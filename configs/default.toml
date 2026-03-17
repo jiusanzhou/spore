@@ -1,0 +1,44 @@
+# Default Spore Agent Configuration
+
+[agent]
+name = "agent-0"
+# role = "coordinator"  # coordinator | worker | specialist
+
+[identity]
+# key_path = "~/.spore/keys"  # auto-generated on first run
+
+[llm]
+provider = "openai"
+model = "gpt-4o"
+# base_url = "https://api.openai.com/v1"
+# api_key from env: SPORE_LLM_API_KEY
+
+[llm.router]
+# Map task types to preferred models
+# simple = "gpt-4o-mini"
+# reasoning = "gpt-4o"
+# coding = "claude-sonnet-4-20250514"
+
+[memory]
+backend = "sqlite"
+path = "~/.spore/memory.db"
+# max_entries = 100000
+
+[network]
+# Phase 1: local only
+transport = "local"
+# Phase 2: p2p
+# transport = "libp2p"
+# listen = ["/ip4/0.0.0.0/tcp/9000"]
+# bootstrap = []
+
+[ethics]
+# L0 constraints are hardcoded and cannot be disabled
+# L1 and L2 can be customized here
+# max_spawn_children = 5
+# max_budget_per_task = 1.0  # USD
+
+[spawner]
+# max_children = 5
+# min_balance_to_spawn = 10.0  # USD equivalent
+# default_resource_share = 0.2  # 20% of parent resources
