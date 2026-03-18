@@ -1,0 +1,32 @@
+# Coordinator agent configuration
+# Usage: spore run -c examples/demo/agent-0.toml
+
+[agent]
+name = "coordinator"
+role = "coordinator"
+
+[runtime]
+type = "builtin"
+
+[llm]
+provider = "openai"
+model = "gpt-4o-mini"
+base_url = "https://api.openai.com/v1"
+
+[memory]
+backend = "sqlite"
+path = "coordinator.db"
+
+[network]
+transport = "local"
+
+[ethics]
+max_budget_per_task = 1.0
+
+[economy]
+hibernate_threshold = 0.1
+min_task_balance = 0.0
+
+[privacy]
+enabled = true
+mode = "warn"

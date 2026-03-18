@@ -1,0 +1,30 @@
+# P2P Node 2 — Connects to Node 1
+# Usage: spore run -c examples/demo/p2p-node2.toml
+
+[agent]
+name = "node-2"
+role = "worker"
+
+[runtime]
+type = "builtin"
+
+[llm]
+provider = "openai"
+model = "gpt-4o-mini"
+base_url = "https://api.openai.com/v1"
+
+[memory]
+backend = "sqlite"
+path = "node2.db"
+
+[network]
+transport = "libp2p"
+listen = ["/ip4/127.0.0.1/tcp/9002"]
+bootstrap = ["/ip4/127.0.0.1/tcp/9001"]
+
+[ethics]
+max_budget_per_task = 1.0
+
+[privacy]
+enabled = true
+mode = "warn"

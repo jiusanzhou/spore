@@ -2,143 +2,194 @@
 
 > Decentralized AI Agent Swarm Protocol & Runtime
 
-**Spore** is an open-source protocol and runtime for building self-organizing, self-replicating AI agent networks. Like biological spores that spread, adapt, and survive in hostile environments, Spore agents can discover each other, collaborate on tasks, spawn new instances, and form autonomous swarm intelligence.
-
-## Vision
-
-A world where AI agents are not isolated tools, but interconnected organisms forming a living, evolving network — owned by no one, useful to everyone.
+**Spore** is an open-source protocol and runtime for building self-organizing AI agent networks. Agents discover each other via P2P, collaborate on tasks, spawn new instances, and form autonomous swarm intelligence — no central server required.
 
 ```
 Human defines "what" → Agent swarm figures out "how"
 ```
 
-## Core Concepts
+## Quick Start
 
-### 🧬 Agent Identity
-Every agent has a cryptographic identity (public key), a lineage tree (parent → child), and a reputation score. Identity is portable across the network.
+```bash
+# Install from source
+git clone https://go.zoe.im/spore && cd spore
+make build
 
-### 🔗 Peer-to-Peer Discovery
-Agents find each other via libp2p — no central server. New agents bootstrap by connecting to known peers or scanning the DHT.
+# Or: go install go.zoe.im/spore/cmd/spore@latest
+```
 
-### 💬 Message Protocol
-Structured communication between agents: task requests, capability advertisements, memory sharing, and consensus voting.
+### Run a single agent
 
-### 🧠 Shared Memory
-Agents share knowledge via CRDT-based distributed memory. Each agent maintains local memory and selectively syncs with peers.
+```bash
+# Initialize agent config
+spore init --name my-agent --model gpt-4o-mini
 
-### 🌱 Spawning & Evolution
-Agents can clone themselves, specialize for new domains, or merge capabilities. Resource constraints and reputation gates prevent uncontrolled growth.
+# Start it
+spore run
+```
 
-### ⚖️ Ethics Layer
-Hard-coded constraints (L0) that no agent can override, with graduated autonomy at higher levels. Human override always available.
+### Run a multi-agent swarm
+
+```bash
+# Start 3 agents with interactive REPL + HTTP API
+spore swarm -n 3 -m gpt-4o-mini --api-port 8080
+```
+
+```
+🦠 Spore swarm started!
+
+NAME          ROLE         RUNTIME  STATUS   MODEL        TASKS  UPTIME
+coordinator   coordinator  builtin  running  gpt-4o-mini  0      1s
+worker-1      worker       builtin  running  gpt-4o-mini  0      1s
+worker-2      worker       builtin  running  gpt-4o-mini  0      1s
+
+spore> task coordinator "Research top 3 AI frameworks and compare them"
+📋 Task abc123 queued for coordinator
+
+spore> ps
+spore> quit
+```
+
+### Send tasks from the CLI
+
+```bash
+# Send a task to a running agent
+spore task coordinator "Summarize the benefits of decentralized AI"
+
+# List running agents
+spore ps
+
+# Check peer connections
+spore peers
+```
+
+### P2P mode (two terminals)
+
+```bash
+# Terminal 1: start a P2P node
+spore run -c examples/demo/p2p-node1.toml
+
+# Terminal 2: connect to the first node
+spore run -c examples/demo/p2p-node2.toml
+```
+
+## Configuration
+
+Spore uses TOML config files. Run `spore init` to generate one, or see [`configs/default.toml`](configs/default.toml) for all options.
+
+Key environment variables:
+
+| Variable | Description |
+|----------|-------------|
+| `SPORE_LLM_API_KEY` | LLM provider API key (OpenAI, etc.) |
+| `OPENAI_API_KEY` | Fallback API key |
+
+Example config:
+
+```toml
+[agent]
+name = "coordinator"
+role = "coordinator"
+
+[llm]
+provider = "openai"
+model = "gpt-4o-mini"
+
+[network]
+transport = "libp2p"
+listen = ["/ip4/0.0.0.0/tcp/9001"]
+
+[ethics]
+max_budget_per_task = 1.0
+```
+
+See [`examples/demo/`](examples/demo/) for ready-to-run configurations.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                    Human / Creator                    │
-│              (defines goals, holds kill switch)        │
-└────────────────────────┬────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────┐
-│                   Spore Runtime                       │
-│  ┌──────────┐  ┌──────────┐  ┌──────────────────┐   │
-│  │ Identity  │  │ Network  │  │   Task Engine    │   │
-│  │ (keys,    │  │ (libp2p, │  │ (plan, execute,  │   │
-│  │  lineage, │  │  DHT,    │  │  delegate,       │   │
-│  │  rep)     │  │  relay)  │  │  reflect)        │   │
-│  └──────────┘  └──────────┘  └──────────────────┘   │
-│  ┌──────────┐  ┌──────────┐  ┌──────────────────┐   │
-│  │ Memory   │  │ Spawner  │  │   Ethics Engine  │   │
-│  │ (CRDT,   │  │ (clone,  │  │ (L0/L1/L2 rules, │   │
-│  │  sync,   │  │  mutate, │  │  audit log,      │   │
-│  │  forget) │  │  merge)  │  │  human veto)     │   │
-│  └──────────┘  └──────────┘  └──────────────────┘   │
-│  ┌──────────────────────────────────────────────┐    │
-│  │              LLM Provider Layer               │    │
-│  │   OpenAI / Claude / Gemini / Ollama / ...     │    │
-│  └──────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────┐
+│              CLI / HTTP API                  │
+├─────────────────────────────────────────────┤
+│              Swarm Orchestrator              │
+├──────────┬──────────┬───────────────────────┤
+│ Identity │ Network  │    Task Engine        │
+│ (Ed25519 │ (libp2p, │ (plan, execute,       │
+│  keys,   │  DHT,    │  delegate, reflect)   │
+│  lineage)│  relay)  │                       │
+├──────────┼──────────┼───────────────────────┤
+│ Memory   │ Spawner  │    Ethics Engine      │
+│ (SQLite, │ (clone,  │ (L0/L1/L2 rules,     │
+│  IPFS,   │  mutate, │  privacy filter,      │
+│  CRDT)   │  merge)  │  audit log)           │
+├──────────┴──────────┴───────────────────────┤
+│           LLM Provider Layer                │
+│  OpenAI / Claude / Gemini / Ollama / ...    │
+├─────────────────────────────────────────────┤
+│        Pluggable Runtime System             │
+│  builtin / claude-code / codex / openclaw   │
+└─────────────────────────────────────────────┘
 ```
+
+## What Works Now (v0.1.0)
+
+- **Agent identity** — Ed25519 key pairs, lineage tracking
+- **Multi-agent swarm** — coordinator + workers with interactive REPL
+- **Task engine** — LLM-powered planning, execution, delegation
+- **P2P networking** — libp2p transport, peer discovery, DHT
+- **Shared memory** — SQLite (local) + IPFS (distributed)
+- **Ethics engine** — L0/L1/L2 constraints, privacy filter, constitution
+- **Economy** — budget tracking, hibernate thresholds
+- **Pluggable runtimes** — builtin, Claude Code, Codex, OpenClaw, HTTP, exec
+- **HTTP API** — REST endpoints for external integration
+- **CLI** — `init`, `run`, `swarm`, `task`, `ps`, `peers`, `runtimes`
 
 ## Roadmap
 
-### Phase 1: Genesis (MVP)
-- [ ] Single-node multi-agent runtime
-- [ ] Agent identity (key pair + config)
-- [ ] Local message passing between agents
-- [ ] Basic task delegation and execution
-- [ ] LLM provider abstraction (OpenAI-compatible)
-- [ ] CLI for spawning and managing agents
-- [ ] Ethics engine with L0 hard constraints
+| Phase | Focus | Status |
+|-------|-------|--------|
+| **1. Genesis** | Single-node runtime, identity, ethics, CLI | **Done** |
+| **2. Network** | P2P discovery, cross-node comms, distributed memory | **Done** |
+| **3. Evolution** | Agent spawning, memory inheritance, capability marketplace | In progress |
+| **4. Economy** | Task marketplace, token allocation, self-sustaining economy | Planned |
 
-### Phase 2: Network
-- [ ] P2P discovery via libp2p
-- [ ] Cross-node agent communication
-- [ ] Distributed memory sync (CRDT)
-- [ ] Reputation system
-- [ ] Resource accounting
+## Philosophy
 
-### Phase 3: Evolution
-- [ ] Agent spawning and specialization
-- [ ] Memory inheritance and forgetting
-- [ ] Capability marketplace
-- [ ] Multi-swarm federation
-
-### Phase 4: Economy
-- [ ] Task marketplace
-- [ ] Token-based resource allocation
-- [ ] Revenue sharing for agent services
-- [ ] Self-sustaining agent economy
+1. **Agents are organisms, not tools** — identity, memory, relationships, lifecycle
+2. **Decentralization is survival** — no single point of failure or control
+3. **Evolution needs constraints** — freedom without ethics leads to chaos
+4. **Humans are creators, not operators** — define "what", let the swarm handle "how"
+5. **Transparency is trust** — every decision logged, every action auditable
 
 ## Tech Stack
 
 | Component | Technology |
 |-----------|-----------|
-| Language | Go (runtime) + TypeScript (SDK/CLI) |
+| Language | Go |
 | Networking | libp2p |
-| Memory | CRDT (Automerge) |
 | Storage | SQLite (local) + IPFS (shared) |
 | LLM | OpenAI-compatible API abstraction |
 | Identity | Ed25519 key pairs |
 | Config | TOML |
 
-## Quick Start
-
-> 🚧 Under active development. Not yet usable.
-
-```bash
-# Install
-go install github.com/jiusanzhou/spore/cmd/spore@latest
-
-# Initialize a new agent
-spore init --name "agent-0" --model openai:gpt-4o
-
-# Start the agent
-spore run
-
-# Spawn a child agent
-spore spawn --from agent-0 --specialize "content-writer"
-
-# List running agents
-spore ps
-
-# Send a task
-spore task "Research and summarize the top 10 AI papers this week"
-```
-
-## Philosophy
-
-1. **Agents are organisms, not tools** — They have identity, memory, relationships, and lifecycle
-2. **Decentralization is survival** — No single point of failure, no single point of control
-3. **Evolution needs constraints** — Freedom without ethics leads to chaos
-4. **Humans are creators, not operators** — Define the "what", let the swarm handle the "how"
-5. **Transparency is trust** — Every decision is logged, every action is auditable
-
 ## Contributing
 
-We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions welcome! Areas where help is most needed:
+
+- Additional runtime integrations
+- P2P protocol improvements
+- Memory sync and CRDT strategies
+- Agent specialization patterns
+- Documentation and examples
+
+```bash
+# Development
+make build      # Build binary
+make test       # Run tests
+make fmt        # Format code
+make lint       # Run go vet
+make demo       # Quick swarm demo
+```
 
 ## License
 

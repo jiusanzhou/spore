@@ -1,0 +1,30 @@
+# P2P Node 1 — Listener
+# Usage: spore run -c examples/demo/p2p-node1.toml
+
+[agent]
+name = "node-1"
+role = "coordinator"
+
+[runtime]
+type = "builtin"
+
+[llm]
+provider = "openai"
+model = "gpt-4o-mini"
+base_url = "https://api.openai.com/v1"
+
+[memory]
+backend = "sqlite"
+path = "node1.db"
+
+[network]
+transport = "libp2p"
+listen = ["/ip4/127.0.0.1/tcp/9001"]
+bootstrap = []
+
+[ethics]
+max_budget_per_task = 1.0
+
+[privacy]
+enabled = true
+mode = "warn"
