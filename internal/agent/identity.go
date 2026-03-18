@@ -20,8 +20,12 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
+	"sync"
 )
 
 // Identity represents an agent's cryptographic identity.
@@ -29,6 +33,20 @@ type Identity struct {
 	Name       string
 	PublicKey  ed25519.PublicKey
 	PrivateKey ed25519.PrivateKey
+
+	mu         sync.Mutex
+	Balance    float64 `json:"balance"`
+	TotalEarned float64 `json:"total_earned"`
+	TotalSpent  float64 `json:"total_spent"`
+}
+
+// identityJSON is the JSON sidecar format for persisting identity state.
+type identityJSON struct {
+	Name        string  `json:"name"`
+	PublicKey   string  `json:"public_key"`
+	Balance     float64 `json:"balance"`
+	TotalEarned float64 `json:"total_earned"`
+	TotalSpent  float64 `json:"total_spent"`
 }
 
 // NewIdentity generates a new Ed25519 identity for the agent.
@@ -56,16 +74,88 @@ func LoadIdentity(path string) (*Identity, error) {
 	}
 	priv := ed25519.NewKeyFromSeed(seed)
 	pub := priv.Public().(ed25519.PublicKey)
-	return &Identity{
+
+	id := &Identity{
 		PublicKey:  pub,
 		PrivateKey: priv,
-	}, nil
+	}
+
+	// Try to load JSON sidecar for balance state.
+	jsonPath := sidecarPath(path)
+	if jdata, err := os.ReadFile(jsonPath); err == nil {
+		var ij identityJSON
+		if err := json.Unmarshal(jdata, &ij); err == nil {
+			id.Name = ij.Name
+			id.Balance = ij.Balance
+			id.TotalEarned = ij.TotalEarned
+			id.TotalSpent = ij.TotalSpent
+		}
+	}
+
+	return id, nil
 }
 
 // Save writes the identity's private key seed to disk.
 func (id *Identity) Save(path string) error {
 	seed := id.PrivateKey.Seed()
-	return os.WriteFile(path, []byte(hex.EncodeToString(seed)), 0600)
+	if err := os.WriteFile(path, []byte(hex.EncodeToString(seed)), 0600); err != nil {
+		return err
+	}
+	return id.SaveState(path)
+}
+
+// SaveState writes the identity's balance state to the JSON sidecar file.
+func (id *Identity) SaveState(keyPath string) error {
+	id.mu.Lock()
+	defer id.mu.Unlock()
+
+	ij := identityJSON{
+		Name:        id.Name,
+		PublicKey:   hex.EncodeToString(id.PublicKey),
+		Balance:     id.Balance,
+		TotalEarned: id.TotalEarned,
+		TotalSpent:  id.TotalSpent,
+	}
+	data, err := json.MarshalIndent(ij, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling identity state: %w", err)
+	}
+	return os.WriteFile(sidecarPath(keyPath), data, 0600)
+}
+
+// sidecarPath returns the JSON sidecar path for an identity key file.
+func sidecarPath(keyPath string) string {
+	dir := filepath.Dir(keyPath)
+	base := strings.TrimSuffix(filepath.Base(keyPath), filepath.Ext(keyPath))
+	return filepath.Join(dir, base+".json")
+}
+
+// Credit adds tokens to the identity's balance.
+func (id *Identity) Credit(amount float64) {
+	id.mu.Lock()
+	defer id.mu.Unlock()
+	id.Balance += amount
+	id.TotalEarned += amount
+}
+
+// Debit subtracts tokens from the identity's balance.
+// Returns an error if the balance is insufficient.
+func (id *Identity) Debit(amount float64) error {
+	id.mu.Lock()
+	defer id.mu.Unlock()
+	if id.Balance < amount {
+		return fmt.Errorf("insufficient balance: have %.4f, need %.4f", id.Balance, amount)
+	}
+	id.Balance -= amount
+	id.TotalSpent += amount
+	return nil
+}
+
+// CanAfford returns true if the identity has enough balance.
+func (id *Identity) CanAfford(amount float64) bool {
+	id.mu.Lock()
+	defer id.mu.Unlock()
+	return id.Balance >= amount
 }
 
 // PublicKeyHex returns the hex-encoded public key.

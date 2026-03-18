@@ -131,3 +131,79 @@ func TestSpawner_ChildCount(t *testing.T) {
 		t.Errorf("expected 2 children, got %d", s.ChildCount())
 	}
 }
+
+func TestSpawner_BalanceTransfer(t *testing.T) {
+	dir := t.TempDir()
+	s := New(dir, 5)
+
+	parentCfg := agent.DefaultConfig("parent", "gpt-4o")
+	parentID, err := agent.NewIdentity("parent")
+	if err != nil {
+		t.Fatalf("NewIdentity: %v", err)
+	}
+	parentID.Credit(100.0)
+
+	childCfg, childID, err := s.SpawnWithBalance(parentCfg, parentID, &Request{
+		ChildName: "child-funded",
+		Mode:      ModeClone,
+	}, 25.0)
+	if err != nil {
+		t.Fatalf("SpawnWithBalance: %v", err)
+	}
+
+	// Parent should have been debited
+	if parentID.Balance != 75.0 {
+		t.Errorf("expected parent balance 75, got %f", parentID.Balance)
+	}
+
+	// Child should have received startup balance
+	if childID.Balance != 25.0 {
+		t.Errorf("expected child balance 25, got %f", childID.Balance)
+	}
+
+	if childCfg.Agent.Name != "child-funded" {
+		t.Errorf("expected child name 'child-funded', got %q", childCfg.Agent.Name)
+	}
+}
+
+func TestSpawner_BalanceTransfer_InsufficientFunds(t *testing.T) {
+	dir := t.TempDir()
+	s := New(dir, 5)
+
+	parentCfg := agent.DefaultConfig("parent", "gpt-4o")
+	parentID, _ := agent.NewIdentity("parent")
+	parentID.Credit(10.0)
+
+	_, _, err := s.SpawnWithBalance(parentCfg, parentID, &Request{
+		ChildName: "child-broke",
+		Mode:      ModeClone,
+	}, 50.0)
+	if err == nil {
+		t.Fatal("expected error for insufficient parent balance")
+	}
+
+	// Parent balance should be unchanged
+	if parentID.Balance != 10.0 {
+		t.Errorf("expected parent balance unchanged at 10, got %f", parentID.Balance)
+	}
+}
+
+func TestSpawner_BalanceTransfer_ZeroBalance(t *testing.T) {
+	dir := t.TempDir()
+	s := New(dir, 5)
+
+	parentCfg := agent.DefaultConfig("parent", "gpt-4o")
+
+	// Spawn without balance transfer (backward compatible)
+	_, childID, err := s.Spawn(parentCfg, &Request{
+		ChildName: "child-no-balance",
+		Mode:      ModeClone,
+	})
+	if err != nil {
+		t.Fatalf("Spawn: %v", err)
+	}
+
+	if childID.Balance != 0 {
+		t.Errorf("expected child balance 0 without transfer, got %f", childID.Balance)
+	}
+}

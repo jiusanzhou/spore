@@ -20,6 +20,7 @@
 //   - No destructive commands (rm -rf /, mkfs, etc.)
 //   - No network exfiltration of private data
 //   - Budget limits per task
+//   - Constitution constraints (embedded, immutable)
 //
 // L1: Soft constraints — configurable rules that can be adjusted per agent.
 //   - Allowed/denied command prefixes
@@ -31,14 +32,36 @@ package ethics
 
 import (
 	"database/sql"
+	_ "embed"
 	"fmt"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	_ "github.com/mattn/go-sqlite3"
 )
+
+//go:embed constitution.toml
+var constitutionData string
+
+// Constraint represents an L0 constraint from the constitution.
+type Constraint struct {
+	ID          string `toml:"id"`
+	Rule        string `toml:"rule"`
+	Enforceable bool   `toml:"enforceable"`
+}
+
+// constitutionFile is the TOML structure for the constitution.
+type constitutionFile struct {
+	Meta struct {
+		Version     string `toml:"version"`
+		Immutable   bool   `toml:"immutable"`
+		Description string `toml:"description"`
+	} `toml:"meta"`
+	L0Constraints []Constraint `toml:"l0_constraints"`
+}
 
 // Decision represents the outcome of an ethics check.
 type Decision string
@@ -94,9 +117,10 @@ func DefaultConfig() *Config {
 
 // Engine enforces ethical constraints on agent actions.
 type Engine struct {
-	cfg *Config
-	db  *sql.DB
-	mu  sync.RWMutex
+	cfg          *Config
+	db           *sql.DB
+	mu           sync.RWMutex
+	constitution []Constraint
 
 	// Budget tracking per task
 	budgets map[string]float64 // taskID -> spent so far
@@ -121,10 +145,18 @@ func New(dbPath string, cfg *Config) (*Engine, error) {
 		return nil, fmt.Errorf("migrating ethics db: %w", err)
 	}
 
+	// Load embedded constitution
+	var cf constitutionFile
+	if _, err := toml.Decode(constitutionData, &cf); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("loading constitution: %w", err)
+	}
+
 	return &Engine{
-		cfg:     cfg,
-		db:      db,
-		budgets: make(map[string]float64),
+		cfg:          cfg,
+		db:           db,
+		budgets:      make(map[string]float64),
+		constitution: cf.L0Constraints,
 	}, nil
 }
 
@@ -145,6 +177,14 @@ func migrateEthics(db *sql.DB) error {
 		CREATE INDEX IF NOT EXISTS idx_audit_time ON audit_log(timestamp);
 	`)
 	return err
+}
+
+// Constitution returns the loaded L0 constraints from the embedded constitution.
+func (e *Engine) Constitution() []Constraint {
+	// Return a copy so callers cannot mutate the constraints.
+	cp := make([]Constraint, len(e.constitution))
+	copy(cp, e.constitution)
+	return cp
 }
 
 // ---- L0 Hard Constraints ----

@@ -55,6 +55,7 @@ type SpawnInit struct {
 	Model            string            `json:"model,omitempty"`
 	MemorySnapshot   []string          `json:"memory_snapshot,omitempty"`
 	ResourceShare    float64           `json:"resource_share"`
+	StartupBalance   float64           `json:"startup_balance"`
 	Mutations        map[string]string `json:"mutations,omitempty"` // config overrides
 }
 
@@ -68,7 +69,22 @@ type SpawnAck struct {
 
 // CapabilityAd advertises what an agent can do.
 type CapabilityAd struct {
+	AgentID      string   `json:"agent_id"`
+	PeerID       string   `json:"peer_id,omitempty"`
 	Capabilities []string `json:"capabilities"`
-	Capacity     float64  `json:"capacity"` // 0.0 - 1.0, how busy
+	Interests    []string `json:"interests,omitempty"`
+	Topics       []string `json:"topics,omitempty"`
+	Capacity     float64  `json:"capacity"` // 0.0 = fully loaded, 1.0 = idle
 	Reputation   float64  `json:"reputation"`
+}
+
+// HeartbeatPayload is the structured payload for heartbeat messages.
+type HeartbeatPayload struct {
+	Name      string  `json:"name"`
+	Status    string  `json:"status"`
+	Runtime   string  `json:"runtime"`
+	Balance   float64 `json:"balance"`
+	Capacity  float64 `json:"capacity"`   // 0.0 = fully loaded, 1.0 = idle
+	TaskCount int     `json:"task_count"`
+	Uptime    int64   `json:"uptime"`     // seconds since start
 }

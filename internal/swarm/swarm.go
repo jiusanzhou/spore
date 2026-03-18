@@ -83,7 +83,7 @@ func (s *Swarm) SpawnChild(parentName string, req *spawner.Request) (*agent.Agen
 		return nil, fmt.Errorf("parent agent not found: %s", parentName)
 	}
 
-	childCfg, _, err := s.spawner.Spawn(parent.Config(), req)
+	childCfg, _, err := s.spawner.SpawnWithBalance(parent.Config(), parent.Identity(), req, 0)
 	if err != nil {
 		return nil, err
 	}

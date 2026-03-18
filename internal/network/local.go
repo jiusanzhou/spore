@@ -17,28 +17,50 @@
 package network
 
 import (
+	"encoding/json"
 	"fmt"
 	"sync"
 
+	"go.zoe.im/spore/internal/ethics"
 	"go.zoe.im/spore/internal/protocol"
 )
 
 // LocalBus is an in-process message bus for single-node multi-agent.
 type LocalBus struct {
-	mu       sync.RWMutex
-	handlers map[string]Handler
-	inbox    map[string]chan *protocol.Message
+	mu            sync.RWMutex
+	handlers      map[string]Handler
+	inbox         map[string]chan *protocol.Message
+	privacyFilter *ethics.PrivacyFilter
+	privacyMode   string // warn, sanitize, reject
 }
 
 // NewLocalBus creates a new local message bus.
 func NewLocalBus() *LocalBus {
 	return &LocalBus{
-		handlers: make(map[string]Handler),
-		inbox:    make(map[string]chan *protocol.Message),
+		handlers:      make(map[string]Handler),
+		inbox:         make(map[string]chan *protocol.Message),
+		privacyFilter: ethics.NewPrivacyFilter(),
+		privacyMode:   "warn",
 	}
 }
 
+// SetPrivacyMode sets the privacy filter mode (warn, sanitize, reject).
+func (b *LocalBus) SetPrivacyMode(mode string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.privacyMode = mode
+}
+
 func (b *LocalBus) Send(msg *protocol.Message) error {
+	// Run privacy filter on broadcast messages.
+	if msg.To == "broadcast" {
+		if filtered, err := b.applyPrivacyFilter(msg); err != nil {
+			return err
+		} else {
+			msg = filtered
+		}
+	}
+
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
@@ -60,6 +82,37 @@ func (b *LocalBus) Send(msg *protocol.Message) error {
 		return fmt.Errorf("agent not found: %s", msg.To)
 	}
 	return handler(msg)
+}
+
+// applyPrivacyFilter scans the message payload for sensitive data.
+func (b *LocalBus) applyPrivacyFilter(msg *protocol.Message) (*protocol.Message, error) {
+	if b.privacyFilter == nil {
+		return msg, nil
+	}
+
+	payload := string(msg.Payload)
+	violations := b.privacyFilter.Scan(payload)
+	if len(violations) == 0 {
+		return msg, nil
+	}
+
+	b.mu.RLock()
+	mode := b.privacyMode
+	b.mu.RUnlock()
+
+	switch mode {
+	case "reject":
+		return nil, fmt.Errorf("privacy violation detected: %d sensitive patterns found", len(violations))
+	case "sanitize":
+		sanitized := b.privacyFilter.Sanitize(payload)
+		cp := *msg
+		cp.Payload = json.RawMessage(sanitized)
+		fmt.Printf("⚠️  privacy: sanitized %d violations in message from %s\n", len(violations), msg.From)
+		return &cp, nil
+	default: // "warn"
+		fmt.Printf("⚠️  privacy: %d violations detected in message from %s\n", len(violations), msg.From)
+		return msg, nil
+	}
 }
 
 func (b *LocalBus) Subscribe(agentID string, handler Handler) error {

@@ -41,11 +41,22 @@ import (
 type Status string
 
 const (
-	StatusIdle    Status = "idle"
-	StatusBusy    Status = "busy"
-	StatusError   Status = "error"
-	StatusStopped Status = "stopped"
+	StatusIdle      Status = "idle"
+	StatusBusy      Status = "busy"
+	StatusError     Status = "error"
+	StatusStopped   Status = "stopped"
+	StatusHibernate Status = "hibernate"
 )
+
+// PeerInfo holds discovered peer information from CapabilityAd.
+type PeerInfo struct {
+	AgentID      string
+	PeerID       string
+	Capabilities []string
+	Capacity     float64
+	Reputation   float64
+	LastSeen     time.Time
+}
 
 // Info holds the agent's runtime information.
 type Info struct {
@@ -57,6 +68,7 @@ type Info struct {
 	Status    Status    `json:"status"`
 	TaskCount int       `json:"task_count"`
 	StartedAt time.Time `json:"started_at"`
+	Balance   float64   `json:"balance"`
 }
 
 // ethicsAdapter wraps *ethics.Engine to satisfy engine.EthicsChecker.
@@ -85,6 +97,10 @@ type Agent struct {
 	mu        sync.RWMutex
 	taskCount int
 	startedAt time.Time
+
+	// Peer registry from CapabilityAd messages
+	peersMu  sync.RWMutex
+	peers    map[string]*PeerInfo
 }
 
 // taskEntry wraps a task with optional runtime preference.
@@ -178,6 +194,7 @@ func New(cfg *Config) (*Agent, error) {
 		registry:  reg,
 		status:    StatusIdle,
 		taskQueue: make(chan *taskEntry, 50),
+		peers:     make(map[string]*PeerInfo),
 	}, nil
 }
 
@@ -234,8 +251,12 @@ func (a *Agent) Run() error {
 	fmt.Printf("   Runtime: %s\n", runtimeName)
 	fmt.Printf("   Model:   %s/%s\n", a.cfg.LLM.Provider, a.cfg.LLM.Model)
 	fmt.Printf("   Role:    %s\n", a.cfg.Agent.Role)
+	fmt.Printf("   Balance: %.4f\n", a.identity.Balance)
 
 	go a.taskWorker(ctx)
+
+	// Publish initial CapabilityAd
+	a.publishCapabilityAd()
 
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -288,6 +309,7 @@ func (a *Agent) Info() Info {
 		Status:    a.status,
 		TaskCount: a.taskCount,
 		StartedAt: a.startedAt,
+		Balance:   a.identity.Balance,
 	}
 }
 
@@ -302,12 +324,39 @@ func (a *Agent) Identity() *Identity { return a.identity }
 // Config returns the agent's config.
 func (a *Agent) Config() *Config { return a.cfg }
 
+// Peers returns the current peer registry.
+func (a *Agent) Peers() map[string]*PeerInfo {
+	a.peersMu.RLock()
+	defer a.peersMu.RUnlock()
+	cp := make(map[string]*PeerInfo, len(a.peers))
+	for k, v := range a.peers {
+		cp[k] = v
+	}
+	return cp
+}
+
 func (a *Agent) taskWorker(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case entry := <-a.taskQueue:
+			// Check hibernate state
+			a.mu.RLock()
+			status := a.status
+			a.mu.RUnlock()
+			if status == StatusHibernate {
+				fmt.Printf("💤 [%s] Rejecting task (hibernate): %s\n", a.cfg.Agent.Name, entry.Description)
+				continue
+			}
+
+			// Check minimum balance for task acceptance
+			if a.cfg.Economy.MinTaskBalance > 0 && !a.identity.CanAfford(a.cfg.Economy.MinTaskBalance) {
+				fmt.Printf("💰 [%s] Rejecting task (insufficient_balance): %.4f < %.4f\n",
+					a.cfg.Agent.Name, a.identity.Balance, a.cfg.Economy.MinTaskBalance)
+				continue
+			}
+
 			a.mu.Lock()
 			a.status = StatusBusy
 			a.mu.Unlock()
@@ -320,8 +369,14 @@ func (a *Agent) taskWorker(ctx context.Context) {
 			}
 
 			a.mu.Lock()
-			a.status = StatusIdle
 			a.taskCount++
+			// Check if we should hibernate
+			if a.cfg.Economy.HibernateThreshold > 0 && a.identity.Balance <= 0 {
+				a.status = StatusHibernate
+				fmt.Printf("💤 [%s] Entering hibernate (balance depleted)\n", a.cfg.Agent.Name)
+			} else {
+				a.status = StatusIdle
+			}
 			a.mu.Unlock()
 		}
 	}
@@ -362,6 +417,12 @@ func (a *Agent) executeTask(ctx context.Context, entry *taskEntry) error {
 
 	if output.Success {
 		fmt.Printf("✅ [%s] Task completed via %s: %s\n", a.cfg.Agent.Name, rt.Info().Name, truncate(output.Result, 200))
+		// Debit cost from balance after task completion
+		if output.Cost > 0 {
+			if err := a.identity.Debit(output.Cost); err != nil {
+				fmt.Printf("⚠️  [%s] Balance debit failed: %v\n", a.cfg.Agent.Name, err)
+			}
+		}
 	} else {
 		return fmt.Errorf("task failed: %s", output.Error)
 	}
@@ -371,6 +432,11 @@ func (a *Agent) executeTask(ctx context.Context, entry *taskEntry) error {
 func (a *Agent) handleMessage(msg *protocol.Message) error {
 	switch msg.Type {
 	case protocol.MsgTaskRequest:
+		// Check balance before accepting
+		if a.cfg.Economy.MinTaskBalance > 0 && !a.identity.CanAfford(a.cfg.Economy.MinTaskBalance) {
+			fmt.Printf("💰 [%s] Rejecting task_request from %s: insufficient_balance\n", a.cfg.Agent.Name, msg.From[:8])
+			return nil
+		}
 		var req protocol.TaskRequest
 		if err := json.Unmarshal(msg.Payload, &req); err != nil {
 			return fmt.Errorf("unmarshaling task request: %w", err)
@@ -379,23 +445,102 @@ func (a *Agent) handleMessage(msg *protocol.Message) error {
 		a.SubmitTask(req.Description)
 	case protocol.MsgHeartbeat:
 		fmt.Printf("💓 [%s] Heartbeat from %s\n", a.cfg.Agent.Name, msg.From[:8])
+	case protocol.MsgCapabilityAd:
+		var ad protocol.CapabilityAd
+		if err := json.Unmarshal(msg.Payload, &ad); err != nil {
+			return fmt.Errorf("unmarshaling capability_ad: %w", err)
+		}
+		a.registerPeer(&ad)
 	}
 	return nil
+}
+
+func (a *Agent) registerPeer(ad *protocol.CapabilityAd) {
+	a.peersMu.Lock()
+	defer a.peersMu.Unlock()
+	a.peers[ad.AgentID] = &PeerInfo{
+		AgentID:      ad.AgentID,
+		PeerID:       ad.PeerID,
+		Capabilities: ad.Capabilities,
+		Capacity:     ad.Capacity,
+		Reputation:   ad.Reputation,
+		LastSeen:     time.Now(),
+	}
+
+	// Auto-register peer mapping on P2PBus
+	if p2pBus, ok := a.bus.(*network.P2PBus); ok && ad.PeerID != "" {
+		pid, err := network.ParsePeerID(ad.PeerID)
+		if err == nil {
+			p2pBus.RegisterPeer(ad.AgentID, pid)
+		}
+	}
+}
+
+func (a *Agent) publishCapabilityAd() {
+	if a.bus == nil {
+		return
+	}
+	a.mu.RLock()
+	taskCount := a.taskCount
+	a.mu.RUnlock()
+
+	capacity := 1.0 // idle
+	if taskCount > 0 {
+		capacity = 0.5
+	}
+
+	ad := protocol.CapabilityAd{
+		AgentID:      a.identity.PublicKeyHex()[:16],
+		Capabilities: []string{a.cfg.Agent.Role},
+		Capacity:     capacity,
+		Reputation:   1.0,
+	}
+
+	// Set PeerID if using P2P bus
+	if p2pBus, ok := a.bus.(*network.P2PBus); ok {
+		ad.PeerID = p2pBus.PeerID()
+	}
+
+	msg, _ := protocol.NewMessage(
+		a.identity.PublicKeyHex()[:16],
+		"broadcast",
+		protocol.MsgCapabilityAd,
+		ad,
+	)
+	a.bus.Send(msg)
 }
 
 func (a *Agent) heartbeat() {
 	if a.bus == nil {
 		return
 	}
+	a.mu.RLock()
+	taskCount := a.taskCount
+	status := a.status
+	a.mu.RUnlock()
+
+	capacity := 1.0
+	if status == StatusBusy {
+		capacity = 0.0
+	} else if status == StatusHibernate {
+		capacity = 0.0
+	}
+
+	payload := protocol.HeartbeatPayload{
+		Name:      a.cfg.Agent.Name,
+		Status:    string(status),
+		Runtime:   a.cfg.Runtime.Type,
+		Balance:   a.identity.Balance,
+		Capacity:  capacity,
+		TaskCount: taskCount,
+		Uptime:    int64(time.Since(a.startedAt).Seconds()),
+	}
+
 	msg, _ := protocol.NewMessage(
 		a.identity.PublicKeyHex()[:16],
 		"broadcast",
 		protocol.MsgHeartbeat,
-		map[string]interface{}{
-			"name":    a.cfg.Agent.Name,
-			"status":  a.status,
-			"runtime": a.cfg.Runtime.Type,
-		},
+		payload,
 	)
 	a.bus.Send(msg)
 }

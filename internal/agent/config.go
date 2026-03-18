@@ -32,6 +32,8 @@ type Config struct {
 	Memory  MemoryConfig   `toml:"memory"`
 	Network NetworkConfig  `toml:"network"`
 	Ethics  EthicsConfig   `toml:"ethics"`
+	Economy EconomyConfig  `toml:"economy"`
+	Privacy PrivacyConfig  `toml:"privacy"`
 	Spawner SpawnerConfig  `toml:"spawner"`
 }
 
@@ -93,6 +95,18 @@ type SpawnerConfig struct {
 	DefaultResourceShare float64 `toml:"default_resource_share"`
 }
 
+// EconomyConfig defines economic parameters for the agent.
+type EconomyConfig struct {
+	HibernateThreshold float64 `toml:"hibernate_threshold"` // balance below which agent stops accepting tasks
+	MinTaskBalance     float64 `toml:"min_task_balance"`    // minimum balance to accept a new task
+}
+
+// PrivacyConfig defines privacy filter settings.
+type PrivacyConfig struct {
+	Enabled bool   `toml:"enabled"`
+	Mode    string `toml:"mode"` // warn, sanitize, reject
+}
+
 // DefaultConfig returns a Config with sensible defaults.
 func DefaultConfig(name, model string) *Config {
 	return &Config{
@@ -118,6 +132,14 @@ func DefaultConfig(name, model string) *Config {
 		Ethics: EthicsConfig{
 			MaxSpawnChildren: 5,
 			MaxBudgetPerTask: 1.0,
+		},
+		Economy: EconomyConfig{
+			HibernateThreshold: 0.0,
+			MinTaskBalance:     1.0,
+		},
+		Privacy: PrivacyConfig{
+			Enabled: true,
+			Mode:    "warn",
 		},
 		Spawner: SpawnerConfig{
 			MaxChildren:          5,

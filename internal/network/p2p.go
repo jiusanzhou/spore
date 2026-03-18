@@ -36,15 +36,23 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	ma "github.com/multiformats/go-multiaddr"
 
+	"go.zoe.im/spore/internal/ethics"
 	proto "go.zoe.im/spore/internal/protocol"
 )
 
 const (
-	protocolID     = "/spore/msg/1.0.0"
-	broadcastTopic = "spore-broadcast"
-	rendezvous     = "spore-network"
-	maxMessageSize = 1 << 20 // 1 MB
+	protocolID          = "/spore/msg/1.0.0"
+	broadcastTopic      = "spore-broadcast"
+	capabilitiesTopic   = "spore-capabilities"
+	rendezvous          = "spore-network"
+	maxMessageSize      = 1 << 20 // 1 MB
 )
+
+// topicEntry holds a GossipSub topic and its subscription.
+type topicEntry struct {
+	topic *pubsub.Topic
+	sub   *pubsub.Subscription
+}
 
 // P2PConfig holds configuration for the P2P bus.
 type P2PConfig struct {
@@ -58,13 +66,26 @@ type P2PBus struct {
 	host    host.Host
 	dht     *dht.IpfsDHT
 	ps      *pubsub.PubSub
-	topic   *pubsub.Topic
-	sub     *pubsub.Subscription
+	topic   *pubsub.Topic        // default broadcast topic
+	sub     *pubsub.Subscription // default broadcast subscription
 	ctx     context.Context
 	cancel  context.CancelFunc
 	mu      sync.RWMutex
 	handlers map[string]Handler
 	peerMap  map[string]peer.ID // agent ID -> peer ID
+
+	// Multi-topic support
+	topicsMu sync.RWMutex
+	topics   map[string]*topicEntry
+
+	// Privacy filter
+	privacyFilter *ethics.PrivacyFilter
+	privacyMode   string // warn, sanitize, reject
+}
+
+// ParsePeerID parses a string into a libp2p peer.ID.
+func ParsePeerID(s string) (peer.ID, error) {
+	return peer.Decode(s)
 }
 
 // NewP2PBus creates a new libp2p-backed message bus.
@@ -157,7 +178,13 @@ func NewP2PBus(cfg P2PConfig) (*P2PBus, error) {
 		cancel:   cancel,
 		handlers: make(map[string]Handler),
 		peerMap:  make(map[string]peer.ID),
+		topics:   make(map[string]*topicEntry),
+		privacyFilter: ethics.NewPrivacyFilter(),
+		privacyMode:   "warn",
 	}
+
+	// Store the default broadcast topic in the topics map.
+	bus.topics[broadcastTopic] = &topicEntry{topic: topic, sub: sub}
 
 	// Register stream handler for point-to-point messages.
 	h.SetStreamHandler(protocol.ID(protocolID), bus.handleStream)
@@ -172,9 +199,85 @@ func NewP2PBus(cfg P2PConfig) (*P2PBus, error) {
 	}
 
 	// Start broadcast subscription reader.
-	go bus.readBroadcast()
+	go bus.readBroadcastFromSub(sub)
+
+	// Join default capabilities topic.
+	if _, err := bus.JoinTopic(capabilitiesTopic); err != nil {
+		fmt.Printf("warning: join capabilities topic failed: %v\n", err)
+	}
 
 	return bus, nil
+}
+
+// JoinTopic joins a GossipSub topic and starts reading from it.
+func (b *P2PBus) JoinTopic(topicName string) (*pubsub.Topic, error) {
+	b.topicsMu.Lock()
+	defer b.topicsMu.Unlock()
+
+	if entry, ok := b.topics[topicName]; ok {
+		return entry.topic, nil
+	}
+
+	t, err := b.ps.Join(topicName)
+	if err != nil {
+		return nil, fmt.Errorf("join topic %q: %w", topicName, err)
+	}
+
+	s, err := t.Subscribe()
+	if err != nil {
+		t.Close()
+		return nil, fmt.Errorf("subscribe topic %q: %w", topicName, err)
+	}
+
+	b.topics[topicName] = &topicEntry{topic: t, sub: s}
+	go b.readBroadcastFromSub(s)
+
+	return t, nil
+}
+
+// LeaveTopic leaves a GossipSub topic.
+func (b *P2PBus) LeaveTopic(topicName string) error {
+	b.topicsMu.Lock()
+	defer b.topicsMu.Unlock()
+
+	entry, ok := b.topics[topicName]
+	if !ok {
+		return nil
+	}
+
+	// Don't leave the default broadcast topic.
+	if topicName == broadcastTopic {
+		return fmt.Errorf("cannot leave default broadcast topic")
+	}
+
+	entry.sub.Cancel()
+	entry.topic.Close()
+	delete(b.topics, topicName)
+	return nil
+}
+
+// PublishToTopic publishes a message to a specific GossipSub topic.
+func (b *P2PBus) PublishToTopic(topicName string, msg *proto.Message) error {
+	b.topicsMu.RLock()
+	entry, ok := b.topics[topicName]
+	b.topicsMu.RUnlock()
+
+	if !ok {
+		return fmt.Errorf("not subscribed to topic %q", topicName)
+	}
+
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("marshal message for topic %q: %w", topicName, err)
+	}
+	return entry.topic.Publish(b.ctx, data)
+}
+
+// SetPrivacyMode sets the privacy filter mode (warn, sanitize, reject).
+func (b *P2PBus) SetPrivacyMode(mode string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.privacyMode = mode
 }
 
 // HandlePeerFound implements mdns.Notifee for local peer discovery.
@@ -210,10 +313,10 @@ func (b *P2PBus) connectBootstrapPeers(peers []string) {
 	}
 }
 
-// readBroadcast reads from the pubsub subscription and dispatches to all handlers.
-func (b *P2PBus) readBroadcast() {
+// readBroadcastFromSub reads from a pubsub subscription and dispatches to all handlers.
+func (b *P2PBus) readBroadcastFromSub(sub *pubsub.Subscription) {
 	for {
-		msg, err := b.sub.Next(b.ctx)
+		msg, err := sub.Next(b.ctx)
 		if err != nil {
 			return // context cancelled or subscription closed
 		}
@@ -269,6 +372,25 @@ func (b *P2PBus) handleStream(s libp2pnet.Stream) {
 
 func (b *P2PBus) Send(msg *proto.Message) error {
 	if msg.To == "broadcast" {
+		// Run privacy filter on broadcast messages.
+		if b.privacyFilter != nil {
+			payload := string(msg.Payload)
+			violations := b.privacyFilter.Scan(payload)
+			if len(violations) > 0 {
+				switch b.privacyMode {
+				case "reject":
+					return fmt.Errorf("privacy violation detected: %d sensitive patterns found", len(violations))
+				case "sanitize":
+					sanitized := b.privacyFilter.Sanitize(payload)
+					cp := *msg
+					cp.Payload = json.RawMessage(sanitized)
+					msg = &cp
+					fmt.Printf("⚠️  privacy: sanitized %d violations in message from %s\n", len(violations), msg.From)
+				default: // "warn"
+					fmt.Printf("⚠️  privacy: %d violations detected in message from %s\n", len(violations), msg.From)
+				}
+			}
+		}
 		data, err := json.Marshal(msg)
 		if err != nil {
 			return fmt.Errorf("marshal broadcast: %w", err)
@@ -344,6 +466,17 @@ func (b *P2PBus) Unsubscribe(agentID string) error {
 func (b *P2PBus) Close() error {
 	b.cancel()
 	b.sub.Cancel()
+
+	// Close all additional topics.
+	b.topicsMu.Lock()
+	for name, entry := range b.topics {
+		if name != broadcastTopic {
+			entry.sub.Cancel()
+			entry.topic.Close()
+		}
+	}
+	b.topicsMu.Unlock()
+
 	b.topic.Close()
 	b.dht.Close()
 	return b.host.Close()

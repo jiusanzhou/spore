@@ -59,14 +59,38 @@ func New(baseDir string, maxChildren int) *Spawner {
 
 // Spawn creates a new child agent.
 func (s *Spawner) Spawn(parentCfg *agent.Config, req *Request) (*agent.Config, *agent.Identity, error) {
+	return s.SpawnWithBalance(parentCfg, nil, req, 0)
+}
+
+// SpawnWithBalance creates a new child agent with startup balance transferred from parent.
+func (s *Spawner) SpawnWithBalance(parentCfg *agent.Config, parentID *agent.Identity, req *Request, startupBalance float64) (*agent.Config, *agent.Identity, error) {
 	if s.childCount >= s.maxChildren {
 		return nil, nil, fmt.Errorf("max children reached (%d/%d)", s.childCount, s.maxChildren)
+	}
+
+	// If startup balance requested, debit from parent
+	if startupBalance > 0 && parentID != nil {
+		if !parentID.CanAfford(startupBalance) {
+			return nil, nil, fmt.Errorf("parent cannot afford startup balance: have %.4f, need %.4f", parentID.Balance, startupBalance)
+		}
+		if err := parentID.Debit(startupBalance); err != nil {
+			return nil, nil, fmt.Errorf("debiting parent balance: %w", err)
+		}
 	}
 
 	// Generate child identity
 	childID, err := agent.NewIdentity(req.ChildName)
 	if err != nil {
+		// Refund parent if identity generation fails
+		if startupBalance > 0 && parentID != nil {
+			parentID.Credit(startupBalance)
+		}
 		return nil, nil, fmt.Errorf("generating child identity: %w", err)
+	}
+
+	// Set child's initial balance
+	if startupBalance > 0 {
+		childID.Credit(startupBalance)
 	}
 
 	// Create child config based on mode
