@@ -29,11 +29,11 @@ import (
 type TaskState string
 
 const (
-	TaskPending    TaskState = "pending"
-	TaskRunning    TaskState = "running"
-	TaskCompleted  TaskState = "completed"
-	TaskFailed     TaskState = "failed"
-	TaskDelegated  TaskState = "delegated"
+	TaskPending   TaskState = "pending"
+	TaskRunning   TaskState = "running"
+	TaskCompleted TaskState = "completed"
+	TaskFailed    TaskState = "failed"
+	TaskDelegated TaskState = "delegated"
 )
 
 // Task represents a unit of work for an agent.
@@ -57,11 +57,19 @@ type Step struct {
 	Timestamp   time.Time
 }
 
+// EthicsChecker is the interface the engine uses to validate actions.
+// This decouples the engine from the ethics package.
+type EthicsChecker interface {
+	Check(agentID, taskID, action string) (decision string, level string, reason string)
+}
+
 // Engine drives the Observe → Think → Act → Reflect loop.
 type Engine struct {
-	llm    llm.Provider
-	memory memory.Store
-	tools  map[string]Tool
+	llm     llm.Provider
+	memory  memory.Store
+	tools   map[string]Tool
+	ethics  EthicsChecker
+	agentID string // for ethics audit
 }
 
 // Tool is something the agent can invoke during Act phase.
@@ -78,6 +86,16 @@ func New(provider llm.Provider, store memory.Store) *Engine {
 		memory: store,
 		tools:  make(map[string]Tool),
 	}
+}
+
+// SetEthics attaches an ethics checker to the engine.
+func (e *Engine) SetEthics(checker EthicsChecker) {
+	e.ethics = checker
+}
+
+// SetAgentID sets the agent identifier for ethics audit logging.
+func (e *Engine) SetAgentID(id string) {
+	e.agentID = id
 }
 
 // RegisterTool adds a tool the agent can use.
@@ -147,7 +165,17 @@ func (e *Engine) tick(ctx context.Context, task *Task) (*Step, bool, error) {
 		return step, true, nil
 	}
 
-	// 4. Act — execute the chosen action
+	// 4. Ethics check — validate before execution
+	if e.ethics != nil {
+		actionStr := fmt.Sprintf("%s %s", action.ToolName, action.ToolInput)
+		decision, level, reason := e.ethics.Check(e.agentID, task.ID, actionStr)
+		if decision == "deny" {
+			step.Reflection = fmt.Sprintf("⛔ action blocked by ethics engine (%s): %s", level, reason)
+			return step, false, nil
+		}
+	}
+
+	// 5. Act — execute the chosen action
 	result, err := e.act(ctx, action)
 	if err != nil {
 		step.Reflection = fmt.Sprintf("action failed: %s", err)
@@ -155,7 +183,7 @@ func (e *Engine) tick(ctx context.Context, task *Task) (*Step, bool, error) {
 		return step, false, nil
 	}
 
-	// 5. Reflect — record what happened
+	// 6. Reflect — record what happened
 	step.Reflection = result
 	return step, false, nil
 }

@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"go.zoe.im/spore/internal/engine"
+	"go.zoe.im/spore/internal/ethics"
 	"go.zoe.im/spore/internal/llm"
 	"go.zoe.im/spore/internal/memory"
 	"go.zoe.im/spore/internal/network"
@@ -56,6 +57,16 @@ type Info struct {
 	StartedAt time.Time `json:"started_at"`
 }
 
+// ethicsAdapter wraps *ethics.Engine to satisfy engine.EthicsChecker.
+type ethicsAdapter struct {
+	e *ethics.Engine
+}
+
+func (a *ethicsAdapter) Check(agentID, taskID, action string) (string, string, string) {
+	dec, lvl, reason := a.e.Check(agentID, taskID, action)
+	return string(dec), string(lvl), reason
+}
+
 // Agent is the core runtime for a single spore agent.
 type Agent struct {
 	cfg      *Config
@@ -63,6 +74,7 @@ type Agent struct {
 	llm      llm.Provider
 	memory   memory.Store
 	engine   *engine.Engine
+	ethics   *ethics.Engine
 	bus      network.Bus
 
 	status    Status
@@ -96,8 +108,18 @@ func New(cfg *Config) (*Agent, error) {
 		return nil, fmt.Errorf("creating memory store: %w", err)
 	}
 
+	// init ethics engine
+	ethicsEngine, err := ethics.New("", &ethics.Config{
+		MaxBudgetPerTask: cfg.Ethics.MaxBudgetPerTask,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("creating ethics engine: %w", err)
+	}
+
 	// init task engine
 	eng := engine.New(provider, store)
+	eng.SetEthics(&ethicsAdapter{e: ethicsEngine})
+	eng.SetAgentID(id.PublicKeyHex()[:16])
 
 	// register built-in tools
 	eng.RegisterTool(&engine.ShellTool{})
@@ -109,6 +131,7 @@ func New(cfg *Config) (*Agent, error) {
 		llm:       provider,
 		memory:    store,
 		engine:    eng,
+		ethics:    ethicsEngine,
 		status:    StatusIdle,
 		taskQueue: make(chan *engine.Task, 50),
 	}, nil
@@ -277,6 +300,9 @@ func (a *Agent) shutdown() error {
 	a.status = StatusStopped
 	if a.bus != nil {
 		a.bus.Unsubscribe(a.identity.PublicKeyHex()[:16])
+	}
+	if a.ethics != nil {
+		a.ethics.Close()
 	}
 	if a.memory != nil {
 		return a.memory.Close()
