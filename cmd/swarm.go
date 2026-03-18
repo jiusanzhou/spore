@@ -32,9 +32,10 @@ import (
 )
 
 type swarmCmd struct {
-	Agents int    `opts:"short=n,help=number of agents to start"`
-	Model  string `opts:"short=m,help=LLM model"`
-	Dir    string `opts:"short=d,help=data directory"`
+	Agents  int    `opts:"short=n,help=number of agents to start"`
+	Model   string `opts:"short=m,help=LLM model"`
+	Dir     string `opts:"short=d,help=data directory"`
+	APIPort int    `opts:"help=HTTP API port (0 to disable)"`
 }
 
 func init() {
@@ -85,38 +86,55 @@ func (c *swarmCmd) run() error {
 	// Start all agents
 	sw.RunAll()
 
+	// Start HTTP API if port specified
+	if c.APIPort > 0 {
+		go startAPIServer(sw, c.APIPort)
+	}
+
 	fmt.Println()
 	fmt.Println("🦠 Spore swarm started!")
 	fmt.Println()
 	printAgentTable(sw)
 	fmt.Println()
-	fmt.Println("Commands: task <agent> <description> | ps | quit")
+	fmt.Println("Commands: task <agent> <description> | broadcast <description> | ps | quit")
 	fmt.Println()
 
-	// REPL
+	// Signal handling
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
 
-	scanner := bufio.NewScanner(os.Stdin)
-	inputCh := make(chan string)
-
+	// Single reader goroutine — avoids multiple goroutines blocking on stdin
+	inputCh := make(chan string, 1)
+	errCh := make(chan error, 1)
 	go func() {
+		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
 			inputCh <- scanner.Text()
 		}
+		if err := scanner.Err(); err != nil {
+			errCh <- err
+		} else {
+			errCh <- fmt.Errorf("EOF")
+		}
 	}()
 
+	fmt.Print("spore> ")
 	for {
-		fmt.Print("spore> ")
 		select {
 		case <-sigCh:
 			fmt.Println("\n🛑 Shutting down swarm...")
 			sw.Close()
 			return nil
 
+		case err := <-errCh:
+			fmt.Printf("\n🛑 Input closed (%v), shutting down...\n", err)
+			sw.Close()
+			return nil
+
 		case line := <-inputCh:
 			line = strings.TrimSpace(line)
 			if line == "" {
+				fmt.Print("spore> ")
 				continue
 			}
 
@@ -133,25 +151,34 @@ func (c *swarmCmd) run() error {
 				parts := strings.SplitN(line[5:], " ", 2)
 				if len(parts) < 2 {
 					fmt.Println("Usage: task <agent-name> <description>")
-					continue
-				}
-				taskID, err := sw.SendTask(parts[0], parts[1])
-				if err != nil {
-					fmt.Printf("❌ %v\n", err)
 				} else {
-					fmt.Printf("📋 Task %s queued for %s\n", taskID, parts[0])
+					taskID, err := sw.SendTask(parts[0], parts[1])
+					if err != nil {
+						fmt.Printf("❌ %v\n", err)
+					} else {
+						fmt.Printf("📋 Task %s queued for %s\n", taskID, parts[0])
+					}
 				}
 
 			case strings.HasPrefix(line, "broadcast "):
 				desc := strings.TrimPrefix(line, "broadcast ")
-				// send to coordinator
 				if _, err := sw.SendTask("coordinator", desc); err != nil {
 					fmt.Printf("❌ %v\n", err)
 				}
 
+			case line == "help":
+				fmt.Println("Commands:")
+				fmt.Println("  task <agent> <description>  — send a task to an agent")
+				fmt.Println("  broadcast <description>     — send a task to the coordinator")
+				fmt.Println("  ps                          — list running agents")
+				fmt.Println("  help                        — show this help")
+				fmt.Println("  quit / exit                 — shut down the swarm")
+
 			default:
-				fmt.Println("Unknown command. Try: task <agent> <desc> | ps | quit")
+				fmt.Println("Unknown command. Type 'help' for available commands.")
 			}
+
+			fmt.Print("spore> ")
 		}
 	}
 }
