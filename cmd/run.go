@@ -19,14 +19,18 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"go.zoe.im/spore/internal/agent"
+	"go.zoe.im/spore/internal/swarm"
 	"go.zoe.im/x/cli"
 )
 
 type runCmd struct {
-	Dir    string `opts:"short=d,help=agent data directory (contains spore.toml)"`
-	Config string `opts:"short=c,help=agent config file path (default: <dir>/spore.toml)"`
+	Dir     string `opts:"short=d,help=agent data directory (contains spore.toml)"`
+	Config  string `opts:"short=c,help=agent config file path (default: <dir>/spore.toml)"`
+	APIPort int    `opts:"help=HTTP API + dashboard port (0 to disable)"`
 }
 
 func init() {
@@ -50,31 +54,40 @@ func (c *runCmd) run() error {
 		return fmt.Errorf("loading config: %w", err)
 	}
 
-	// Inherit from global config for empty fields
-	if cfg.LLM.BaseURL == "" {
-		cfg.LLM.BaseURL = globalCfg.LLM.BaseURL
-	}
-	if cfg.LLM.APIKey == "" {
-		cfg.LLM.APIKey = globalCfg.LLM.APIKey
-	}
-	if cfg.LLM.Provider == "" {
-		cfg.LLM.Provider = globalCfg.LLM.Provider
-	}
-	if cfg.LLM.Model == "" {
-		cfg.LLM.Model = globalCfg.LLM.Model
-	}
-	if len(cfg.LLM.Headers) == 0 && len(globalCfg.LLM.Headers) > 0 {
-		cfg.LLM.Headers = make(map[string]string)
-		for k, v := range globalCfg.LLM.Headers {
-			cfg.LLM.Headers[k] = v
-		}
+	// Inherit from global config: global overrides local defaults
+	applyGlobalConfig(cfg)
+
+	dir := c.Dir
+	if dir == "" {
+		home, _ := os.UserHomeDir()
+		dir = home + "/.spore"
 	}
 
-	a, err := agent.New(cfg)
-	if err != nil {
-		return fmt.Errorf("creating agent: %w", err)
+	// Use swarm as single-agent wrapper for API support
+	sw := swarm.New(dir, 5)
+	if _, err := sw.AddAgent(cfg); err != nil {
+		return fmt.Errorf("creating agent %s: %w", cfg.Agent.Name, err)
 	}
 
-	fmt.Printf("🦠 Starting agent: %s\n", cfg.Agent.Name)
-	return a.Run()
+	sw.RunAll()
+
+	if c.APIPort > 0 {
+		go startAPIServer(sw, c.APIPort)
+	}
+
+	fmt.Printf("🦠 Agent %s running\n", cfg.Agent.Name)
+	fmt.Printf("   Model:   %s/%s\n", cfg.LLM.Provider, cfg.LLM.Model)
+	fmt.Printf("   Runtime: %s\n", cfg.Runtime.Type)
+	if c.APIPort > 0 {
+		fmt.Printf("   API:     http://localhost:%d\n", c.APIPort)
+	}
+
+	// Wait for signal
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+	<-sigCh
+
+	fmt.Println("\n🛑 Shutting down...")
+	sw.Close()
+	return nil
 }

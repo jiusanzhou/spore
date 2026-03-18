@@ -181,27 +181,10 @@ func (c *swarmCmd) loadConfigs(dir string) ([]*agent.Config, error) {
 	return configs, nil
 }
 
-// applyEnvOverrides applies environment variables, CLI flags, and global config to an agent config.
+// applyEnvOverrides applies global config, environment variables, and CLI flags to an agent config.
 func (c *swarmCmd) applyEnvOverrides(cfg *agent.Config) {
-	// Global config as base — only fill empty fields
-	if cfg.LLM.BaseURL == "" && globalCfg.LLM.BaseURL != "" {
-		cfg.LLM.BaseURL = globalCfg.LLM.BaseURL
-	}
-	if cfg.LLM.APIKey == "" && globalCfg.LLM.APIKey != "" {
-		cfg.LLM.APIKey = globalCfg.LLM.APIKey
-	}
-	if cfg.LLM.Provider == "" && globalCfg.LLM.Provider != "" {
-		cfg.LLM.Provider = globalCfg.LLM.Provider
-	}
-	if cfg.LLM.Model == "" && globalCfg.LLM.Model != "" {
-		cfg.LLM.Model = globalCfg.LLM.Model
-	}
-	if len(cfg.LLM.Headers) == 0 && len(globalCfg.LLM.Headers) > 0 {
-		cfg.LLM.Headers = make(map[string]string)
-		for k, v := range globalCfg.LLM.Headers {
-			cfg.LLM.Headers[k] = v
-		}
-	}
+	// Global config as base
+	applyGlobalConfig(cfg)
 
 	// CLI flags override everything
 	if c.BaseURL != "" {

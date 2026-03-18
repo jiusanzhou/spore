@@ -77,3 +77,34 @@ func mustFSProvider(path string) config.Provider {
 
 // Run is the entry point.
 var Run = app.Run
+
+// defaultLLM is the unmodified default LLM config for comparison.
+var defaultLLM = agent.DefaultConfig("", "gpt-4o").LLM
+
+// applyGlobalConfig merges global config into an agent config.
+// Global config values override agent config when the global value
+// differs from the built-in default (meaning user explicitly set it).
+func applyGlobalConfig(cfg *agent.Config) {
+	if globalCfg.LLM.BaseURL != defaultLLM.BaseURL && globalCfg.LLM.BaseURL != "" {
+		cfg.LLM.BaseURL = globalCfg.LLM.BaseURL
+	}
+	if globalCfg.LLM.APIKey != "" {
+		cfg.LLM.APIKey = globalCfg.LLM.APIKey
+	}
+	if globalCfg.LLM.Provider != defaultLLM.Provider && globalCfg.LLM.Provider != "" {
+		cfg.LLM.Provider = globalCfg.LLM.Provider
+	}
+	if globalCfg.LLM.Model != defaultLLM.Model && globalCfg.LLM.Model != "" {
+		cfg.LLM.Model = globalCfg.LLM.Model
+	}
+	if len(globalCfg.LLM.Headers) > 0 {
+		if cfg.LLM.Headers == nil {
+			cfg.LLM.Headers = make(map[string]string)
+		}
+		for k, v := range globalCfg.LLM.Headers {
+			if _, exists := cfg.LLM.Headers[k]; !exists {
+				cfg.LLM.Headers[k] = v
+			}
+		}
+	}
+}
