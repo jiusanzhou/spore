@@ -135,7 +135,7 @@ func DefaultConfig(name, model string) *Config {
 		},
 		Economy: EconomyConfig{
 			HibernateThreshold: 0.0,
-			MinTaskBalance:     1.0,
+			MinTaskBalance:     0.0, // no gate by default; set > 0 to require balance
 		},
 		Privacy: PrivacyConfig{
 			Enabled: true,
