@@ -32,6 +32,7 @@ import (
 	"go.zoe.im/spore/internal/memory"
 	"go.zoe.im/spore/internal/network"
 	"go.zoe.im/spore/internal/protocol"
+	"go.zoe.im/spore/internal/runtime"
 
 	"github.com/google/uuid"
 )
@@ -49,9 +50,10 @@ const (
 // Info holds the agent's runtime information.
 type Info struct {
 	Name      string    `json:"name"`
-	ID        string    `json:"id"` // public key hex (short)
+	ID        string    `json:"id"`
 	Role      string    `json:"role"`
 	Model     string    `json:"model"`
+	Runtime   string    `json:"runtime"`
 	Status    Status    `json:"status"`
 	TaskCount int       `json:"task_count"`
 	StartedAt time.Time `json:"started_at"`
@@ -76,23 +78,31 @@ type Agent struct {
 	engine   *engine.Engine
 	ethics   *ethics.Engine
 	bus      network.Bus
+	registry *runtime.Registry
 
 	status    Status
-	taskQueue chan *engine.Task
+	taskQueue chan *taskEntry
 	mu        sync.RWMutex
 	taskCount int
 	startedAt time.Time
 }
 
+// taskEntry wraps a task with optional runtime preference.
+type taskEntry struct {
+	ID          string
+	Description string
+	Runtime     string // preferred runtime name, empty = auto
+	WorkDir     string
+	CreatedAt   time.Time
+}
+
 // New creates a new Agent from config.
 func New(cfg *Config) (*Agent, error) {
-	// load or create identity
 	id, err := NewIdentity(cfg.Agent.Name)
 	if err != nil {
 		return nil, fmt.Errorf("creating identity: %w", err)
 	}
 
-	// init LLM provider
 	provider, err := llm.NewProvider(cfg.LLM.Provider, llm.ProviderConfig{
 		BaseURL: cfg.LLM.BaseURL,
 		APIKey:  cfg.LLM.APIKey,
@@ -102,13 +112,11 @@ func New(cfg *Config) (*Agent, error) {
 		return nil, fmt.Errorf("creating LLM provider: %w", err)
 	}
 
-	// init memory store
 	store, err := memory.NewStore(cfg.Memory.Backend, cfg.Memory.Path)
 	if err != nil {
 		return nil, fmt.Errorf("creating memory store: %w", err)
 	}
 
-	// init ethics engine
 	ethicsEngine, err := ethics.New("", &ethics.Config{
 		MaxBudgetPerTask: cfg.Ethics.MaxBudgetPerTask,
 	})
@@ -116,14 +124,49 @@ func New(cfg *Config) (*Agent, error) {
 		return nil, fmt.Errorf("creating ethics engine: %w", err)
 	}
 
-	// init task engine
 	eng := engine.New(provider, store)
 	eng.SetEthics(&ethicsAdapter{e: ethicsEngine})
 	eng.SetAgentID(id.PublicKeyHex()[:16])
-
-	// register built-in tools
 	eng.RegisterTool(&engine.ShellTool{})
 	eng.RegisterTool(&engine.WebSearchTool{})
+
+	// Setup runtime registry
+	reg := runtime.NewRegistry()
+
+	// Always register builtin
+	reg.Register(runtime.NewBuiltin(provider, store))
+
+	// Setup based on config
+	switch cfg.Runtime.Type {
+	case "auto", "":
+		// Auto-discover available CLIs
+		discovered := reg.AutoDiscover(context.Background())
+		if len(discovered) > 0 {
+			fmt.Printf("   Discovered runtimes: %v\n", discovered)
+		}
+	case "claude-code":
+		reg.Register(runtime.NewClaudeCode())
+	case "codex":
+		reg.Register(runtime.NewCodex())
+	case "openclaw":
+		reg.Register(runtime.NewOpenClaw())
+	case "http":
+		if cfg.Runtime.URL != "" {
+			reg.Register(runtime.NewHTTPRuntime(cfg.Runtime.URL))
+		}
+	case "exec":
+		if cfg.Runtime.Command != "" {
+			reg.Register(runtime.NewExecRuntime(runtime.ExecConfig{
+				Name:     cfg.Agent.Name + "-exec",
+				Command:  cfg.Runtime.Command,
+				Args:     cfg.Runtime.Args,
+				TaskFlag: cfg.Runtime.TaskFlag,
+				Tags:     cfg.Runtime.Tags,
+			}))
+		}
+	case "builtin":
+		// already registered
+	}
 
 	return &Agent{
 		cfg:       cfg,
@@ -132,8 +175,9 @@ func New(cfg *Config) (*Agent, error) {
 		memory:    store,
 		engine:    eng,
 		ethics:    ethicsEngine,
+		registry:  reg,
 		status:    StatusIdle,
-		taskQueue: make(chan *engine.Task, 50),
+		taskQueue: make(chan *taskEntry, 50),
 	}, nil
 }
 
@@ -145,7 +189,6 @@ func NewWithBus(cfg *Config, bus network.Bus) (*Agent, error) {
 	}
 	a.bus = bus
 
-	// register delegate tool if bus is available
 	a.engine.RegisterTool(&engine.DelegateTool{
 		SendFunc: func(to, taskDesc string) error {
 			msg, err := protocol.NewMessage(
@@ -161,9 +204,7 @@ func NewWithBus(cfg *Config, bus network.Bus) (*Agent, error) {
 		},
 	})
 
-	// subscribe to messages
 	bus.Subscribe(a.identity.PublicKeyHex()[:16], a.handleMessage)
-
 	return a, nil
 }
 
@@ -178,14 +219,24 @@ func (a *Agent) Run() error {
 	a.startedAt = time.Now()
 	a.status = StatusIdle
 
-	fmt.Printf("🦠 Agent %s running (id: %s)\n", a.cfg.Agent.Name, a.identity.PublicKeyHex()[:16])
-	fmt.Printf("   Model: %s/%s\n", a.cfg.LLM.Provider, a.cfg.LLM.Model)
-	fmt.Printf("   Role:  %s\n", a.cfg.Agent.Role)
+	runtimeName := "builtin"
+	if rts := a.registry.List(); len(rts) > 0 {
+		// pick the first non-builtin if available
+		for _, rt := range rts {
+			if rt.Name != "builtin" {
+				runtimeName = rt.Name
+				break
+			}
+		}
+	}
 
-	// task worker
+	fmt.Printf("🦠 Agent %s running (id: %s)\n", a.cfg.Agent.Name, a.identity.PublicKeyHex()[:16])
+	fmt.Printf("   Runtime: %s\n", runtimeName)
+	fmt.Printf("   Model:   %s/%s\n", a.cfg.LLM.Provider, a.cfg.LLM.Model)
+	fmt.Printf("   Role:    %s\n", a.cfg.Agent.Role)
+
 	go a.taskWorker(ctx)
 
-	// heartbeat ticker
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
@@ -202,57 +253,70 @@ func (a *Agent) Run() error {
 
 // SubmitTask queues a task for execution.
 func (a *Agent) SubmitTask(description string) string {
-	task := &engine.Task{
+	return a.SubmitTaskWithRuntime(description, "", "")
+}
+
+// SubmitTaskWithRuntime queues a task with a specific runtime preference.
+func (a *Agent) SubmitTaskWithRuntime(description, runtimeName, workDir string) string {
+	entry := &taskEntry{
 		ID:          uuid.New().String()[:8],
 		Description: description,
-		State:       engine.TaskPending,
+		Runtime:     runtimeName,
+		WorkDir:     workDir,
 		CreatedAt:   time.Now(),
 	}
-	a.taskQueue <- task
-	return task.ID
+	a.taskQueue <- entry
+	return entry.ID
 }
 
 // Info returns the agent's current info.
 func (a *Agent) Info() Info {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
+
+	rtName := a.cfg.Runtime.Type
+	if rtName == "" {
+		rtName = "auto"
+	}
+
 	return Info{
 		Name:      a.cfg.Agent.Name,
 		ID:        a.identity.PublicKeyHex()[:16],
 		Role:      a.cfg.Agent.Role,
 		Model:     a.cfg.LLM.Model,
+		Runtime:   rtName,
 		Status:    a.status,
 		TaskCount: a.taskCount,
 		StartedAt: a.startedAt,
 	}
 }
 
-// Identity returns the agent's identity.
-func (a *Agent) Identity() *Identity {
-	return a.identity
+// Runtimes returns info about all available runtimes.
+func (a *Agent) Runtimes() []runtime.Info {
+	return a.registry.List()
 }
 
+// Identity returns the agent's identity.
+func (a *Agent) Identity() *Identity { return a.identity }
+
 // Config returns the agent's config.
-func (a *Agent) Config() *Config {
-	return a.cfg
-}
+func (a *Agent) Config() *Config { return a.cfg }
 
 func (a *Agent) taskWorker(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case task := <-a.taskQueue:
+		case entry := <-a.taskQueue:
 			a.mu.Lock()
 			a.status = StatusBusy
 			a.mu.Unlock()
 
-			fmt.Printf("📋 [%s] Starting task: %s\n", a.cfg.Agent.Name, task.Description)
+			fmt.Printf("📋 [%s] Starting task: %s\n", a.cfg.Agent.Name, entry.Description)
 
-			if err := a.engine.Run(ctx, task); err != nil {
+			err := a.executeTask(ctx, entry)
+			if err != nil {
 				fmt.Printf("❌ [%s] Task failed: %s\n", a.cfg.Agent.Name, err)
-			} else {
-				fmt.Printf("✅ [%s] Task completed: %s\n", a.cfg.Agent.Name, task.Result)
 			}
 
 			a.mu.Lock()
@@ -261,6 +325,47 @@ func (a *Agent) taskWorker(ctx context.Context) {
 			a.mu.Unlock()
 		}
 	}
+}
+
+func (a *Agent) executeTask(ctx context.Context, entry *taskEntry) error {
+	// Determine which runtime to use
+	var rt runtime.Runtime
+	var err error
+
+	if entry.Runtime != "" {
+		// Explicit runtime requested
+		var ok bool
+		rt, ok = a.registry.Get(entry.Runtime)
+		if !ok {
+			return fmt.Errorf("runtime not found: %s", entry.Runtime)
+		}
+	} else {
+		// Auto-route based on task tags (for now, just use first non-builtin)
+		rt, err = a.registry.Route(nil)
+		if err != nil {
+			return fmt.Errorf("no runtime available: %w", err)
+		}
+	}
+
+	fmt.Printf("   [%s] Using runtime: %s\n", a.cfg.Agent.Name, rt.Info().Name)
+
+	input := runtime.TaskInput{
+		ID:          entry.ID,
+		Description: entry.Description,
+		WorkDir:     entry.WorkDir,
+	}
+
+	output, err := rt.Execute(ctx, input)
+	if err != nil {
+		return err
+	}
+
+	if output.Success {
+		fmt.Printf("✅ [%s] Task completed via %s: %s\n", a.cfg.Agent.Name, rt.Info().Name, truncate(output.Result, 200))
+	} else {
+		return fmt.Errorf("task failed: %s", output.Error)
+	}
+	return nil
 }
 
 func (a *Agent) handleMessage(msg *protocol.Message) error {
@@ -272,9 +377,7 @@ func (a *Agent) handleMessage(msg *protocol.Message) error {
 		}
 		fmt.Printf("📨 [%s] Received task from %s: %s\n", a.cfg.Agent.Name, msg.From[:8], req.Description)
 		a.SubmitTask(req.Description)
-
 	case protocol.MsgHeartbeat:
-		// acknowledge
 		fmt.Printf("💓 [%s] Heartbeat from %s\n", a.cfg.Agent.Name, msg.From[:8])
 	}
 	return nil
@@ -289,8 +392,9 @@ func (a *Agent) heartbeat() {
 		"broadcast",
 		protocol.MsgHeartbeat,
 		map[string]interface{}{
-			"name":   a.cfg.Agent.Name,
-			"status": a.status,
+			"name":    a.cfg.Agent.Name,
+			"status":  a.status,
+			"runtime": a.cfg.Runtime.Type,
 		},
 	)
 	a.bus.Send(msg)
@@ -301,6 +405,9 @@ func (a *Agent) shutdown() error {
 	if a.bus != nil {
 		a.bus.Unsubscribe(a.identity.PublicKeyHex()[:16])
 	}
+	if a.registry != nil {
+		a.registry.Close()
+	}
 	if a.ethics != nil {
 		a.ethics.Close()
 	}
@@ -308,4 +415,11 @@ func (a *Agent) shutdown() error {
 		return a.memory.Close()
 	}
 	return nil
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
 }

@@ -34,14 +34,16 @@ import (
 type swarmCmd struct {
 	Agents  int    `opts:"short=n,help=number of agents to start"`
 	Model   string `opts:"short=m,help=LLM model"`
+	Runtime string `opts:"short=r,help=runtime: auto/builtin/claude-code/codex/openclaw"`
 	Dir     string `opts:"short=d,help=data directory"`
 	APIPort int    `opts:"help=HTTP API port (0 to disable)"`
 }
 
 func init() {
 	c := &swarmCmd{
-		Agents: 3,
-		Model:  "gpt-4o",
+		Agents:  3,
+		Model:   "gpt-4o",
+		Runtime: "auto",
 	}
 	app.Register(cli.New(
 		cli.Name("swarm"),
@@ -78,6 +80,7 @@ func (c *swarmCmd) run() error {
 	for i := 0; i < c.Agents && i < len(names); i++ {
 		cfg := agent.DefaultConfig(names[i], c.Model)
 		cfg.Agent.Role = roles[i]
+		cfg.Runtime.Type = c.Runtime
 		if _, err := sw.AddAgent(cfg); err != nil {
 			return fmt.Errorf("creating agent %s: %w", names[i], err)
 		}
@@ -186,14 +189,14 @@ func (c *swarmCmd) run() error {
 func printAgentTable(sw *swarm.Swarm) {
 	infos := sw.List()
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tROLE\tSTATUS\tMODEL\tTASKS\tUPTIME")
+	fmt.Fprintln(w, "NAME\tROLE\tRUNTIME\tSTATUS\tMODEL\tTASKS\tUPTIME")
 	for _, info := range infos {
 		uptime := ""
 		if !info.StartedAt.IsZero() {
 			uptime = time.Since(info.StartedAt).Truncate(time.Second).String()
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\t%s\n",
-			info.Name, info.Role, info.Status, info.Model, info.TaskCount, uptime)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%d\t%s\n",
+			info.Name, info.Role, info.Runtime, info.Status, info.Model, info.TaskCount, uptime)
 	}
 	w.Flush()
 }

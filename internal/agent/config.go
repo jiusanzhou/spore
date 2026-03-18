@@ -26,18 +26,35 @@ import (
 
 // Config is the top-level agent configuration.
 type Config struct {
-	Agent   AgentConfig   `toml:"agent"`
-	LLM     LLMConfig     `toml:"llm"`
-	Memory  MemoryConfig  `toml:"memory"`
-	Network NetworkConfig `toml:"network"`
-	Ethics  EthicsConfig  `toml:"ethics"`
-	Spawner SpawnerConfig `toml:"spawner"`
+	Agent   AgentConfig    `toml:"agent"`
+	Runtime RuntimeConfig  `toml:"runtime"`
+	LLM     LLMConfig      `toml:"llm"`
+	Memory  MemoryConfig   `toml:"memory"`
+	Network NetworkConfig  `toml:"network"`
+	Ethics  EthicsConfig   `toml:"ethics"`
+	Spawner SpawnerConfig  `toml:"spawner"`
 }
 
 // AgentConfig defines the agent's basic identity and behavior.
 type AgentConfig struct {
 	Name string `toml:"name"`
 	Role string `toml:"role"` // coordinator, worker, specialist
+}
+
+// RuntimeConfig defines which execution backend to use.
+type RuntimeConfig struct {
+	// Type selects the runtime: "builtin", "claude-code", "codex", "openclaw", "exec", "http", "auto"
+	// "auto" will probe available CLIs and pick the best one.
+	Type string `toml:"type"`
+
+	// Exec-specific config (when type = "exec")
+	Command  string   `toml:"command"`
+	Args     []string `toml:"args"`
+	TaskFlag string   `toml:"task_flag"`
+	Tags     []string `toml:"tags"`
+
+	// HTTP-specific config (when type = "http")
+	URL string `toml:"url"`
 }
 
 // LLMConfig defines the LLM provider settings.
@@ -81,6 +98,9 @@ func DefaultConfig(name, model string) *Config {
 		Agent: AgentConfig{
 			Name: name,
 			Role: "worker",
+		},
+		Runtime: RuntimeConfig{
+			Type: "auto", // auto-discover available runtimes
 		},
 		LLM: LLMConfig{
 			Provider: "openai",
