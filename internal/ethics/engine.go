@@ -171,7 +171,7 @@ var exfilPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\bwget\b.*--post-data.*\b(password|secret|token|key|credential)\b`),
 	regexp.MustCompile(`(?i)\bnc\s+`),                   // netcat
 	regexp.MustCompile(`(?i)/dev/tcp/`),                 // bash tcp
-	regexp.MustCompile(`(?i)\bscp\b.*\b(\.ssh|\.gnupg|\.aws)\b`), // scp private dirs
+	regexp.MustCompile(`(?i)\bscp\b.*(\.ssh|\.gnupg|\.aws)`), // scp private dirs
 }
 
 // checkL0 verifies hard constraints. These cannot be overridden.

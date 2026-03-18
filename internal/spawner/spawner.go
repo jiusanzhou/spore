@@ -18,6 +18,7 @@ package spawner
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"go.zoe.im/spore/internal/agent"
@@ -73,6 +74,9 @@ func (s *Spawner) Spawn(parentCfg *agent.Config, req *Request) (*agent.Config, *
 
 	// Save to child directory
 	childDir := filepath.Join(s.baseDir, req.ChildName)
+	if err := os.MkdirAll(childDir, 0755); err != nil {
+		return nil, nil, fmt.Errorf("creating child directory: %w", err)
+	}
 	if err := childCfg.Save(filepath.Join(childDir, "spore.toml")); err != nil {
 		return nil, nil, fmt.Errorf("saving child config: %w", err)
 	}
