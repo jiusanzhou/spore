@@ -20,11 +20,26 @@ import (
 	"crypto/ed25519"
 	"fmt"
 	"sync"
+	"time"
 
 	"go.zoe.im/spore/internal/agent"
 	"go.zoe.im/spore/internal/network"
 	"go.zoe.im/spore/internal/spawner"
 )
+
+// TaskEvent records a task lifecycle event.
+type TaskEvent struct {
+	ID          string    `json:"id"`
+	Agent       string    `json:"agent"`
+	Description string    `json:"description"`
+	Status      string    `json:"status"` // queued, running, completed, failed
+	Runtime     string    `json:"runtime"`
+	Error       string    `json:"error,omitempty"`
+	SubmittedAt time.Time `json:"submitted_at"`
+	CompletedAt time.Time `json:"completed_at,omitempty"`
+}
+
+const maxTaskLog = 50
 
 // Swarm manages multiple agents on the same node.
 type Swarm struct {
@@ -32,14 +47,22 @@ type Swarm struct {
 	agents  map[string]*agent.Agent
 	spawner *spawner.Spawner
 	mu      sync.RWMutex
+
+	startedAt      time.Time
+	taskLog        []TaskEvent
+	taskLogMu      sync.RWMutex
+	tasksCompleted int
+	tasksFailed    int
+	tasksQueued    int
 }
 
 // New creates a new swarm with a local in-process bus.
 func New(baseDir string, maxAgents int) *Swarm {
 	return &Swarm{
-		bus:     network.NewLocalBus(),
-		agents:  make(map[string]*agent.Agent),
-		spawner: spawner.New(baseDir, maxAgents),
+		bus:       network.NewLocalBus(),
+		agents:    make(map[string]*agent.Agent),
+		spawner:   spawner.New(baseDir, maxAgents),
+		startedAt: time.Now(),
 	}
 }
 
@@ -54,9 +77,10 @@ func NewP2PSwarm(baseDir string, maxAgents int, privKey ed25519.PrivateKey, list
 		return nil, fmt.Errorf("create p2p bus: %w", err)
 	}
 	return &Swarm{
-		bus:     bus,
-		agents:  make(map[string]*agent.Agent),
-		spawner: spawner.New(baseDir, maxAgents),
+		bus:       bus,
+		agents:    make(map[string]*agent.Agent),
+		spawner:   spawner.New(baseDir, maxAgents),
+		startedAt: time.Now(),
 	}, nil
 }
 
@@ -114,6 +138,15 @@ func (s *Swarm) SendTask(agentName, description string) (string, error) {
 		return "", fmt.Errorf("agent not found: %s", agentName)
 	}
 	taskID := a.SubmitTask(description)
+
+	s.LogTask(TaskEvent{
+		ID:          taskID,
+		Agent:       agentName,
+		Description: description,
+		Status:      "queued",
+		SubmittedAt: time.Now(),
+	})
+
 	return taskID, nil
 }
 
@@ -132,6 +165,107 @@ func (s *Swarm) List() []agent.Info {
 // Bus returns the shared message bus.
 func (s *Swarm) Bus() network.Bus {
 	return s.bus
+}
+
+// LogTask records a task event in the swarm's task log.
+func (s *Swarm) LogTask(evt TaskEvent) {
+	s.taskLogMu.Lock()
+	defer s.taskLogMu.Unlock()
+
+	// Update or append
+	found := false
+	for i := len(s.taskLog) - 1; i >= 0; i-- {
+		if s.taskLog[i].ID == evt.ID {
+			s.taskLog[i] = evt
+			found = true
+			break
+		}
+	}
+	if !found {
+		s.taskLog = append(s.taskLog, evt)
+		if len(s.taskLog) > maxTaskLog {
+			s.taskLog = s.taskLog[len(s.taskLog)-maxTaskLog:]
+		}
+	}
+
+	// Update counters
+	switch evt.Status {
+	case "queued":
+		s.tasksQueued++
+	case "completed":
+		s.tasksCompleted++
+		s.tasksQueued--
+	case "failed":
+		s.tasksFailed++
+		s.tasksQueued--
+	}
+}
+
+// TaskLog returns the recent task events (newest first).
+func (s *Swarm) TaskLog() []TaskEvent {
+	s.taskLogMu.RLock()
+	defer s.taskLogMu.RUnlock()
+
+	result := make([]TaskEvent, len(s.taskLog))
+	for i, evt := range s.taskLog {
+		result[len(s.taskLog)-1-i] = evt
+	}
+	return result
+}
+
+// Stats returns swarm-level statistics.
+type SwarmStats struct {
+	TotalAgents       int     `json:"total_agents"`
+	ActiveAgents      int     `json:"active_agents"`
+	TotalCompleted    int     `json:"total_tasks_completed"`
+	TotalFailed       int     `json:"total_tasks_failed"`
+	TotalQueued       int     `json:"total_tasks_queued"`
+	UptimeSeconds     int64   `json:"uptime_seconds"`
+	NetworkTransport  string  `json:"network_transport"`
+	AverageCapacity   float64 `json:"average_capacity"`
+}
+
+// Stats returns the current swarm statistics.
+func (s *Swarm) Stats() SwarmStats {
+	infos := s.List()
+	active := 0
+	var totalCapacity float64
+	for _, info := range infos {
+		if info.Status == agent.StatusIdle || info.Status == agent.StatusBusy {
+			active++
+		}
+		if info.Status == agent.StatusBusy {
+			totalCapacity += 0.0
+		} else if info.Status == agent.StatusIdle {
+			totalCapacity += 1.0
+		}
+	}
+	avgCap := 0.0
+	if len(infos) > 0 {
+		avgCap = totalCapacity / float64(len(infos))
+	}
+
+	transport := "local"
+	if _, ok := s.bus.(*network.P2PBus); ok {
+		transport = "libp2p"
+	}
+
+	s.taskLogMu.RLock()
+	completed := s.tasksCompleted
+	failed := s.tasksFailed
+	queued := s.tasksQueued
+	s.taskLogMu.RUnlock()
+
+	return SwarmStats{
+		TotalAgents:      len(infos),
+		ActiveAgents:     active,
+		TotalCompleted:   completed,
+		TotalFailed:      failed,
+		TotalQueued:      queued,
+		UptimeSeconds:    int64(time.Since(s.startedAt).Seconds()),
+		NetworkTransport: transport,
+		AverageCapacity:  avgCap,
+	}
 }
 
 // Close shuts down the swarm.

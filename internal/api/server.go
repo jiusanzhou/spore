@@ -17,6 +17,7 @@
 package api
 
 import (
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -26,6 +27,9 @@ import (
 	"go.zoe.im/spore/internal/network"
 	"go.zoe.im/spore/internal/swarm"
 )
+
+//go:embed dashboard.html
+var dashboardHTML []byte
 
 // Server is the HTTP API server for the swarm.
 type Server struct {
@@ -63,12 +67,15 @@ func (s *Server) Close() error {
 }
 
 func (s *Server) routes() {
+	s.mux.HandleFunc("/", s.handleDashboard)
 	s.mux.HandleFunc("/api/health", s.handleHealth)
 	s.mux.HandleFunc("/api/agents", s.handleAgents)
 	// Pattern: /api/agents/<name>/tasks or /api/agents/<name>/info
 	s.mux.HandleFunc("/api/agents/", s.handleAgentRoute)
 	s.mux.HandleFunc("/api/peers", s.handlePeers)
 	s.mux.HandleFunc("/api/peers/connect", s.handlePeerConnect)
+	s.mux.HandleFunc("/api/stats", s.handleStats)
+	s.mux.HandleFunc("/api/tasks", s.handleTasks)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -209,6 +216,33 @@ func (s *Server) handlePeerConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "connected", "addr": addr})
+}
+
+func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write(dashboardHTML)
+}
+
+func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.sw.Stats())
+}
+
+func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"tasks": s.sw.TaskLog(),
+	})
 }
 
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
