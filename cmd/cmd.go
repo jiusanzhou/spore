@@ -24,6 +24,7 @@ import (
 	"go.zoe.im/spore/internal/agent"
 	"go.zoe.im/x/cli"
 	"go.zoe.im/x/cli/config"
+	"go.zoe.im/x/version"
 )
 
 const banner = `
@@ -49,7 +50,7 @@ func sporeConfigDir() string {
 var app = cli.New(
 	cli.Name("spore"),
 	cli.Short("Decentralized AI agent swarm protocol & runtime"),
-	cli.Version("0.1.0-dev"),
+	version.NewOption(true),
 	cli.GlobalConfig(
 		globalCfg,
 		cli.WithConfigCommand(true),
