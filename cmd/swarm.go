@@ -38,7 +38,7 @@ type swarmCmd struct {
 	Runtime string `opts:"short=r,help=runtime backend: auto/builtin/claude-code/codex/openclaw"`
 	Dir     string `opts:"short=d,help=config directory (scan *.toml) or data directory"`
 	Config  string `opts:"short=c,help=single swarm config file path"`
-	APIPort int    `opts:"help=HTTP API + dashboard port (0 to disable)"`
+	APIPort int    `opts:"help=HTTP API + dashboard port (default 8080; 0 to disable)"`
 	BaseURL string `opts:"help=LLM API base URL (overrides config file)"`
 }
 
@@ -47,6 +47,7 @@ func init() {
 		Agents:  3,
 		Model:   "gpt-4o",
 		Runtime: "auto",
+		APIPort: 8080,
 	}
 	app.Register(cli.New(
 		cli.Name("swarm"),
