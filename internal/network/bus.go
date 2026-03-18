@@ -14,37 +14,26 @@
  * limitations under the License.
  */
 
-package cmd
+package network
 
 import (
-	"go.zoe.im/x/cli"
+	"go.zoe.im/spore/internal/protocol"
 )
 
-const banner = `
-     ___ _ __   ___  _ __ ___ 
-    / __| '_ \ / _ \| '__/ _ \
-    \__ \ |_) | (_) | | |  __/
-    |___/ .__/ \___/|_|  \___|
-        |_|
-`
+// Handler processes incoming messages.
+type Handler func(msg *protocol.Message) error
 
-type sporeApp struct{}
+// Bus is the interface for inter-agent communication.
+type Bus interface {
+	// Send delivers a message to a specific agent or broadcasts.
+	Send(msg *protocol.Message) error
 
-func (s *sporeApp) ShortDescription() string {
-	return "Decentralized AI agent swarm protocol & runtime"
-}
+	// Subscribe registers a handler for incoming messages.
+	Subscribe(agentID string, handler Handler) error
 
-var (
-	s   = &sporeApp{}
-	app = cli.FromStruct(s)
+	// Unsubscribe removes a handler.
+	Unsubscribe(agentID string) error
 
-	// Run is the entry point.
-	Run = app.Run
-)
-
-func init() {
-	app.Option(
-		cli.Name("spore"),
-		cli.Version("0.1.0-dev"),
-	)
+	// Close shuts down the bus.
+	Close() error
 }
