@@ -125,9 +125,19 @@ func (c *swarmCmd) loadConfigs(dir string) ([]*agent.Config, error) {
 	subdirs, _ := filepath.Glob(filepath.Join(dir, "*", "spore.toml"))
 	matches = append(matches, subdirs...)
 
-	if len(matches) > 0 {
-		fmt.Printf("📂 Loading %d config(s) from %s\n", len(matches), dir)
-		for _, path := range matches {
+	// Filter out global config file
+	var agentFiles []string
+	for _, m := range matches {
+		base := filepath.Base(m)
+		if base == "config.toml" || base == "config.yaml" || base == "config.json" {
+			continue // skip global config
+		}
+		agentFiles = append(agentFiles, m)
+	}
+
+	if len(agentFiles) > 0 {
+		fmt.Printf("📂 Loading %d config(s) from %s\n", len(agentFiles), dir)
+		for _, path := range agentFiles {
 			cfg, err := agent.LoadConfig(path, "")
 			if err != nil {
 				fmt.Printf("⚠️  Skipping %s: %v\n", path, err)
@@ -171,9 +181,29 @@ func (c *swarmCmd) loadConfigs(dir string) ([]*agent.Config, error) {
 	return configs, nil
 }
 
-// applyEnvOverrides applies environment variables and CLI flags to a config.
+// applyEnvOverrides applies environment variables, CLI flags, and global config to an agent config.
 func (c *swarmCmd) applyEnvOverrides(cfg *agent.Config) {
-	// CLI flags override config file
+	// Global config as base — only fill empty fields
+	if cfg.LLM.BaseURL == "" && globalCfg.LLM.BaseURL != "" {
+		cfg.LLM.BaseURL = globalCfg.LLM.BaseURL
+	}
+	if cfg.LLM.APIKey == "" && globalCfg.LLM.APIKey != "" {
+		cfg.LLM.APIKey = globalCfg.LLM.APIKey
+	}
+	if cfg.LLM.Provider == "" && globalCfg.LLM.Provider != "" {
+		cfg.LLM.Provider = globalCfg.LLM.Provider
+	}
+	if cfg.LLM.Model == "" && globalCfg.LLM.Model != "" {
+		cfg.LLM.Model = globalCfg.LLM.Model
+	}
+	if len(cfg.LLM.Headers) == 0 && len(globalCfg.LLM.Headers) > 0 {
+		cfg.LLM.Headers = make(map[string]string)
+		for k, v := range globalCfg.LLM.Headers {
+			cfg.LLM.Headers[k] = v
+		}
+	}
+
+	// CLI flags override everything
 	if c.BaseURL != "" {
 		cfg.LLM.BaseURL = c.BaseURL
 	} else if envURL := os.Getenv("SPORE_LLM_BASE_URL"); envURL != "" {

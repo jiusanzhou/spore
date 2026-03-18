@@ -17,7 +17,13 @@
 package cmd
 
 import (
+	"log"
+	"os"
+	"path/filepath"
+
+	"go.zoe.im/spore/internal/agent"
 	"go.zoe.im/x/cli"
+	"go.zoe.im/x/cli/config"
 )
 
 const banner = `
@@ -28,23 +34,45 @@ const banner = `
         |_|
 `
 
-type sporeApp struct{}
+// globalCfg is the shared config loaded from ~/.spore/config.toml
+// All subcommands can access this to inherit LLM, network, etc. settings.
+var globalCfg = agent.DefaultConfig("spore", "gpt-4o")
 
-func (s *sporeApp) ShortDescription() string {
-	return "Decentralized AI agent swarm protocol & runtime"
+func sporeConfigDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = "/tmp"
+	}
+	return filepath.Join(home, ".spore")
 }
 
-var (
-	s   = &sporeApp{}
-	app = cli.FromStruct(s)
-
-	// Run is the entry point.
-	Run = app.Run
+var app = cli.New(
+	cli.Name("spore"),
+	cli.Short("Decentralized AI agent swarm protocol & runtime"),
+	cli.Version("0.1.0-dev"),
+	cli.GlobalConfig(
+		globalCfg,
+		cli.WithConfigCommand(true),
+		cli.WithConfigName("config"),
+		cli.WithConfigChanged(func(o, n any) {
+			if newCfg, ok := n.(*agent.Config); ok {
+				log.Printf("Config reloaded: llm=%s/%s", newCfg.LLM.Provider, newCfg.LLM.Model)
+			}
+		}),
+		cli.WithConfigOptions(config.WithProvider(
+			mustFSProvider(sporeConfigDir()),
+		)),
+	),
 )
 
-func init() {
-	app.Option(
-		cli.Name("spore"),
-		cli.Version("0.1.0-dev"),
-	)
+func mustFSProvider(path string) config.Provider {
+	p, err := config.NewFSProvider(path)
+	if err != nil {
+		// Fallback to default
+		return config.DefaultFSProvider
+	}
+	return p
 }
+
+// Run is the entry point.
+var Run = app.Run

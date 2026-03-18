@@ -50,6 +50,26 @@ func (c *runCmd) run() error {
 		return fmt.Errorf("loading config: %w", err)
 	}
 
+	// Inherit from global config for empty fields
+	if cfg.LLM.BaseURL == "" {
+		cfg.LLM.BaseURL = globalCfg.LLM.BaseURL
+	}
+	if cfg.LLM.APIKey == "" {
+		cfg.LLM.APIKey = globalCfg.LLM.APIKey
+	}
+	if cfg.LLM.Provider == "" {
+		cfg.LLM.Provider = globalCfg.LLM.Provider
+	}
+	if cfg.LLM.Model == "" {
+		cfg.LLM.Model = globalCfg.LLM.Model
+	}
+	if len(cfg.LLM.Headers) == 0 && len(globalCfg.LLM.Headers) > 0 {
+		cfg.LLM.Headers = make(map[string]string)
+		for k, v := range globalCfg.LLM.Headers {
+			cfg.LLM.Headers[k] = v
+		}
+	}
+
 	a, err := agent.New(cfg)
 	if err != nil {
 		return fmt.Errorf("creating agent: %w", err)

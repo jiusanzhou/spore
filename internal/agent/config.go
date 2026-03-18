@@ -26,86 +26,86 @@ import (
 
 // Config is the top-level agent configuration.
 type Config struct {
-	Agent   AgentConfig    `toml:"agent"`
-	Runtime RuntimeConfig  `toml:"runtime"`
-	LLM     LLMConfig      `toml:"llm"`
-	Memory  MemoryConfig   `toml:"memory"`
-	Network NetworkConfig  `toml:"network"`
-	Ethics  EthicsConfig   `toml:"ethics"`
-	Economy EconomyConfig  `toml:"economy"`
-	Privacy PrivacyConfig  `toml:"privacy"`
-	Spawner SpawnerConfig  `toml:"spawner"`
+	Agent   AgentConfig    `toml:"agent" yaml:"agent" json:"agent"`
+	Runtime RuntimeConfig  `toml:"runtime" yaml:"runtime" json:"runtime"`
+	LLM     LLMConfig      `toml:"llm" yaml:"llm" json:"llm"`
+	Memory  MemoryConfig   `toml:"memory" yaml:"memory" json:"memory"`
+	Network NetworkConfig  `toml:"network" yaml:"network" json:"network"`
+	Ethics  EthicsConfig   `toml:"ethics" yaml:"ethics" json:"ethics"`
+	Economy EconomyConfig  `toml:"economy" yaml:"economy" json:"economy"`
+	Privacy PrivacyConfig  `toml:"privacy" yaml:"privacy" json:"privacy"`
+	Spawner SpawnerConfig  `toml:"spawner" yaml:"spawner" json:"spawner"`
 }
 
 // AgentConfig defines the agent's basic identity and behavior.
 type AgentConfig struct {
-	Name string `toml:"name"`
-	Role string `toml:"role"` // coordinator, worker, specialist
+	Name string `toml:"name" yaml:"name" json:"name"`
+	Role string `toml:"role" yaml:"role" json:"role"` // coordinator, worker, specialist
 }
 
 // RuntimeConfig defines which execution backend to use.
 type RuntimeConfig struct {
 	// Type selects the runtime: "builtin", "claude-code", "codex", "openclaw", "exec", "http", "auto"
 	// "auto" will probe available CLIs and pick the best one.
-	Type string `toml:"type"`
+	Type string `toml:"type" yaml:"type" json:"type"`
 
 	// Exec-specific config (when type = "exec")
-	Command  string   `toml:"command"`
-	Args     []string `toml:"args"`
-	TaskFlag string   `toml:"task_flag"`
-	Tags     []string `toml:"tags"`
+	Command  string   `toml:"command" yaml:"command" json:"command"`
+	Args     []string `toml:"args" yaml:"args" json:"args"`
+	TaskFlag string   `toml:"task_flag" yaml:"task_flag" json:"task_flag"`
+	Tags     []string `toml:"tags" yaml:"tags" json:"tags"`
 
 	// HTTP-specific config (when type = "http")
-	URL string `toml:"url"`
+	URL string `toml:"url" yaml:"url" json:"url"`
 }
 
 // LLMConfig defines the LLM provider settings.
 type LLMConfig struct {
-	Provider string            `toml:"provider"`
-	Model    string            `toml:"model"`
-	BaseURL  string            `toml:"base_url"`
-	APIKey   string            `toml:"api_key"`  // prefer env: SPORE_LLM_API_KEY
-	Headers  map[string]string `toml:"headers"`  // custom headers (e.g. x-api-key)
-	Router   map[string]string `toml:"router"`   // task_type -> model
+	Provider string            `toml:"provider" yaml:"provider" json:"provider"`
+	Model    string            `toml:"model" yaml:"model" json:"model"`
+	BaseURL  string            `toml:"base_url" yaml:"base_url" json:"base_url"`
+	APIKey   string            `toml:"api_key" yaml:"api_key" json:"api_key"`     // prefer env: SPORE_LLM_API_KEY
+	Headers  map[string]string `toml:"headers" yaml:"headers" json:"headers" opts:"-"`     // custom headers (e.g. x-api-key)
+	Router   map[string]string `toml:"router" yaml:"router" json:"router" opts:"-"`        // task_type -> model
 }
 
 // MemoryConfig defines memory storage settings.
 type MemoryConfig struct {
-	Backend      string `toml:"backend"` // sqlite, ipfs
-	Path         string `toml:"path"`
-	IPFSEndpoint string `toml:"ipfs_endpoint"` // IPFS API endpoint (default: localhost:5001)
+	Backend      string `toml:"backend" yaml:"backend" json:"backend"`                   // sqlite, ipfs
+	Path         string `toml:"path" yaml:"path" json:"path"`
+	IPFSEndpoint string `toml:"ipfs_endpoint" yaml:"ipfs_endpoint" json:"ipfs_endpoint"` // IPFS API endpoint
 }
 
 // NetworkConfig defines networking settings.
 type NetworkConfig struct {
-	Transport string   `toml:"transport"` // local, libp2p
-	Listen    []string `toml:"listen"`
-	Bootstrap []string `toml:"bootstrap"`
+	Transport string   `toml:"transport" yaml:"transport" json:"transport"` // local, libp2p
+	Listen    []string `toml:"listen" yaml:"listen" json:"listen"`
+	Bootstrap []string `toml:"bootstrap" yaml:"bootstrap" json:"bootstrap"`
 }
 
 // EthicsConfig defines ethics engine parameters.
 type EthicsConfig struct {
-	MaxSpawnChildren int     `toml:"max_spawn_children"`
-	MaxBudgetPerTask float64 `toml:"max_budget_per_task"`
+	MaxSpawnChildren int     `toml:"max_spawn_children" yaml:"max_spawn_children" json:"max_spawn_children"`
+	MaxBudgetPerTask float64 `toml:"max_budget_per_task" yaml:"max_budget_per_task" json:"max_budget_per_task"`
 }
 
 // SpawnerConfig defines spawning parameters.
 type SpawnerConfig struct {
-	MaxChildren          int     `toml:"max_children"`
-	MinBalanceToSpawn    float64 `toml:"min_balance_to_spawn"`
-	DefaultResourceShare float64 `toml:"default_resource_share"`
+	MaxChildren          int     `toml:"max_children" yaml:"max_children" json:"max_children"`
+	MinBalanceToSpawn    float64 `toml:"min_balance_to_spawn" yaml:"min_balance_to_spawn" json:"min_balance_to_spawn"`
+	DefaultResourceShare float64 `toml:"default_resource_share" yaml:"default_resource_share" json:"default_resource_share"`
 }
 
 // EconomyConfig defines economic parameters for the agent.
 type EconomyConfig struct {
-	HibernateThreshold float64 `toml:"hibernate_threshold"` // balance below which agent stops accepting tasks
-	MinTaskBalance     float64 `toml:"min_task_balance"`    // minimum balance to accept a new task
+	HibernateThreshold float64 `toml:"hibernate_threshold" yaml:"hibernate_threshold" json:"hibernate_threshold"`
+	MinTaskBalance     float64 `toml:"min_task_balance" yaml:"min_task_balance" json:"min_task_balance"`
 }
 
 // PrivacyConfig defines privacy filter settings.
 type PrivacyConfig struct {
-	Enabled bool   `toml:"enabled"`
-	Mode    string `toml:"mode"` // warn, sanitize, reject
+	Enabled bool   `toml:"enabled" yaml:"enabled" json:"enabled"`
+	Mode    string `toml:"mode" yaml:"mode" json:"mode"` // warn, sanitize, reject
 }
 
 // DefaultConfig returns a Config with sensible defaults.
