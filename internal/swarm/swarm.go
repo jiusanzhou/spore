@@ -34,6 +34,7 @@ type TaskEvent struct {
 	Description string    `json:"description"`
 	Status      string    `json:"status"` // queued, running, completed, failed
 	Runtime     string    `json:"runtime"`
+	Result      string    `json:"result,omitempty"`
 	Error       string    `json:"error,omitempty"`
 	SubmittedAt time.Time `json:"submitted_at"`
 	CompletedAt time.Time `json:"completed_at,omitempty"`
@@ -93,6 +94,20 @@ func (s *Swarm) AddAgent(cfg *agent.Config) (*agent.Agent, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Register task lifecycle callback
+	agentName := cfg.Agent.Name
+	a.SetOnTaskUpdate(func(taskID, status, runtime, result, errMsg string) {
+		s.LogTask(TaskEvent{
+			ID:          taskID,
+			Agent:       agentName,
+			Status:      status,
+			Runtime:     runtime,
+			Result:      result,
+			Error:       errMsg,
+			CompletedAt: time.Now(),
+		})
+	})
 
 	s.agents[cfg.Agent.Name] = a
 	return a, nil
@@ -176,7 +191,22 @@ func (s *Swarm) LogTask(evt TaskEvent) {
 	found := false
 	for i := len(s.taskLog) - 1; i >= 0; i-- {
 		if s.taskLog[i].ID == evt.ID {
-			s.taskLog[i] = evt
+			// Merge: keep original fields, update new ones
+			if evt.Status != "" {
+				s.taskLog[i].Status = evt.Status
+			}
+			if evt.Runtime != "" {
+				s.taskLog[i].Runtime = evt.Runtime
+			}
+			if evt.Result != "" {
+				s.taskLog[i].Result = evt.Result
+			}
+			if evt.Error != "" {
+				s.taskLog[i].Error = evt.Error
+			}
+			if !evt.CompletedAt.IsZero() {
+				s.taskLog[i].CompletedAt = evt.CompletedAt
+			}
 			found = true
 			break
 		}

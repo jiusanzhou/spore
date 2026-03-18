@@ -101,6 +101,14 @@ type Agent struct {
 	// Peer registry from CapabilityAd messages
 	peersMu  sync.RWMutex
 	peers    map[string]*PeerInfo
+
+	// Task lifecycle callback (set by Swarm)
+	onTaskUpdate func(taskID, status, runtime, result, errMsg string)
+}
+
+// SetOnTaskUpdate registers a callback for task lifecycle events.
+func (a *Agent) SetOnTaskUpdate(fn func(taskID, status, runtime, result, errMsg string)) {
+	a.onTaskUpdate = fn
 }
 
 // taskEntry wraps a task with optional runtime preference.
@@ -363,6 +371,9 @@ func (a *Agent) taskWorker(ctx context.Context) {
 			a.mu.Unlock()
 
 			fmt.Printf("📋 [%s] Starting task: %s\n", a.cfg.Agent.Name, entry.Description)
+			if a.onTaskUpdate != nil {
+				a.onTaskUpdate(entry.ID, "running", "", "", "")
+			}
 
 			err := a.executeTask(ctx, entry)
 			if err != nil {
@@ -413,11 +424,17 @@ func (a *Agent) executeTask(ctx context.Context, entry *taskEntry) error {
 
 	output, err := rt.Execute(ctx, input)
 	if err != nil {
+		if a.onTaskUpdate != nil {
+			a.onTaskUpdate(entry.ID, "failed", rt.Info().Name, "", err.Error())
+		}
 		return err
 	}
 
 	if output.Success {
 		fmt.Printf("✅ [%s] Task completed via %s: %s\n", a.cfg.Agent.Name, rt.Info().Name, truncate(output.Result, 200))
+		if a.onTaskUpdate != nil {
+			a.onTaskUpdate(entry.ID, "completed", rt.Info().Name, output.Result, "")
+		}
 		// Debit cost from balance after task completion
 		if output.Cost > 0 {
 			if err := a.identity.Debit(output.Cost); err != nil {
@@ -425,6 +442,9 @@ func (a *Agent) executeTask(ctx context.Context, entry *taskEntry) error {
 			}
 		}
 	} else {
+		if a.onTaskUpdate != nil {
+			a.onTaskUpdate(entry.ID, "failed", rt.Info().Name, "", output.Error)
+		}
 		return fmt.Errorf("task failed: %s", output.Error)
 	}
 	return nil
