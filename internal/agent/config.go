@@ -68,8 +68,9 @@ type LLMConfig struct {
 
 // MemoryConfig defines memory storage settings.
 type MemoryConfig struct {
-	Backend string `toml:"backend"` // sqlite
-	Path    string `toml:"path"`
+	Backend      string `toml:"backend"` // sqlite, ipfs
+	Path         string `toml:"path"`
+	IPFSEndpoint string `toml:"ipfs_endpoint"` // IPFS API endpoint (default: localhost:5001)
 }
 
 // NetworkConfig defines networking settings.

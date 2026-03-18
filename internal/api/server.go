@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"go.zoe.im/spore/internal/network"
 	"go.zoe.im/spore/internal/swarm"
 )
 
@@ -66,6 +67,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/agents", s.handleAgents)
 	// Pattern: /api/agents/<name>/tasks or /api/agents/<name>/info
 	s.mux.HandleFunc("/api/agents/", s.handleAgentRoute)
+	s.mux.HandleFunc("/api/peers", s.handlePeers)
+	s.mux.HandleFunc("/api/peers/connect", s.handlePeerConnect)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -159,6 +162,53 @@ func (s *Server) handleAgentTasks(w http.ResponseWriter, r *http.Request, name s
 		"agent":   name,
 		"status":  "queued",
 	})
+}
+
+func (s *Server) handlePeers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	bus := s.sw.Bus()
+	p2pBus, ok := bus.(*network.P2PBus)
+	if !ok {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"peer_id": "",
+			"peers":   []string{},
+			"count":   0,
+			"note":    "not using P2P transport",
+		})
+		return
+	}
+	peers := p2pBus.ConnectedPeers()
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"peer_id": p2pBus.PeerID(),
+		"peers":   peers,
+		"count":   len(peers),
+	})
+}
+
+func (s *Server) handlePeerConnect(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	addr := r.URL.Query().Get("addr")
+	if addr == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "addr parameter required"})
+		return
+	}
+	bus := s.sw.Bus()
+	p2pBus, ok := bus.(*network.P2PBus)
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "not using P2P transport"})
+		return
+	}
+	if err := p2pBus.Connect(addr); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "connected", "addr": addr})
 }
 
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {

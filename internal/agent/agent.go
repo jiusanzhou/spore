@@ -112,7 +112,7 @@ func New(cfg *Config) (*Agent, error) {
 		return nil, fmt.Errorf("creating LLM provider: %w", err)
 	}
 
-	store, err := memory.NewStore(cfg.Memory.Backend, cfg.Memory.Path)
+	store, err := memory.NewStore(cfg.Memory.Backend, cfg.Memory.Path, memory.WithIPFSEndpoint(cfg.Memory.IPFSEndpoint))
 	if err != nil {
 		return nil, fmt.Errorf("creating memory store: %w", err)
 	}

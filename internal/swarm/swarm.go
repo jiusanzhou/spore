@@ -17,6 +17,7 @@
 package swarm
 
 import (
+	"crypto/ed25519"
 	"fmt"
 	"sync"
 
@@ -27,19 +28,36 @@ import (
 
 // Swarm manages multiple agents on the same node.
 type Swarm struct {
-	bus     *network.LocalBus
+	bus     network.Bus
 	agents  map[string]*agent.Agent
 	spawner *spawner.Spawner
 	mu      sync.RWMutex
 }
 
-// New creates a new swarm.
+// New creates a new swarm with a local in-process bus.
 func New(baseDir string, maxAgents int) *Swarm {
 	return &Swarm{
 		bus:     network.NewLocalBus(),
 		agents:  make(map[string]*agent.Agent),
 		spawner: spawner.New(baseDir, maxAgents),
 	}
+}
+
+// NewP2PSwarm creates a swarm backed by a libp2p P2P bus.
+func NewP2PSwarm(baseDir string, maxAgents int, privKey ed25519.PrivateKey, listenAddrs, bootstrapPeers []string) (*Swarm, error) {
+	bus, err := network.NewP2PBus(network.P2PConfig{
+		ListenAddrs:    listenAddrs,
+		BootstrapPeers: bootstrapPeers,
+		PrivateKey:     privKey,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create p2p bus: %w", err)
+	}
+	return &Swarm{
+		bus:     bus,
+		agents:  make(map[string]*agent.Agent),
+		spawner: spawner.New(baseDir, maxAgents),
+	}, nil
 }
 
 // AddAgent creates and registers an agent in the swarm.
@@ -112,7 +130,7 @@ func (s *Swarm) List() []agent.Info {
 }
 
 // Bus returns the shared message bus.
-func (s *Swarm) Bus() *network.LocalBus {
+func (s *Swarm) Bus() network.Bus {
 	return s.bus
 }
 

@@ -28,6 +28,8 @@ type Entry struct {
 	CreatedAt int64
 	UpdatedAt int64
 	AccessCnt int
+	CID       string // IPFS content identifier
+	Shared    bool   // whether shared to IPFS
 }
 
 // Store is the interface for memory backends.
@@ -49,11 +51,35 @@ type Store interface {
 }
 
 // NewStore creates a memory store by backend name.
-func NewStore(backend, path string) (Store, error) {
+func NewStore(backend, path string, opts ...StoreOption) (Store, error) {
+	o := &storeOptions{}
+	for _, opt := range opts {
+		opt(o)
+	}
 	switch backend {
 	case "sqlite", "":
 		return NewSQLiteStore(path)
+	case "ipfs":
+		endpoint := o.ipfsEndpoint
+		if endpoint == "" {
+			endpoint = "localhost:5001"
+		}
+		return NewIPFSStore(path, IPFSConfig{APIEndpoint: endpoint})
 	default:
 		return nil, fmt.Errorf("unknown memory backend: %s", backend)
+	}
+}
+
+type storeOptions struct {
+	ipfsEndpoint string
+}
+
+// StoreOption configures store creation.
+type StoreOption func(*storeOptions)
+
+// WithIPFSEndpoint sets the IPFS API endpoint.
+func WithIPFSEndpoint(endpoint string) StoreOption {
+	return func(o *storeOptions) {
+		o.ipfsEndpoint = endpoint
 	}
 }
