@@ -17,9 +17,11 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"go.zoe.im/spore/internal/agent"
@@ -30,11 +32,14 @@ import (
 type runCmd struct {
 	Dir     string `opts:"short=d,help=agent data directory (contains spore.toml)"`
 	Config  string `opts:"short=c,help=agent config file path (default: <dir>/spore.toml)"`
-	APIPort int    `opts:"help=HTTP API + dashboard port (0 to disable)"`
+	APIPort int    `opts:"help=HTTP API + dashboard port (default 8080; 0 to disable)"`
+	NoREPL  bool   `opts:"help=disable interactive REPL (run as daemon)"`
 }
 
 func init() {
-	c := &runCmd{}
+	c := &runCmd{
+		APIPort: 8080,
+	}
 	app.Register(cli.New(
 		cli.Name("run"),
 		cli.Short("Start a spore agent"),
@@ -54,7 +59,7 @@ func (c *runCmd) run() error {
 		return fmt.Errorf("loading config: %w", err)
 	}
 
-	// Inherit from global config: global overrides local defaults
+	// Inherit from global config
 	applyGlobalConfig(cfg)
 
 	dir := c.Dir
@@ -63,7 +68,6 @@ func (c *runCmd) run() error {
 		dir = home + "/.spore"
 	}
 
-	// Use swarm as single-agent wrapper for API support
 	sw := swarm.New(dir, 5)
 	if _, err := sw.AddAgent(cfg); err != nil {
 		return fmt.Errorf("creating agent %s: %w", cfg.Agent.Name, err)
@@ -81,13 +85,65 @@ func (c *runCmd) run() error {
 	if c.APIPort > 0 {
 		fmt.Printf("   API:     http://localhost:%d\n", c.APIPort)
 	}
+	fmt.Println()
 
-	// Wait for signal
+	if c.NoREPL {
+		// Daemon mode: wait for signal
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+		<-sigCh
+		fmt.Println("\n🛑 Shutting down...")
+		sw.Close()
+		return nil
+	}
+
+	// Interactive REPL
+	fmt.Println("Type a task description (or 'quit' to exit):")
+	fmt.Println()
+
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
-	<-sigCh
 
-	fmt.Println("\n🛑 Shutting down...")
-	sw.Close()
-	return nil
+	inputCh := make(chan string, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			inputCh <- scanner.Text()
+		}
+		errCh <- fmt.Errorf("EOF")
+	}()
+
+	fmt.Printf("%s> ", cfg.Agent.Name)
+	for {
+		select {
+		case <-sigCh:
+			fmt.Println("\n🛑 Shutting down...")
+			sw.Close()
+			return nil
+		case <-errCh:
+			fmt.Println("\n🛑 Shutting down...")
+			sw.Close()
+			return nil
+		case line := <-inputCh:
+			line = strings.TrimSpace(line)
+			if line == "" {
+				fmt.Printf("%s> ", cfg.Agent.Name)
+				continue
+			}
+			if line == "quit" || line == "exit" {
+				fmt.Println("🛑 Shutting down...")
+				sw.Close()
+				return nil
+			}
+
+			taskID, err := sw.SendTask(cfg.Agent.Name, line)
+			if err != nil {
+				fmt.Printf("❌ %v\n", err)
+			} else {
+				fmt.Printf("📋 Task %s queued\n", taskID)
+			}
+			fmt.Printf("%s> ", cfg.Agent.Name)
+		}
+	}
 }
