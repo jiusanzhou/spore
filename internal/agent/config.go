@@ -39,8 +39,13 @@ type Config struct {
 
 // AgentConfig defines the agent's basic identity and behavior.
 type AgentConfig struct {
-	Name string `toml:"name" yaml:"name" json:"name" opts:"help=agent display name"`
-	Role string `toml:"role" yaml:"role" json:"role" opts:"help=agent role: coordinator/worker/specialist"`
+	Name         string   `toml:"name" yaml:"name" json:"name" opts:"help=agent display name"`
+	Role         string   `toml:"role" yaml:"role" json:"role" opts:"help=agent role: coordinator/worker/specialist"`
+	Description  string   `toml:"description" yaml:"description" json:"description" opts:"help=one-line agent description"`
+	Skills       []string `toml:"skills" yaml:"skills" json:"skills" opts:"-"` // e.g. ["coding", "research", "writing"]
+	Interests    []string `toml:"interests" yaml:"interests" json:"interests" opts:"-"` // topics this agent subscribes to
+	CanDelegate  bool     `toml:"can_delegate" yaml:"can_delegate" json:"can_delegate" opts:"help=can delegate tasks to other agents"`
+	CanReceive   bool     `toml:"can_receive" yaml:"can_receive" json:"can_receive" opts:"help=can receive tasks from other agents"`
 }
 
 // RuntimeConfig defines which execution backend to use.
@@ -106,8 +111,11 @@ type PrivacyConfig struct {
 func DefaultConfig(name, model string) *Config {
 	return &Config{
 		Agent: AgentConfig{
-			Name: name,
-			Role: "worker",
+			Name:        name,
+			Role:        "worker",
+			Skills:      []string{"general"},
+			CanDelegate: false,
+			CanReceive:  true,
 		},
 		Runtime: RuntimeConfig{
 			Type: "auto", // auto-discover available runtimes

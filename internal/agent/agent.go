@@ -60,15 +60,17 @@ type PeerInfo struct {
 
 // Info holds the agent's runtime information.
 type Info struct {
-	Name      string    `json:"name"`
-	ID        string    `json:"id"`
-	Role      string    `json:"role"`
-	Model     string    `json:"model"`
-	Runtime   string    `json:"runtime"`
-	Status    Status    `json:"status"`
-	TaskCount int       `json:"task_count"`
-	StartedAt time.Time `json:"started_at"`
-	Balance   float64   `json:"balance"`
+	Name        string    `json:"name"`
+	ID          string    `json:"id"`
+	Role        string    `json:"role"`
+	Skills      []string  `json:"skills,omitempty"`
+	Description string    `json:"description,omitempty"`
+	Model       string    `json:"model"`
+	Runtime     string    `json:"runtime"`
+	Status      Status    `json:"status"`
+	TaskCount   int       `json:"task_count"`
+	StartedAt   time.Time `json:"started_at"`
+	Balance     float64   `json:"balance"`
 }
 
 // ethicsAdapter wraps *ethics.Engine to satisfy engine.EthicsChecker.
@@ -310,15 +312,17 @@ func (a *Agent) Info() Info {
 	}
 
 	return Info{
-		Name:      a.cfg.Agent.Name,
-		ID:        a.identity.PublicKeyHex()[:16],
-		Role:      a.cfg.Agent.Role,
-		Model:     a.cfg.LLM.Model,
-		Runtime:   rtName,
-		Status:    a.status,
-		TaskCount: a.taskCount,
-		StartedAt: a.startedAt,
-		Balance:   a.identity.Balance,
+		Name:        a.cfg.Agent.Name,
+		ID:          a.identity.PublicKeyHex()[:16],
+		Role:        a.cfg.Agent.Role,
+		Skills:      a.cfg.Agent.Skills,
+		Description: a.cfg.Agent.Description,
+		Model:       a.cfg.LLM.Model,
+		Runtime:     rtName,
+		Status:      a.status,
+		TaskCount:   a.taskCount,
+		StartedAt:   a.startedAt,
+		Balance:     a.identity.Balance,
 	}
 }
 
@@ -510,9 +514,13 @@ func (a *Agent) publishCapabilityAd() {
 		capacity = 0.5
 	}
 
+	// Build capabilities from role + skills
+	caps := append([]string{a.cfg.Agent.Role}, a.cfg.Agent.Skills...)
+
 	ad := protocol.CapabilityAd{
 		AgentID:      a.identity.PublicKeyHex()[:16],
-		Capabilities: []string{a.cfg.Agent.Role},
+		Capabilities: caps,
+		Interests:    a.cfg.Agent.Interests,
 		Capacity:     capacity,
 		Reputation:   1.0,
 	}
