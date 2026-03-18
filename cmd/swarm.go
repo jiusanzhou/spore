@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"text/tabwriter"
@@ -32,10 +33,11 @@ import (
 )
 
 type swarmCmd struct {
-	Agents  int    `opts:"short=n,help=number of agents to start"`
+	Agents  int    `opts:"short=n,help=number of agents (ignored when config dir has .toml files)"`
 	Model   string `opts:"short=m,help=LLM model"`
 	Runtime string `opts:"short=r,help=runtime: auto/builtin/claude-code/codex/openclaw"`
-	Dir     string `opts:"short=d,help=data directory"`
+	Dir     string `opts:"short=d,help=config directory (scan *.toml) or data directory"`
+	Config  string `opts:"short=c,help=single swarm config file"`
 	APIPort int    `opts:"help=HTTP API port (0 to disable)"`
 	BaseURL string `opts:"help=LLM API base URL"`
 }
@@ -66,37 +68,19 @@ func (c *swarmCmd) run() error {
 		dir = home + "/.spore"
 	}
 
-	roles := []string{"coordinator", "worker", "worker"}
-	names := []string{"coordinator", "worker-1", "worker-2"}
-	if c.Agents > 3 {
-		for i := 3; i < c.Agents; i++ {
-			roles = append(roles, "worker")
-			names = append(names, fmt.Sprintf("worker-%d", i))
-		}
+	// Try loading configs from directory
+	configs, err := c.loadConfigs(dir)
+	if err != nil {
+		return err
 	}
 
-	sw := swarm.New(dir, c.Agents+5)
+	sw := swarm.New(dir, len(configs)+5)
 
-	// Create agents
-	for i := 0; i < c.Agents && i < len(names); i++ {
-		cfg := agent.DefaultConfig(names[i], c.Model)
-		cfg.Agent.Role = roles[i]
-		cfg.Runtime.Type = c.Runtime
-
-		// Apply LLM config from env/flags
-		if c.BaseURL != "" {
-			cfg.LLM.BaseURL = c.BaseURL
-		} else if envURL := os.Getenv("SPORE_LLM_BASE_URL"); envURL != "" {
-			cfg.LLM.BaseURL = envURL
-		}
-		if apiKey := os.Getenv("SPORE_LLM_API_KEY"); apiKey != "" {
-			cfg.LLM.APIKey = apiKey
-			// Also set x-api-key header for gateways that require it
-			cfg.LLM.Headers = map[string]string{"x-api-key": apiKey}
-		}
-
+	for _, cfg := range configs {
+		// Override with env/flags
+		c.applyEnvOverrides(cfg)
 		if _, err := sw.AddAgent(cfg); err != nil {
-			return fmt.Errorf("creating agent %s: %w", names[i], err)
+			return fmt.Errorf("creating agent %s: %w", cfg.Agent.Name, err)
 		}
 	}
 
@@ -116,6 +100,103 @@ func (c *swarmCmd) run() error {
 	fmt.Println("Commands: task <agent> <description> | broadcast <description> | ps | quit")
 	fmt.Println()
 
+	return c.repl(sw)
+}
+
+// loadConfigs loads agent configs from directory .toml files or generates defaults.
+func (c *swarmCmd) loadConfigs(dir string) ([]*agent.Config, error) {
+	var configs []*agent.Config
+
+	// 1. If --config specified, load that single file
+	if c.Config != "" {
+		cfg, err := agent.LoadConfig(c.Config, "")
+		if err != nil {
+			return nil, fmt.Errorf("loading config %s: %w", c.Config, err)
+		}
+		configs = append(configs, cfg)
+		return configs, nil
+	}
+
+	// 2. Scan directory for *.toml files (agent configs)
+	pattern := filepath.Join(dir, "*.toml")
+	matches, _ := filepath.Glob(pattern)
+
+	// Also check subdirectories: dir/*/spore.toml
+	subdirs, _ := filepath.Glob(filepath.Join(dir, "*", "spore.toml"))
+	matches = append(matches, subdirs...)
+
+	if len(matches) > 0 {
+		fmt.Printf("📂 Loading %d config(s) from %s\n", len(matches), dir)
+		for _, path := range matches {
+			cfg, err := agent.LoadConfig(path, "")
+			if err != nil {
+				fmt.Printf("⚠️  Skipping %s: %v\n", path, err)
+				continue
+			}
+			if cfg.Agent.Name == "" {
+				// Use filename as agent name
+				base := filepath.Base(path)
+				cfg.Agent.Name = strings.TrimSuffix(base, ".toml")
+				if cfg.Agent.Name == "spore" {
+					// For subdir configs, use parent dir name
+					cfg.Agent.Name = filepath.Base(filepath.Dir(path))
+				}
+			}
+			configs = append(configs, cfg)
+			fmt.Printf("   ✅ %s (role=%s, model=%s)\n", cfg.Agent.Name, cfg.Agent.Role, cfg.LLM.Model)
+		}
+		if len(configs) == 0 {
+			return nil, fmt.Errorf("no valid configs found in %s", dir)
+		}
+		return configs, nil
+	}
+
+	// 3. Fallback: generate default configs
+	roles := []string{"coordinator", "worker", "worker"}
+	names := []string{"coordinator", "worker-1", "worker-2"}
+	if c.Agents > 3 {
+		for i := 3; i < c.Agents; i++ {
+			roles = append(roles, "worker")
+			names = append(names, fmt.Sprintf("worker-%d", i))
+		}
+	}
+
+	for i := 0; i < c.Agents && i < len(names); i++ {
+		cfg := agent.DefaultConfig(names[i], c.Model)
+		cfg.Agent.Role = roles[i]
+		cfg.Runtime.Type = c.Runtime
+		configs = append(configs, cfg)
+	}
+
+	return configs, nil
+}
+
+// applyEnvOverrides applies environment variables and CLI flags to a config.
+func (c *swarmCmd) applyEnvOverrides(cfg *agent.Config) {
+	// CLI flags override config file
+	if c.BaseURL != "" {
+		cfg.LLM.BaseURL = c.BaseURL
+	} else if envURL := os.Getenv("SPORE_LLM_BASE_URL"); envURL != "" {
+		cfg.LLM.BaseURL = envURL
+	}
+	if apiKey := os.Getenv("SPORE_LLM_API_KEY"); apiKey != "" {
+		cfg.LLM.APIKey = apiKey
+		if cfg.LLM.Headers == nil {
+			cfg.LLM.Headers = make(map[string]string)
+		}
+		cfg.LLM.Headers["x-api-key"] = apiKey
+	}
+	// CLI model/runtime override (only if explicitly set, not default)
+	if c.Model != "gpt-4o" && cfg.LLM.Model == "" {
+		cfg.LLM.Model = c.Model
+	}
+	if c.Runtime != "auto" && cfg.Runtime.Type == "" {
+		cfg.Runtime.Type = c.Runtime
+	}
+}
+
+// repl runs the interactive command loop.
+func (c *swarmCmd) repl(sw *swarm.Swarm) error {
 	// Signal handling
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
