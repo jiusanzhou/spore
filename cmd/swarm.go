@@ -37,6 +37,7 @@ type swarmCmd struct {
 	Runtime string `opts:"short=r,help=runtime: auto/builtin/claude-code/codex/openclaw"`
 	Dir     string `opts:"short=d,help=data directory"`
 	APIPort int    `opts:"help=HTTP API port (0 to disable)"`
+	BaseURL string `opts:"help=LLM API base URL"`
 }
 
 func init() {
@@ -81,6 +82,19 @@ func (c *swarmCmd) run() error {
 		cfg := agent.DefaultConfig(names[i], c.Model)
 		cfg.Agent.Role = roles[i]
 		cfg.Runtime.Type = c.Runtime
+
+		// Apply LLM config from env/flags
+		if c.BaseURL != "" {
+			cfg.LLM.BaseURL = c.BaseURL
+		} else if envURL := os.Getenv("SPORE_LLM_BASE_URL"); envURL != "" {
+			cfg.LLM.BaseURL = envURL
+		}
+		if apiKey := os.Getenv("SPORE_LLM_API_KEY"); apiKey != "" {
+			cfg.LLM.APIKey = apiKey
+			// Also set x-api-key header for gateways that require it
+			cfg.LLM.Headers = map[string]string{"x-api-key": apiKey}
+		}
+
 		if _, err := sw.AddAgent(cfg); err != nil {
 			return fmt.Errorf("creating agent %s: %w", names[i], err)
 		}

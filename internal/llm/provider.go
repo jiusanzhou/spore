@@ -39,6 +39,7 @@ type ProviderConfig struct {
 	BaseURL string
 	APIKey  string
 	Model   string
+	Headers map[string]string // additional headers (e.g. x-api-key)
 }
 
 // Provider is the interface all LLM backends implement.

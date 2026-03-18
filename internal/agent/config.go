@@ -64,8 +64,9 @@ type LLMConfig struct {
 	Provider string            `toml:"provider"`
 	Model    string            `toml:"model"`
 	BaseURL  string            `toml:"base_url"`
-	APIKey   string            `toml:"api_key"` // prefer env: SPORE_LLM_API_KEY
-	Router   map[string]string `toml:"router"`  // task_type -> model
+	APIKey   string            `toml:"api_key"`  // prefer env: SPORE_LLM_API_KEY
+	Headers  map[string]string `toml:"headers"`  // custom headers (e.g. x-api-key)
+	Router   map[string]string `toml:"router"`   // task_type -> model
 }
 
 // MemoryConfig defines memory storage settings.

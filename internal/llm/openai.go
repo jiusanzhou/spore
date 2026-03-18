@@ -67,6 +67,9 @@ func (p *OpenAIProvider) Chat(ctx context.Context, messages []Message) (*Respons
 	if p.cfg.APIKey != "" {
 		req.Header.Set("Authorization", "Bearer "+p.cfg.APIKey)
 	}
+	for k, v := range p.cfg.Headers {
+		req.Header.Set(k, v)
+	}
 
 	resp, err := p.client.Do(req)
 	if err != nil {

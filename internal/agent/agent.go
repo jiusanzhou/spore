@@ -123,6 +123,7 @@ func New(cfg *Config) (*Agent, error) {
 		BaseURL: cfg.LLM.BaseURL,
 		APIKey:  cfg.LLM.APIKey,
 		Model:   cfg.LLM.Model,
+		Headers: cfg.LLM.Headers,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("creating LLM provider: %w", err)
