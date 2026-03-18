@@ -26,9 +26,9 @@ import (
 )
 
 type initCmd struct {
-	Name  string `opts:"short=n,help=agent name"`
-	Model string `opts:"short=m,help=LLM model (e.g. gpt-4o)"`
-	Dir   string `opts:"short=d,help=data directory"`
+	Name  string `opts:"short=n,help=agent name (used as directory name and identity)"`
+	Model string `opts:"short=m,help=default LLM model (e.g. gpt-4o/gpt-4o-mini)"`
+	Dir   string `opts:"short=d,help=parent directory for agent data (default: ~/.spore)"`
 }
 
 func init() {

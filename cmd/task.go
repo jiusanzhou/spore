@@ -29,7 +29,7 @@ import (
 )
 
 type taskCmd struct {
-	APIAddr string `opts:"short=a,help=swarm API address (e.g. localhost:8080)"`
+	APIAddr string `opts:"short=a,help=swarm API address (host:port)"`
 }
 
 func init() {

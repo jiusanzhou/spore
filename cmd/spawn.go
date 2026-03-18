@@ -25,12 +25,12 @@ import (
 )
 
 type spawnCmd struct {
-	From  string `opts:"help=parent agent name"`
+	From  string `opts:"help=parent agent name to spawn from"`
 	Name  string `opts:"short=n,help=child agent name"`
-	Role  string `opts:"short=r,help=child role"`
-	Model string `opts:"short=m,help=child model override"`
-	Mode  string `opts:"help=spawn mode: clone or fork"`
-	Dir   string `opts:"short=d,help=data directory"`
+	Role  string `opts:"short=r,help=child agent role: coordinator/worker/specialist"`
+	Model string `opts:"short=m,help=child LLM model override (inherits parent if empty)"`
+	Mode  string `opts:"help=spawn mode: clone (exact copy) or fork (new identity)"`
+	Dir   string `opts:"short=d,help=parent agent data directory"`
 }
 
 func init() {

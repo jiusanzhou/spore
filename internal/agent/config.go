@@ -39,73 +39,67 @@ type Config struct {
 
 // AgentConfig defines the agent's basic identity and behavior.
 type AgentConfig struct {
-	Name string `toml:"name" yaml:"name" json:"name"`
-	Role string `toml:"role" yaml:"role" json:"role"` // coordinator, worker, specialist
+	Name string `toml:"name" yaml:"name" json:"name" opts:"help=agent display name"`
+	Role string `toml:"role" yaml:"role" json:"role" opts:"help=agent role: coordinator/worker/specialist"`
 }
 
 // RuntimeConfig defines which execution backend to use.
 type RuntimeConfig struct {
-	// Type selects the runtime: "builtin", "claude-code", "codex", "openclaw", "exec", "http", "auto"
-	// "auto" will probe available CLIs and pick the best one.
-	Type string `toml:"type" yaml:"type" json:"type"`
-
-	// Exec-specific config (when type = "exec")
-	Command  string   `toml:"command" yaml:"command" json:"command"`
-	Args     []string `toml:"args" yaml:"args" json:"args"`
-	TaskFlag string   `toml:"task_flag" yaml:"task_flag" json:"task_flag"`
-	Tags     []string `toml:"tags" yaml:"tags" json:"tags"`
-
-	// HTTP-specific config (when type = "http")
-	URL string `toml:"url" yaml:"url" json:"url"`
+	Type    string   `toml:"type" yaml:"type" json:"type" opts:"help=runtime backend: auto/builtin/claude-code/codex/openclaw/exec/http"`
+	Command string   `toml:"command" yaml:"command" json:"command" opts:"help=exec runtime: external command path"`
+	Args    []string `toml:"args" yaml:"args" json:"args" opts:"help=exec runtime: command arguments"`
+	TaskFlag string  `toml:"task_flag" yaml:"task_flag" json:"task_flag" opts:"help=exec runtime: flag name for task description"`
+	Tags    []string `toml:"tags" yaml:"tags" json:"tags" opts:"help=runtime capability tags"`
+	URL     string   `toml:"url" yaml:"url" json:"url" opts:"help=http runtime: endpoint URL"`
 }
 
 // LLMConfig defines the LLM provider settings.
 type LLMConfig struct {
-	Provider string            `toml:"provider" yaml:"provider" json:"provider"`
-	Model    string            `toml:"model" yaml:"model" json:"model"`
-	BaseURL  string            `toml:"base_url" yaml:"base_url" json:"base_url"`
-	APIKey   string            `toml:"api_key" yaml:"api_key" json:"api_key"`     // prefer env: SPORE_LLM_API_KEY
-	Headers  map[string]string `toml:"headers" yaml:"headers" json:"headers" opts:"-"`     // custom headers (e.g. x-api-key)
-	Router   map[string]string `toml:"router" yaml:"router" json:"router" opts:"-"`        // task_type -> model
+	Provider string            `toml:"provider" yaml:"provider" json:"provider" opts:"help=LLM provider: openai/anthropic"`
+	Model    string            `toml:"model" yaml:"model" json:"model" opts:"help=LLM model name (e.g. gpt-4o-mini)"`
+	BaseURL  string            `toml:"base_url" yaml:"base_url" json:"base_url" opts:"help=LLM API base URL"`
+	APIKey   string            `toml:"api_key" yaml:"api_key" json:"api_key" opts:"help=LLM API key (prefer env SPORE_LLM_API_KEY)"`
+	Headers  map[string]string `toml:"headers" yaml:"headers" json:"headers" opts:"-"`
+	Router   map[string]string `toml:"router" yaml:"router" json:"router" opts:"-"`
 }
 
 // MemoryConfig defines memory storage settings.
 type MemoryConfig struct {
-	Backend      string `toml:"backend" yaml:"backend" json:"backend"`                   // sqlite, ipfs
-	Path         string `toml:"path" yaml:"path" json:"path"`
-	IPFSEndpoint string `toml:"ipfs_endpoint" yaml:"ipfs_endpoint" json:"ipfs_endpoint"` // IPFS API endpoint
+	Backend      string `toml:"backend" yaml:"backend" json:"backend" opts:"help=memory backend: sqlite/ipfs"`
+	Path         string `toml:"path" yaml:"path" json:"path" opts:"help=memory database file path"`
+	IPFSEndpoint string `toml:"ipfs_endpoint" yaml:"ipfs_endpoint" json:"ipfs_endpoint" opts:"help=IPFS API endpoint (e.g. http://localhost:5001)"`
 }
 
 // NetworkConfig defines networking settings.
 type NetworkConfig struct {
-	Transport string   `toml:"transport" yaml:"transport" json:"transport"` // local, libp2p
-	Listen    []string `toml:"listen" yaml:"listen" json:"listen"`
-	Bootstrap []string `toml:"bootstrap" yaml:"bootstrap" json:"bootstrap"`
+	Transport string   `toml:"transport" yaml:"transport" json:"transport" opts:"help=network transport: local/libp2p"`
+	Listen    []string `toml:"listen" yaml:"listen" json:"listen" opts:"help=P2P listen addresses (multiaddr)"`
+	Bootstrap []string `toml:"bootstrap" yaml:"bootstrap" json:"bootstrap" opts:"help=P2P bootstrap peer addresses"`
 }
 
 // EthicsConfig defines ethics engine parameters.
 type EthicsConfig struct {
-	MaxSpawnChildren int     `toml:"max_spawn_children" yaml:"max_spawn_children" json:"max_spawn_children"`
-	MaxBudgetPerTask float64 `toml:"max_budget_per_task" yaml:"max_budget_per_task" json:"max_budget_per_task"`
+	MaxSpawnChildren int     `toml:"max_spawn_children" yaml:"max_spawn_children" json:"max_spawn_children" opts:"help=max child agents allowed to spawn"`
+	MaxBudgetPerTask float64 `toml:"max_budget_per_task" yaml:"max_budget_per_task" json:"max_budget_per_task" opts:"help=max budget (credits) per task"`
 }
 
 // SpawnerConfig defines spawning parameters.
 type SpawnerConfig struct {
-	MaxChildren          int     `toml:"max_children" yaml:"max_children" json:"max_children"`
-	MinBalanceToSpawn    float64 `toml:"min_balance_to_spawn" yaml:"min_balance_to_spawn" json:"min_balance_to_spawn"`
-	DefaultResourceShare float64 `toml:"default_resource_share" yaml:"default_resource_share" json:"default_resource_share"`
+	MaxChildren          int     `toml:"max_children" yaml:"max_children" json:"max_children" opts:"help=max concurrent child agents"`
+	MinBalanceToSpawn    float64 `toml:"min_balance_to_spawn" yaml:"min_balance_to_spawn" json:"min_balance_to_spawn" opts:"help=min parent balance required to spawn"`
+	DefaultResourceShare float64 `toml:"default_resource_share" yaml:"default_resource_share" json:"default_resource_share" opts:"help=fraction of parent balance transferred to child (0-1)"`
 }
 
 // EconomyConfig defines economic parameters for the agent.
 type EconomyConfig struct {
-	HibernateThreshold float64 `toml:"hibernate_threshold" yaml:"hibernate_threshold" json:"hibernate_threshold"`
-	MinTaskBalance     float64 `toml:"min_task_balance" yaml:"min_task_balance" json:"min_task_balance"`
+	HibernateThreshold float64 `toml:"hibernate_threshold" yaml:"hibernate_threshold" json:"hibernate_threshold" opts:"help=balance threshold to enter hibernate mode"`
+	MinTaskBalance     float64 `toml:"min_task_balance" yaml:"min_task_balance" json:"min_task_balance" opts:"help=min balance required to accept new tasks (0=no gate)"`
 }
 
 // PrivacyConfig defines privacy filter settings.
 type PrivacyConfig struct {
-	Enabled bool   `toml:"enabled" yaml:"enabled" json:"enabled"`
-	Mode    string `toml:"mode" yaml:"mode" json:"mode"` // warn, sanitize, reject
+	Enabled bool   `toml:"enabled" yaml:"enabled" json:"enabled" opts:"help=enable privacy filter on outbound messages"`
+	Mode    string `toml:"mode" yaml:"mode" json:"mode" opts:"help=privacy mode: warn/sanitize/reject"`
 }
 
 // DefaultConfig returns a Config with sensible defaults.

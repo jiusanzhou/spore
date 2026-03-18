@@ -27,8 +27,8 @@ import (
 )
 
 type peersCmd struct {
-	APIAddr string `opts:"short=a,help=swarm API address (e.g. localhost:8080)"`
-	JSON    bool   `opts:"short=j,help=output as JSON"`
+	APIAddr string `opts:"short=a,help=swarm API address (host:port)"`
+	JSON    bool   `opts:"short=j,help=output as JSON instead of table"`
 }
 
 func init() {

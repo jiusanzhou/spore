@@ -25,8 +25,8 @@ import (
 )
 
 type runCmd struct {
-	Dir    string `opts:"short=d,help=agent data directory"`
-	Config string `opts:"short=c,help=config file path"`
+	Dir    string `opts:"short=d,help=agent data directory (contains spore.toml)"`
+	Config string `opts:"short=c,help=agent config file path (default: <dir>/spore.toml)"`
 }
 
 func init() {

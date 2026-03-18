@@ -34,12 +34,12 @@ import (
 
 type swarmCmd struct {
 	Agents  int    `opts:"short=n,help=number of agents (ignored when config dir has .toml files)"`
-	Model   string `opts:"short=m,help=LLM model"`
-	Runtime string `opts:"short=r,help=runtime: auto/builtin/claude-code/codex/openclaw"`
+	Model   string `opts:"short=m,help=LLM model for auto-generated agents"`
+	Runtime string `opts:"short=r,help=runtime backend: auto/builtin/claude-code/codex/openclaw"`
 	Dir     string `opts:"short=d,help=config directory (scan *.toml) or data directory"`
-	Config  string `opts:"short=c,help=single swarm config file"`
-	APIPort int    `opts:"help=HTTP API port (0 to disable)"`
-	BaseURL string `opts:"help=LLM API base URL"`
+	Config  string `opts:"short=c,help=single swarm config file path"`
+	APIPort int    `opts:"help=HTTP API + dashboard port (0 to disable)"`
+	BaseURL string `opts:"help=LLM API base URL (overrides config file)"`
 }
 
 func init() {
