@@ -118,43 +118,71 @@ func (c *swarmCmd) loadConfigs(dir string) ([]*agent.Config, error) {
 		return configs, nil
 	}
 
-	// 2. Scan directory for *.toml files (agent configs)
+	// 2. Scan directory for agent configs (*.toml, agent.yaml, subdirs)
 	pattern := filepath.Join(dir, "*.toml")
 	matches, _ := filepath.Glob(pattern)
 
-	// Also check subdirectories: dir/*/spore.toml
+	// Also check subdirectories: dir/*/spore.toml and dir/*/agent.yaml
 	subdirs, _ := filepath.Glob(filepath.Join(dir, "*", "spore.toml"))
 	matches = append(matches, subdirs...)
 
-	// Filter out global config file
+	// Scan for agent.yaml files at top level and in subdirs
+	for _, name := range []string{"agent.yaml", "agent.yml"} {
+		if yamlPath := filepath.Join(dir, name); fileExists(yamlPath) {
+			matches = append(matches, yamlPath)
+		}
+		yamlSubdirs, _ := filepath.Glob(filepath.Join(dir, "*", name))
+		matches = append(matches, yamlSubdirs...)
+	}
+
+	// Filter out global config file, deduplicate
+	seen := make(map[string]bool)
 	var agentFiles []string
 	for _, m := range matches {
 		base := filepath.Base(m)
 		if base == "config.toml" || base == "config.yaml" || base == "config.json" {
 			continue // skip global config
 		}
+		abs, _ := filepath.Abs(m)
+		if seen[abs] {
+			continue
+		}
+		seen[abs] = true
 		agentFiles = append(agentFiles, m)
 	}
 
 	if len(agentFiles) > 0 {
 		fmt.Printf("📂 Loading %d config(s) from %s\n", len(agentFiles), dir)
 		for _, path := range agentFiles {
-			cfg, err := agent.LoadConfig(path, "")
-			if err != nil {
-				fmt.Printf("⚠️  Skipping %s: %v\n", path, err)
-				continue
-			}
-			if cfg.Agent.Name == "" {
-				// Use filename as agent name
-				base := filepath.Base(path)
-				cfg.Agent.Name = strings.TrimSuffix(base, ".toml")
-				if cfg.Agent.Name == "spore" {
-					// For subdir configs, use parent dir name
-					cfg.Agent.Name = filepath.Base(filepath.Dir(path))
+			var cfg *agent.Config
+			var err error
+			base := filepath.Base(path)
+
+			if base == "agent.yaml" || base == "agent.yml" {
+				// OpenAgent Manifest
+				cfg, _, err = agent.LoadManifest(path)
+				if err != nil {
+					fmt.Printf("⚠️  Skipping %s: %v\n", path, err)
+					continue
 				}
+				fmt.Printf("   ✅ %s (manifest, role=%s, skills=%v)\n", cfg.Agent.Name, cfg.Agent.Role, cfg.Agent.Skills)
+			} else {
+				// Legacy spore.toml
+				cfg, err = agent.LoadConfig(path, "")
+				if err != nil {
+					fmt.Printf("⚠️  Skipping %s: %v\n", path, err)
+					continue
+				}
+				if cfg.Agent.Name == "" {
+					cfg.Agent.Name = strings.TrimSuffix(base, ".toml")
+					if cfg.Agent.Name == "spore" {
+						cfg.Agent.Name = filepath.Base(filepath.Dir(path))
+					}
+				}
+				fmt.Printf("   ✅ %s (role=%s, model=%s)\n", cfg.Agent.Name, cfg.Agent.Role, cfg.LLM.Model)
 			}
+
 			configs = append(configs, cfg)
-			fmt.Printf("   ✅ %s (role=%s, model=%s)\n", cfg.Agent.Name, cfg.Agent.Role, cfg.LLM.Model)
 		}
 		if len(configs) == 0 {
 			return nil, fmt.Errorf("no valid configs found in %s", dir)
@@ -308,4 +336,9 @@ func printAgentTable(sw *swarm.Swarm) {
 			info.Name, info.Role, info.Runtime, info.Status, info.Model, info.TaskCount, uptime)
 	}
 	w.Flush()
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }

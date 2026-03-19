@@ -54,19 +54,34 @@ func init() {
 }
 
 func (c *runCmd) run() error {
-	cfg, err := agent.LoadConfig(c.Config, c.Dir)
+	var cfg *agent.Config
+	var err error
+
+	// Try agent.yaml first, then fall back to spore.toml
+	dir := c.Dir
+	if dir == "" {
+		home, _ := os.UserHomeDir()
+		dir = home + "/.spore"
+	}
+
+	if c.Config != "" {
+		// Explicit config path
+		cfg, err = agent.LoadConfig(c.Config, c.Dir)
+	} else if mPath := agent.FindManifest(dir); mPath != "" {
+		// Found agent.yaml
+		cfg, _, err = agent.LoadManifest(mPath)
+		if err == nil {
+			fmt.Printf("📋 Loaded agent manifest: %s\n", mPath)
+		}
+	} else {
+		cfg, err = agent.LoadConfig(c.Config, c.Dir)
+	}
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
 	}
 
 	// Inherit from global config
 	applyGlobalConfig(cfg)
-
-	dir := c.Dir
-	if dir == "" {
-		home, _ := os.UserHomeDir()
-		dir = home + "/.spore"
-	}
 
 	sw := swarm.New(dir, 5)
 	if _, err := sw.AddAgent(cfg); err != nil {
