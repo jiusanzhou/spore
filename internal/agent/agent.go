@@ -166,15 +166,11 @@ func New(cfg *Config) (*Agent, error) {
 	// Setup based on config
 	switch cfg.Runtime.Type {
 	case "auto", "":
-		// Auto-discover available CLIs
+		// Auto-discover available CLIs (native + agentbox adapters)
 		discovered := reg.AutoDiscover(context.Background())
 		if len(discovered) > 0 {
 			fmt.Printf("   Discovered runtimes: %v\n", discovered)
 		}
-	case "claude-code":
-		reg.Register(runtime.NewClaudeCode())
-	case "codex":
-		reg.Register(runtime.NewCodex())
 	case "openclaw":
 		reg.Register(runtime.NewOpenClaw())
 	case "http":
@@ -193,6 +189,19 @@ func New(cfg *Config) (*Agent, error) {
 		}
 	case "builtin":
 		// already registered
+	default:
+		// Try agentbox adapter for known runtimes (claude-code, codex, gemini, etc.)
+		// Map common aliases: "claude-code" → "claude"
+		aboxName := cfg.Runtime.Type
+		if aboxName == "claude-code" {
+			aboxName = "claude"
+		}
+		for _, adapter := range runtime.DefaultAboxAdapters() {
+			if adapter.Info().Name == aboxName {
+				reg.Register(adapter)
+				break
+			}
+		}
 	}
 
 	return &Agent{

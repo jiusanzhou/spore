@@ -128,16 +128,15 @@ func (r *Registry) fallback() (Runtime, error) {
 }
 
 // AutoDiscover probes common agent CLIs and registers those that are available.
+// It checks both native Spore runtimes and agentbox-backed adapters.
 func (r *Registry) AutoDiscover(ctx context.Context) []string {
-	candidates := []Runtime{
-		NewClaudeCode(),
-		NewCodex(),
-		NewOpenCode(),
+	// Native Spore runtimes (kept for openclaw which has custom Execute logic)
+	natives := []Runtime{
 		NewOpenClaw(),
 	}
 
 	var discovered []string
-	for _, rt := range candidates {
+	for _, rt := range natives {
 		checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		if err := rt.Healthy(checkCtx); err == nil {
 			r.Register(rt)
@@ -145,6 +144,21 @@ func (r *Registry) AutoDiscover(ctx context.Context) []string {
 		}
 		cancel()
 	}
+
+	// agentbox-backed adapters (claude, codex, opencode, gemini, aider, goose, openhands)
+	for _, rt := range DefaultAboxAdapters() {
+		name := rt.Info().Name
+		if _, exists := r.Get(name); exists {
+			continue // don't override native implementations
+		}
+		checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		if err := rt.Healthy(checkCtx); err == nil {
+			r.Register(rt)
+			discovered = append(discovered, name)
+		}
+		cancel()
+	}
+
 	return discovered
 }
 
