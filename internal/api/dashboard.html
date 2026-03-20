@@ -89,6 +89,18 @@ a{color:var(--blue);text-decoration:none}
 .task-time{font-size:.65rem;color:#555;margin-top:2px}
 .empty-state{color:var(--dim);font-size:.8rem;text-align:center;padding:40px 16px}
 
+.evo-bar{margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
+.evo-bar-title{font-size:.65rem;color:var(--cyan);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;font-weight:600}
+.evo-skills{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:6px}
+.evo-skill{font-size:.6rem;padding:2px 6px;border-radius:4px;font-weight:500}
+.evo-skill-high{background:rgba(0,255,136,.12);color:var(--green);border:1px solid rgba(0,255,136,.2)}
+.evo-skill-mid{background:rgba(245,158,11,.1);color:var(--amber);border:1px solid rgba(245,158,11,.2)}
+.evo-skill-low{background:rgba(239,68,68,.1);color:var(--red);border:1px solid rgba(239,68,68,.2)}
+.evo-detail{display:flex;justify-content:space-between;font-size:.65rem;color:var(--dim);margin-top:4px}
+.evo-detail .evo-val{color:var(--text);font-family:monospace}
+.fitness-bar{height:4px;background:#333;border-radius:2px;overflow:hidden;margin-top:4px}
+.fitness-bar-inner{height:100%;border-radius:2px;transition:width .5s ease}
+
 .network-panel{padding:16px;border-top:1px solid var(--border)}
 .net-row{display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:6px}
 .net-row .label{color:var(--dim)}
@@ -122,6 +134,8 @@ a{color:var(--blue);text-decoration:none}
   <div class="stat-card"><div class="stat-val" id="stat-active">0 / 0</div><div class="stat-label">Active / Total</div></div>
   <div class="stat-card"><div class="stat-val" id="stat-capacity">--</div><div class="stat-label">Capacity</div></div>
   <div class="stat-card"><div class="stat-val" id="stat-queued">0</div><div class="stat-label">Queued</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:var(--cyan)" id="stat-evo-xp">0</div><div class="stat-label">🧬 Experiences</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:var(--purple)" id="stat-evo-skills">0</div><div class="stat-label">🎯 Skills</div></div>
 </div>
 
 <div class="main">
@@ -192,6 +206,7 @@ a{color:var(--blue);text-decoration:none}
           '<div class="agent-detail"><span class="label">Balance</span><span class="value">💰 '+(a.balance!=null?a.balance.toFixed(4):'0')+'</span></div>' +
           '<div class="agent-detail"><span class="label">Uptime</span><span class="value">'+fmt(up)+'</span></div>' +
         '</div>' +
+        (a.evolution ? '<div class="evo-bar"><div class="evo-bar-title">🧬 Evolution</div><div class="evo-detail"><span>'+esc(a.evolution)+'</span></div></div>' : '') +
         '<div class="progress-bar'+(busy?' active':'')+'"><div class="progress-bar-inner"></div></div>' +
       '</div>';
     }).join('');
@@ -241,6 +256,19 @@ a{color:var(--blue);text-decoration:none}
       anim(document.getElementById('stat-active'), (stats.active_agents||0)+' / '+(stats.total_agents||0));
       anim(document.getElementById('stat-capacity'), stats.average_capacity!=null?(stats.average_capacity*100).toFixed(0)+'%':'--');
       anim(document.getElementById('stat-queued'), stats.total_tasks_queued||0);
+
+      // Evolution stats: aggregate from all agents
+      let totalXP = 0, totalSkills = new Set();
+      for (const a of (agents.agents||[])) {
+        if (a.evolution) {
+          const m = a.evolution.match(/experiences=(\d+)/);
+          if (m) totalXP += parseInt(m[1]);
+          const sm = a.evolution.match(/skills=\[([^\]]*)\]/);
+          if (sm) sm[1].split(', ').forEach(s => { const n = s.split('(')[0]; if(n) totalSkills.add(n); });
+        }
+      }
+      anim(document.getElementById('stat-evo-xp'), totalXP);
+      anim(document.getElementById('stat-evo-skills'), totalSkills.size);
 
       renderAgents(agents.agents||[]);
       renderTasks(tasks.tasks||[]);

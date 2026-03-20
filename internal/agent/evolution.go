@@ -357,6 +357,31 @@ func (e *EvolutionEngine) RestoreState() {
 	}
 }
 
+// RecentJournal returns the last N experience records.
+func (e *EvolutionEngine) RecentJournal(limit int) []*ExperienceRecord {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = 50
+	}
+	total := len(e.journal)
+	start := 0
+	if total > limit {
+		start = total - limit
+	}
+	result := make([]*ExperienceRecord, total-start)
+	copy(result, e.journal[start:])
+	return result
+}
+
+// TotalExperiences returns the total count of experiences.
+func (e *EvolutionEngine) TotalExperiences() int {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return len(e.journal)
+}
+
 // Stats returns a summary string for diagnostics.
 func (e *EvolutionEngine) Stats() string {
 	e.mu.RLock()

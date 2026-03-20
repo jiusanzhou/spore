@@ -120,6 +120,14 @@ func (s *Server) handleAgentRoute(w http.ResponseWriter, r *http.Request) {
 		s.handleAgentTasks(w, r, name)
 	case "info":
 		s.handleAgentInfo(w, r, name)
+	case "evolution":
+		s.handleAgentEvolution(w, r, name)
+	case "skills":
+		s.handleAgentSkills(w, r, name)
+	case "experience":
+		s.handleAgentExperience(w, r, name)
+	case "peers":
+		s.handleAgentPeerFitness(w, r, name)
 	default:
 		http.Error(w, "not found", http.StatusNotFound)
 	}
@@ -249,4 +257,112 @@ func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(data)
+}
+
+// --- Evolution API Handlers ---
+
+func (s *Server) handleAgentEvolution(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	a := s.sw.GetAgent(name)
+	if a == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found: " + name})
+		return
+	}
+	evo := a.Evolution()
+	if evo == nil {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "no evolution engine"})
+		return
+	}
+
+	strategy := evo.Strategy()
+	skills := evo.SkillProfiles()
+	stats := evo.Stats()
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"agent":    name,
+		"stats":    stats,
+		"strategy": strategy,
+		"skills":   skills,
+	})
+}
+
+func (s *Server) handleAgentSkills(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	a := s.sw.GetAgent(name)
+	if a == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found: " + name})
+		return
+	}
+	evo := a.Evolution()
+	if evo == nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"declared": a.Config().Agent.Skills,
+			"profiles": map[string]interface{}{},
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"declared":   a.Config().Agent.Skills,
+		"profiles":   evo.SkillProfiles(),
+		"confidence": evo.Strategy().SkillConfidence,
+	})
+}
+
+func (s *Server) handleAgentExperience(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	a := s.sw.GetAgent(name)
+	if a == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found: " + name})
+		return
+	}
+	evo := a.Evolution()
+	if evo == nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"journal": []interface{}{}})
+		return
+	}
+
+	// Return last N entries from journal
+	limit := 50
+	if l := r.URL.Query().Get("limit"); l != "" {
+		fmt.Sscanf(l, "%d", &limit)
+	}
+
+	journal := evo.RecentJournal(limit)
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"total":   len(journal),
+		"showing": len(journal),
+		"journal": journal,
+	})
+}
+
+func (s *Server) handleAgentPeerFitness(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	a := s.sw.GetAgent(name)
+	if a == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found: " + name})
+		return
+	}
+	pe := a.PeerEvo()
+	if pe == nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"rankings": []interface{}{}})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"rankings": pe.Rankings(),
+	})
 }

@@ -412,6 +412,12 @@ func (a *Agent) Identity() *Identity { return a.identity }
 // Config returns the agent's config.
 func (a *Agent) Config() *Config { return a.cfg }
 
+// Evolution returns the agent's evolution engine (may be nil).
+func (a *Agent) Evolution() *EvolutionEngine { return a.evolution }
+
+// PeerEvo returns the agent's peer evolution tracker (may be nil).
+func (a *Agent) PeerEvo() *PeerEvolution { return a.peerEvo }
+
 // Peers returns the current peer registry.
 func (a *Agent) Peers() map[string]*PeerInfo {
 	a.peersMu.RLock()
