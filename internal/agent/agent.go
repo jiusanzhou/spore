@@ -479,6 +479,8 @@ func (a *Agent) executeTaskDirect(ctx context.Context, entry *taskEntry) error {
 		}
 		// Broadcast result to bus (for coordinator collection)
 		a.broadcastTaskResult(entry.ID, output.Result, true, "")
+		// Store task experience in memory
+		a.rememberTask(entry, output, rt.Info().Name)
 	} else {
 		if a.onTaskUpdate != nil {
 			a.onTaskUpdate(entry.ID, "failed", rt.Info().Name, "", output.Error)
@@ -539,6 +541,28 @@ func (a *Agent) registerPeer(ad *protocol.CapabilityAd) {
 		if err == nil {
 			p2pBus.RegisterPeer(ad.AgentID, pid)
 		}
+	}
+}
+
+// rememberTask stores a completed task as a memory entry for experience building.
+func (a *Agent) rememberTask(entry *taskEntry, output *runtime.TaskOutput, rtName string) {
+	if a.memory == nil {
+		return
+	}
+	memEntry := &memory.Entry{
+		AgentID: a.identity.PublicKeyHex()[:16],
+		Key:     "task:" + entry.ID,
+		Value:   fmt.Sprintf("Task: %s\nResult: %s", entry.Description, truncate(output.Result, 500)),
+		Metadata: map[string]string{
+			"type":    "task_experience",
+			"task_id": entry.ID,
+			"runtime": rtName,
+			"success": "true",
+		},
+	}
+	if err := a.memory.Put(memEntry); err != nil {
+		// Non-fatal: log and continue
+		fmt.Printf("⚠️  [%s] Failed to store task memory: %v\n", a.cfg.Agent.Name, err)
 	}
 }
 

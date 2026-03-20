@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"go.zoe.im/spore/internal/llm"
+	"go.zoe.im/spore/internal/memory"
 	"go.zoe.im/spore/internal/protocol"
 )
 
@@ -133,6 +134,9 @@ func (a *Agent) coordinatorExecute(ctx context.Context, entry *taskEntry) error 
 	if a.onTaskUpdate != nil {
 		a.onTaskUpdate(entry.ID, "completed", "coordinator", summary, "")
 	}
+
+	// Store coordinator experience in memory
+	a.rememberCoordination(entry, state, summary)
 
 	// Cleanup
 	a.mu.Lock()
@@ -388,4 +392,44 @@ func (a *Agent) peerSkillsSummary() string {
 		return "(no workers discovered yet)"
 	}
 	return strings.Join(lines, "\n")
+}
+
+// rememberCoordination stores a coordinator task decomposition as experience.
+func (a *Agent) rememberCoordination(entry *taskEntry, state *coordinatorState, summary string) {
+	if a.memory == nil {
+		return
+	}
+
+	// Build subtask summary
+	state.mu.Lock()
+	var subSummary []string
+	for _, sub := range state.subtasks {
+		status := "✅"
+		if r, ok := state.results[sub.ID]; ok && !r.Success {
+			status = "❌"
+		} else if _, ok := state.results[sub.ID]; !ok {
+			status = "⏳"
+		}
+		subSummary = append(subSummary, fmt.Sprintf("%s %s → %s (skills: %v)",
+			status, sub.ID, sub.AgentID[:8], sub.Skills))
+	}
+	state.mu.Unlock()
+
+	value := fmt.Sprintf("Task: %s\nSubtasks:\n%s\nSummary: %s",
+		entry.Description, strings.Join(subSummary, "\n"), truncate(summary, 500))
+
+	memEntry := &memory.Entry{
+		AgentID: a.identity.PublicKeyHex()[:16],
+		Key:     "coord:" + entry.ID,
+		Value:   value,
+		Metadata: map[string]string{
+			"type":      "coordination_experience",
+			"task_id":   entry.ID,
+			"subtasks":  fmt.Sprintf("%d", len(state.subtasks)),
+			"completed": fmt.Sprintf("%d", len(state.results)),
+		},
+	}
+	if err := a.memory.Put(memEntry); err != nil {
+		fmt.Printf("⚠️  [%s] Failed to store coordination memory: %v\n", a.cfg.Agent.Name, err)
+	}
 }
