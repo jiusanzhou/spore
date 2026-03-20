@@ -326,6 +326,8 @@ func (a *Agent) Run() error {
 				if a.peerEvo != nil {
 					a.peerEvo.Persist()
 				}
+				// Share experience with the swarm
+				a.ShareExperience()
 			}
 		}
 	}
@@ -568,6 +570,19 @@ func (a *Agent) handleMessage(msg *protocol.Message) error {
 			return fmt.Errorf("unmarshaling task_result: %w", err)
 		}
 		a.handleTaskResult(&result, msg.From)
+	case protocol.MsgMemorySync:
+		// Absorb peer experience digest
+		selfID := a.identity.PublicKeyHex()[:16]
+		if msg.From == selfID {
+			return nil // ignore own broadcasts
+		}
+		if a.evolution != nil {
+			var digest ExperienceDigest
+			if err := json.Unmarshal(msg.Payload, &digest); err != nil {
+				return fmt.Errorf("unmarshaling experience digest: %w", err)
+			}
+			a.evolution.AbsorbExperience(&digest)
+		}
 	}
 	return nil
 }
