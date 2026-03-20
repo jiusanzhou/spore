@@ -16,7 +16,12 @@
 
 package memory
 
-import "fmt"
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"time"
+)
 
 // Entry represents a single memory entry.
 type Entry struct {
@@ -30,6 +35,16 @@ type Entry struct {
 	AccessCnt int
 	CID       string // IPFS content identifier
 	Shared    bool   // whether shared to IPFS
+}
+
+// EnsureID populates entry.ID with a random hex string if empty.
+func (e *Entry) EnsureID() {
+	if e.ID != "" {
+		return
+	}
+	b := make([]byte, 8)
+	rand.Read(b)
+	e.ID = hex.EncodeToString(b) + fmt.Sprintf("%x", time.Now().UnixNano()&0xFFFFFF)
 }
 
 // Store is the interface for memory backends.

@@ -72,6 +72,7 @@ type Info struct {
 	TaskCount   int       `json:"task_count"`
 	StartedAt   time.Time `json:"started_at"`
 	Balance     float64   `json:"balance"`
+	Evolution   string    `json:"evolution,omitempty"` // evolution engine stats
 }
 
 // ethicsAdapter wraps *ethics.Engine to satisfy engine.EthicsChecker.
@@ -94,6 +95,8 @@ type Agent struct {
 	ethics   *ethics.Engine
 	bus      network.Bus
 	registry *runtime.Registry
+
+	evolution   *EvolutionEngine
 
 	status      Status
 	taskQueue   chan *taskEntry
@@ -209,7 +212,7 @@ func New(cfg *Config) (*Agent, error) {
 		}
 	}
 
-	return &Agent{
+	a := &Agent{
 		cfg:       cfg,
 		identity:  id,
 		llm:       provider,
@@ -220,7 +223,13 @@ func New(cfg *Config) (*Agent, error) {
 		status:    StatusIdle,
 		taskQueue: make(chan *taskEntry, 50),
 		peers:     make(map[string]*PeerInfo),
-	}, nil
+	}
+
+	// Initialize evolution engine and restore previous state
+	a.evolution = NewEvolutionEngine(a)
+	a.evolution.RestoreState()
+
+	return a, nil
 }
 
 // NewWithBus creates an agent attached to a shared message bus.
@@ -332,7 +341,7 @@ func (a *Agent) Info() Info {
 		rtName = "auto"
 	}
 
-	return Info{
+	info := Info{
 		Name:        a.cfg.Agent.Name,
 		ID:          a.identity.PublicKeyHex()[:16],
 		Role:        a.cfg.Agent.Role,
@@ -345,6 +354,10 @@ func (a *Agent) Info() Info {
 		StartedAt:   a.startedAt,
 		Balance:     a.identity.Balance,
 	}
+	if a.evolution != nil {
+		info.Evolution = a.evolution.Stats()
+	}
+	return info
 }
 
 // Runtimes returns info about all available runtimes.
@@ -443,10 +456,20 @@ func (a *Agent) executeTaskDirect(ctx context.Context, entry *taskEntry) error {
 			return fmt.Errorf("runtime not found: %s", entry.Runtime)
 		}
 	} else {
-		// Auto-route based on task tags (for now, just use first non-builtin)
-		rt, err = a.registry.Route(nil)
-		if err != nil {
-			return fmt.Errorf("no runtime available: %w", err)
+		// Let evolution engine suggest preferred runtime
+		if a.evolution != nil {
+			if preferred := a.evolution.BestRuntime(); preferred != "" {
+				if prt, ok := a.registry.Get(preferred); ok {
+					rt = prt
+				}
+			}
+		}
+		if rt == nil {
+			// Fallback: auto-route based on task tags
+			rt, err = a.registry.Route(nil)
+			if err != nil {
+				return fmt.Errorf("no runtime available: %w", err)
+			}
 		}
 	}
 
@@ -481,11 +504,14 @@ func (a *Agent) executeTaskDirect(ctx context.Context, entry *taskEntry) error {
 		a.broadcastTaskResult(entry.ID, output.Result, true, "")
 		// Store task experience in memory
 		a.rememberTask(entry, output, rt.Info().Name)
+		// Record to evolution engine for self-improvement
+		a.recordEvolution(entry, output, rt.Info().Name, true, "")
 	} else {
 		if a.onTaskUpdate != nil {
 			a.onTaskUpdate(entry.ID, "failed", rt.Info().Name, "", output.Error)
 		}
 		a.broadcastTaskResult(entry.ID, "", false, output.Error)
+		a.recordEvolution(entry, nil, rt.Info().Name, false, output.Error)
 		return fmt.Errorf("task failed: %s", output.Error)
 	}
 	return nil
@@ -506,7 +532,12 @@ func (a *Agent) handleMessage(msg *protocol.Message) error {
 		fmt.Printf("📨 [%s] Received task from %s: %s\n", a.cfg.Agent.Name, msg.From[:8], req.Description)
 		a.SubmitTask(req.Description)
 	case protocol.MsgHeartbeat:
-		fmt.Printf("💓 [%s] Heartbeat from %s\n", a.cfg.Agent.Name, msg.From[:8])
+		// Ignore own heartbeats (GossipSub echoes back to sender)
+		selfID := a.identity.PublicKeyHex()[:16]
+		if msg.From == selfID {
+			return nil
+		}
+		// Silent — heartbeats are high-frequency, only log at debug level
 	case protocol.MsgCapabilityAd:
 		var ad protocol.CapabilityAd
 		if err := json.Unmarshal(msg.Payload, &ad); err != nil {
@@ -564,6 +595,24 @@ func (a *Agent) rememberTask(entry *taskEntry, output *runtime.TaskOutput, rtNam
 		// Non-fatal: log and continue
 		fmt.Printf("⚠️  [%s] Failed to store task memory: %v\n", a.cfg.Agent.Name, err)
 	}
+}
+
+// recordEvolution feeds task outcome to the evolution engine.
+func (a *Agent) recordEvolution(entry *taskEntry, output *runtime.TaskOutput, rtName string, success bool, errMsg string) {
+	if a.evolution == nil {
+		return
+	}
+	duration := time.Since(entry.CreatedAt).Seconds()
+	rec := &ExperienceRecord{
+		TaskID:      entry.ID,
+		Description: entry.Description,
+		Runtime:     rtName,
+		Success:     success,
+		Duration:    duration,
+		Error:       errMsg,
+		Skills:      a.cfg.Agent.Skills, // use declared skills for now
+	}
+	a.evolution.Record(rec)
 }
 
 // broadcastTaskResult sends task result to the bus for coordinator collection.

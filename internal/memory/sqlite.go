@@ -71,14 +71,25 @@ func (s *SQLiteStore) Put(entry *Entry) error {
 		entry.CreatedAt = now
 	}
 	entry.UpdatedAt = now
+	entry.EnsureID()
 
-	_, err := s.db.Exec(`
+	// Use upsert keyed on `key` (the logical dedup field).
+	// We query existing id first to avoid PRIMARY KEY conflicts.
+	var existingID string
+	err := s.db.QueryRow("SELECT id FROM memories WHERE key = ?", entry.Key).Scan(&existingID)
+	if err == nil {
+		// Key exists — update in place, keep original id
+		_, err = s.db.Exec(`
+			UPDATE memories SET value = ?, updated_at = ?, access_cnt = access_cnt + 1
+			WHERE key = ?
+		`, entry.Value, entry.UpdatedAt, entry.Key)
+		return err
+	}
+
+	// Key does not exist — insert
+	_, err = s.db.Exec(`
 		INSERT INTO memories (id, agent_id, key, value, created_at, updated_at, access_cnt)
 		VALUES (?, ?, ?, ?, ?, ?, 0)
-		ON CONFLICT(key) DO UPDATE SET
-			value = excluded.value,
-			updated_at = excluded.updated_at,
-			access_cnt = access_cnt + 1
 	`, entry.ID, entry.AgentID, entry.Key, entry.Value, entry.CreatedAt, entry.UpdatedAt)
 	return err
 }
