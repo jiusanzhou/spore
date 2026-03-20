@@ -13,69 +13,66 @@
 :root{
   --bg:#0a0a0a;--card:#1a1a2e;--border:#2a2a3e;
   --text:#e0e0e0;--dim:#888;--green:#00ff88;--purple:#7c3aed;--blue:#3b82f6;
-  --amber:#f59e0b;--red:#ef4444;--gray:#6b7280;
+  --amber:#f59e0b;--red:#ef4444;--gray:#6b7280;--cyan:#06b6d4;
 }
 body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
 a{color:var(--blue);text-decoration:none}
 
-/* Header */
 .header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--border);background:#0f0f1a;flex-wrap:wrap;gap:12px}
 .header-left{display:flex;align-items:center;gap:12px}
 .header h1{font-size:1.3rem;font-weight:700;white-space:nowrap}
 .badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:12px;font-size:.75rem;font-weight:600}
 .badge-green{background:rgba(0,255,136,.15);color:var(--green)}
 .badge-purple{background:rgba(124,58,237,.2);color:var(--purple)}
-.badge-blue{background:rgba(59,130,246,.2);color:var(--blue)}
 .header-meta{display:flex;gap:16px;font-size:.8rem;color:var(--dim);flex-wrap:wrap}
 .header-meta span{white-space:nowrap}
 
-/* Stats bar */
-.stats-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;padding:16px 24px;border-bottom:1px solid var(--border)}
+.stats-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;padding:16px 24px;border-bottom:1px solid var(--border)}
 .stat-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;text-align:center}
 .stat-val{font-size:1.6rem;font-weight:700;font-variant-numeric:tabular-nums}
 .stat-label{font-size:.7rem;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
 
-/* Main layout */
-.main{display:grid;grid-template-columns:1fr 340px;gap:0;min-height:calc(100vh - 160px)}
+.main{display:grid;grid-template-columns:1fr 380px;gap:0;min-height:calc(100vh - 160px)}
 @media(max-width:900px){.main{grid-template-columns:1fr}}
 
-/* Agent grid */
 .agents-section{padding:16px 24px;overflow-y:auto}
 .section-title{font-size:.85rem;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);margin-bottom:12px}
-.agents-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.agents-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+
 .agent-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;transition:border-color .2s,transform .15s}
 .agent-card:hover{border-color:var(--purple);transform:translateY(-1px)}
-.agent-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.agent-card.coordinator{border-left:3px solid var(--purple)}
+.agent-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .agent-name{font-size:1.05rem;font-weight:700}
+.agent-desc{font-size:.72rem;color:var(--dim);margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .status-dot{width:10px;height:10px;border-radius:50%;display:inline-block;flex-shrink:0}
 .status-idle{background:var(--green);box-shadow:0 0 6px var(--green)}
 .status-busy{background:var(--amber);animation:pulse 1.2s infinite}
-.status-error{background:var(--red);box-shadow:0 0 6px var(--red)}
-.status-hibernate{background:var(--gray);position:relative}
-.status-hibernate::after{content:'zzz';position:absolute;top:-10px;left:12px;font-size:.5rem;color:var(--gray)}
-.status-stopped{background:#333}
+.status-hibernate{background:var(--gray)}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}
 .role-badge{font-size:.65rem;padding:2px 8px;border-radius:8px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
 .role-coordinator{background:rgba(124,58,237,.2);color:var(--purple)}
 .role-worker{background:rgba(59,130,246,.2);color:var(--blue)}
 .role-specialist{background:rgba(0,255,136,.15);color:var(--green)}
-.agent-details{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:.78rem}
+
+.skills-row{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}
+.skill-tag{font-size:.6rem;padding:2px 6px;border-radius:6px;background:rgba(6,182,212,.12);color:var(--cyan);border:1px solid rgba(6,182,212,.2);font-weight:500}
+
+.agent-details{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;font-size:.75rem}
 .agent-detail{display:flex;justify-content:space-between}
 .agent-detail .label{color:var(--dim)}
-.agent-detail .value{font-family:'SF Mono',Monaco,Consolas,monospace;font-size:.72rem;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px}
-.agent-detail.full{grid-column:1/-1}
+.agent-detail .value{font-family:'SF Mono',Monaco,Consolas,monospace;font-size:.7rem;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px}
 .progress-bar{height:3px;background:#333;border-radius:2px;overflow:hidden;margin-top:8px;display:none}
 .progress-bar.active{display:block}
 .progress-bar-inner{height:100%;background:linear-gradient(90deg,var(--amber),var(--green));animation:progress-anim 2s ease-in-out infinite;width:60%}
 @keyframes progress-anim{0%{transform:translateX(-100%)}100%{transform:translateX(200%)}}
 
-/* Right panel */
 .right-panel{border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
 @media(max-width:900px){.right-panel{border-left:none;border-top:1px solid var(--border)}}
 
-/* Task feed */
 .task-feed{flex:1;padding:16px;overflow-y:auto}
 .task-entry{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;animation:slideIn .3s ease}
+.task-entry.is-coordinator{border-left:3px solid var(--purple)}
 @keyframes slideIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
 .task-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
 .task-agent{font-weight:600;font-size:.8rem}
@@ -85,17 +82,19 @@ a{color:var(--blue);text-decoration:none}
 .task-status-completed{background:rgba(0,255,136,.15);color:var(--green)}
 .task-status-failed{background:rgba(239,68,68,.2);color:var(--red)}
 .task-desc{font-size:.75rem;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.task-time{font-size:.65rem;color:#555;margin-top:3px}
+.task-result{font-size:.7rem;color:var(--text);margin-top:4px;padding:6px 8px;background:rgba(255,255,255,.03);border-radius:4px;max-height:60px;overflow:hidden;display:none}
+.task-result.show{display:block}
+.task-runtime{font-size:.6rem;color:#555;margin-top:3px}
+.task-runtime .rt-badge{color:var(--purple);font-weight:600}
+.task-time{font-size:.65rem;color:#555;margin-top:2px}
 .empty-state{color:var(--dim);font-size:.8rem;text-align:center;padding:40px 16px}
 
-/* Network panel */
 .network-panel{padding:16px;border-top:1px solid var(--border)}
 .net-row{display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:6px}
 .net-row .label{color:var(--dim)}
 .heartbeat{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);animation:hb 2s infinite}
 @keyframes hb{0%,100%{opacity:1;box-shadow:0 0 4px var(--green)}50%{opacity:.3;box-shadow:none}}
 
-/* Disconnected overlay */
 .disconnected{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,10,10,.9);z-index:100;align-items:center;justify-content:center;flex-direction:column;gap:12px}
 .disconnected.show{display:flex}
 .disconnected h2{color:var(--red);font-size:1.2rem}
@@ -103,44 +102,37 @@ a{color:var(--blue);text-decoration:none}
 </style>
 </head>
 <body>
-<div class="disconnected" id="disconnected">
-  <h2>Connection Lost</h2>
-  <p>Attempting to reconnect to swarm...</p>
-</div>
+<div class="disconnected" id="disconnected"><h2>Connection Lost</h2><p>Attempting to reconnect...</p></div>
 
 <header class="header">
   <div class="header-left">
-    <h1>&#x1f9a0; Spore Swarm Dashboard</h1>
+    <h1>🦠 Spore Swarm</h1>
     <span class="badge badge-green" id="agent-count">0 agents</span>
   </div>
   <div class="header-meta">
-    <span id="version">v0.1.0-dev</span>
+    <span id="version">v0.1.0</span>
     <span id="uptime">Uptime: --</span>
     <span><span class="heartbeat"></span> Live</span>
   </div>
 </header>
 
 <div class="stats-bar" id="stats-bar">
-  <div class="stat-card"><div class="stat-val" id="stat-completed">0</div><div class="stat-label">Tasks Completed</div></div>
-  <div class="stat-card"><div class="stat-val" id="stat-failed">0</div><div class="stat-label">Tasks Failed</div></div>
+  <div class="stat-card"><div class="stat-val" id="stat-completed">0</div><div class="stat-label">Completed</div></div>
+  <div class="stat-card"><div class="stat-val" id="stat-failed">0</div><div class="stat-label">Failed</div></div>
   <div class="stat-card"><div class="stat-val" id="stat-active">0 / 0</div><div class="stat-label">Active / Total</div></div>
-  <div class="stat-card"><div class="stat-val" id="stat-capacity">--</div><div class="stat-label">Avg Capacity</div></div>
+  <div class="stat-card"><div class="stat-val" id="stat-capacity">--</div><div class="stat-label">Capacity</div></div>
   <div class="stat-card"><div class="stat-val" id="stat-queued">0</div><div class="stat-label">Queued</div></div>
 </div>
 
 <div class="main">
   <div class="agents-section">
     <div class="section-title">Agents</div>
-    <div class="agents-grid" id="agents-grid">
-      <div class="empty-state">No agents registered yet.</div>
-    </div>
+    <div class="agents-grid" id="agents-grid"><div class="empty-state">No agents yet.</div></div>
   </div>
   <div class="right-panel">
     <div class="task-feed">
       <div class="section-title">Task Activity</div>
-      <div id="task-list">
-        <div class="empty-state">No task activity yet.</div>
-      </div>
+      <div id="task-list"><div class="empty-state">No tasks yet.</div></div>
     </div>
     <div class="network-panel">
       <div class="section-title" style="margin-bottom:10px">Network</div>
@@ -153,160 +145,110 @@ a{color:var(--blue);text-decoration:none}
 
 <script>
 (function(){
-  let prevAgents = {};
-  let prevTaskIds = new Set();
   let failCount = 0;
 
-  function formatUptime(sec) {
+  function fmt(sec) {
     if (!sec || sec < 0) return '--';
-    const d = Math.floor(sec / 86400);
-    const h = Math.floor((sec % 86400) / 3600);
-    const m = Math.floor((sec % 3600) / 60);
-    const s = Math.floor(sec % 60);
-    if (d > 0) return d + 'd ' + h + 'h';
-    if (h > 0) return h + 'h ' + m + 'm';
-    return m + 'm ' + s + 's';
+    const d = Math.floor(sec/86400), h = Math.floor((sec%86400)/3600), m = Math.floor((sec%3600)/60), s = Math.floor(sec%60);
+    if (d > 0) return d+'d '+h+'h';
+    if (h > 0) return h+'h '+m+'m';
+    return m+'m '+s+'s';
   }
-
-  function formatTime(iso) {
+  function fmtTime(iso) {
     if (!iso) return '';
-    const d = new Date(iso);
-    return d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    return new Date(iso).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   }
+  function trunc(s, n) { return s && s.length > n ? s.slice(0,n)+'…' : (s||''); }
+  function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+  function anim(el, v) { if (el.textContent !== String(v)) { el.textContent = v; el.style.transition='none'; el.style.color='#fff'; requestAnimationFrame(()=>{el.style.transition='color 1s'; el.style.color=''}); } }
 
-  function truncate(s, n) {
-    return s && s.length > n ? s.slice(0, n) + '...' : (s || '');
-  }
-
-  function roleClass(role) {
-    if (role === 'coordinator') return 'role-coordinator';
-    if (role === 'specialist') return 'role-specialist';
-    return 'role-worker';
-  }
-
-  function statusClass(status) {
-    return 'status-' + (status || 'idle');
-  }
-
-  function animateValue(el, newVal) {
-    if (el.textContent !== String(newVal)) {
-      el.textContent = newVal;
-      el.style.transition = 'none';
-      el.style.color = '#fff';
-      requestAnimationFrame(() => {
-        el.style.transition = 'color 1s';
-        el.style.color = '';
-      });
-    }
-  }
+  function roleClass(r) { return r==='coordinator'?'role-coordinator':r==='specialist'?'role-specialist':'role-worker'; }
 
   function renderAgents(agents) {
     const grid = document.getElementById('agents-grid');
-    if (!agents || agents.length === 0) {
-      grid.innerHTML = '<div class="empty-state">No agents registered yet.</div>';
-      return;
-    }
-    let html = '';
-    agents.forEach(a => {
-      const uptimeSec = a.started_at ? (Date.now() - new Date(a.started_at).getTime()) / 1000 : 0;
-      const isBusy = a.status === 'busy';
-      html += '<div class="agent-card" data-id="' + a.id + '">' +
+    if (!agents || !agents.length) { grid.innerHTML = '<div class="empty-state">No agents yet.</div>'; return; }
+
+    grid.innerHTML = agents.map(a => {
+      const up = a.started_at ? (Date.now() - new Date(a.started_at).getTime())/1000 : 0;
+      const busy = a.status === 'busy';
+      const isCoord = a.role === 'coordinator';
+      const skills = (a.skills || []).map(s => '<span class="skill-tag">'+esc(s)+'</span>').join('');
+
+      return '<div class="agent-card'+(isCoord?' coordinator':'')+'">' +
         '<div class="agent-top">' +
-          '<span class="agent-name">' + esc(a.name) + '</span>' +
+          '<span class="agent-name">'+(isCoord?'🧠 ':'')+esc(a.name)+'</span>' +
           '<span style="display:flex;align-items:center;gap:8px">' +
-            '<span class="role-badge ' + roleClass(a.role) + '">' + esc(a.role) + '</span>' +
-            '<span class="status-dot ' + statusClass(a.status) + '"></span>' +
+            '<span class="role-badge '+roleClass(a.role)+'">'+esc(a.role)+'</span>' +
+            '<span class="status-dot status-'+(a.status||'idle')+'"></span>' +
           '</span>' +
         '</div>' +
+        (a.description ? '<div class="agent-desc">'+esc(a.description)+'</div>' : '') +
+        (skills ? '<div class="skills-row">'+skills+'</div>' : '') +
         '<div class="agent-details">' +
-          '<div class="agent-detail"><span class="label">ID</span><span class="value">' + esc(a.id) + '</span></div>' +
-          '<div class="agent-detail"><span class="label">Runtime</span><span class="value">' + esc(a.runtime) + '</span></div>' +
-          '<div class="agent-detail"><span class="label">Model</span><span class="value">' + esc(a.model) + '</span></div>' +
-          '<div class="agent-detail"><span class="label">Tasks</span><span class="value">' + (a.task_count || 0) + '</span></div>' +
-          '<div class="agent-detail"><span class="label">Balance</span><span class="value">\uD83D\uDCB0 ' + (a.balance != null ? a.balance.toFixed(4) : '0') + '</span></div>' +
-          '<div class="agent-detail"><span class="label">Uptime</span><span class="value">' + formatUptime(uptimeSec) + '</span></div>' +
+          '<div class="agent-detail"><span class="label">ID</span><span class="value">'+esc(a.id)+'</span></div>' +
+          '<div class="agent-detail"><span class="label">Runtime</span><span class="value">'+esc(a.runtime)+'</span></div>' +
+          '<div class="agent-detail"><span class="label">Model</span><span class="value">'+esc(a.model)+'</span></div>' +
+          '<div class="agent-detail"><span class="label">Tasks</span><span class="value">'+(a.task_count||0)+'</span></div>' +
+          '<div class="agent-detail"><span class="label">Balance</span><span class="value">💰 '+(a.balance!=null?a.balance.toFixed(4):'0')+'</span></div>' +
+          '<div class="agent-detail"><span class="label">Uptime</span><span class="value">'+fmt(up)+'</span></div>' +
         '</div>' +
-        '<div class="progress-bar' + (isBusy ? ' active' : '') + '"><div class="progress-bar-inner"></div></div>' +
+        '<div class="progress-bar'+(busy?' active':'')+'"><div class="progress-bar-inner"></div></div>' +
       '</div>';
-    });
-    grid.innerHTML = html;
+    }).join('');
   }
 
   function renderTasks(tasks) {
     const list = document.getElementById('task-list');
-    if (!tasks || tasks.length === 0) {
-      list.innerHTML = '<div class="empty-state">No task activity yet.</div>';
-      return;
-    }
-    let html = '';
-    tasks.forEach(t => {
-      html += '<div class="task-entry">' +
+    if (!tasks || !tasks.length) { list.innerHTML = '<div class="empty-state">No tasks yet.</div>'; return; }
+
+    // Show newest first
+    const sorted = [...tasks].reverse();
+    list.innerHTML = sorted.map(t => {
+      const isCoord = t.runtime === 'coordinator';
+      const hasResult = t.result && t.result.length > 0;
+      return '<div class="task-entry'+(isCoord?' is-coordinator':'')+'">' +
         '<div class="task-header">' +
-          '<span class="task-agent">' + esc(t.agent) + '</span>' +
-          '<span class="task-status task-status-' + (t.status || 'queued') + '">' + esc(t.status) + '</span>' +
+          '<span class="task-agent">'+(isCoord?'🧠 ':'')+esc(t.agent)+'</span>' +
+          '<span class="task-status task-status-'+(t.status||'queued')+'">'+esc(t.status)+'</span>' +
         '</div>' +
-        '<div class="task-desc">' + esc(truncate(t.description, 80)) + '</div>' +
-        '<div class="task-time">' + formatTime(t.submitted_at) +
-          (t.completed_at && t.completed_at !== '0001-01-01T00:00:00Z' ? ' \u2192 ' + formatTime(t.completed_at) : '') +
+        '<div class="task-desc">'+esc(trunc(t.description, 80))+'</div>' +
+        (t.runtime ? '<div class="task-runtime">via <span class="rt-badge">'+esc(t.runtime)+'</span></div>' : '') +
+        (hasResult ? '<div class="task-result show">'+esc(trunc(t.result, 200))+'</div>' : '') +
+        '<div class="task-time">'+fmtTime(t.submitted_at) +
+          (t.completed_at && !t.completed_at.startsWith('0001') ? ' → '+fmtTime(t.completed_at) : '') +
         '</div>' +
       '</div>';
-    });
-    list.innerHTML = html;
+    }).join('');
   }
 
-  function esc(s) {
-    if (!s) return '';
-    const d = document.createElement('div');
-    d.textContent = s;
-    return d.innerHTML;
-  }
-
-  async function fetchJSON(url) {
-    const r = await fetch(url);
-    if (!r.ok) throw new Error(r.status);
-    return r.json();
-  }
+  async function get(u) { const r = await fetch(u); if (!r.ok) throw r.status; return r.json(); }
 
   async function poll() {
     try {
       const [health, agents, stats, tasks, peers] = await Promise.all([
-        fetchJSON('/api/health'),
-        fetchJSON('/api/agents'),
-        fetchJSON('/api/stats'),
-        fetchJSON('/api/tasks'),
-        fetchJSON('/api/peers').catch(() => ({count:0,peers:[]}))
+        get('/api/health'), get('/api/agents'), get('/api/stats'),
+        get('/api/tasks'), get('/api/peers').catch(()=>({count:0}))
       ]);
-
       failCount = 0;
       document.getElementById('disconnected').classList.remove('show');
 
-      // Header
-      document.getElementById('version').textContent = 'v' + (health.version || '0.1.0');
-      document.getElementById('uptime').textContent = 'Uptime: ' + formatUptime(stats.uptime_seconds);
-      document.getElementById('agent-count').textContent = (agents.count || 0) + ' agent' + ((agents.count||0) !== 1 ? 's' : '');
+      document.getElementById('version').textContent = 'v'+(health.version||'0.1.0');
+      document.getElementById('uptime').textContent = 'Uptime: '+fmt(stats.uptime_seconds);
+      document.getElementById('agent-count').textContent = (agents.count||0)+' agent'+((agents.count||0)!==1?'s':'');
 
-      // Stats
-      animateValue(document.getElementById('stat-completed'), stats.total_tasks_completed || 0);
-      animateValue(document.getElementById('stat-failed'), stats.total_tasks_failed || 0);
-      animateValue(document.getElementById('stat-active'), (stats.active_agents||0) + ' / ' + (stats.total_agents||0));
-      animateValue(document.getElementById('stat-capacity'), stats.average_capacity != null ? (stats.average_capacity * 100).toFixed(0) + '%' : '--');
-      animateValue(document.getElementById('stat-queued'), stats.total_tasks_queued || 0);
+      anim(document.getElementById('stat-completed'), stats.total_tasks_completed||0);
+      anim(document.getElementById('stat-failed'), stats.total_tasks_failed||0);
+      anim(document.getElementById('stat-active'), (stats.active_agents||0)+' / '+(stats.total_agents||0));
+      anim(document.getElementById('stat-capacity'), stats.average_capacity!=null?(stats.average_capacity*100).toFixed(0)+'%':'--');
+      anim(document.getElementById('stat-queued'), stats.total_tasks_queued||0);
 
-      // Agents
-      renderAgents(agents.agents || []);
+      renderAgents(agents.agents||[]);
+      renderTasks(tasks.tasks||[]);
 
-      // Tasks
-      renderTasks(tasks.tasks || []);
-
-      // Network
-      document.getElementById('net-transport').textContent = stats.network_transport || 'local';
-      document.getElementById('net-peers').textContent = peers.count || 0;
-
+      document.getElementById('net-transport').textContent = stats.network_transport||'local';
+      document.getElementById('net-peers').textContent = peers.count||0;
     } catch(e) {
-      failCount++;
-      if (failCount >= 3) {
-        document.getElementById('disconnected').classList.add('show');
-      }
+      if (++failCount >= 3) document.getElementById('disconnected').classList.add('show');
     }
   }
 
