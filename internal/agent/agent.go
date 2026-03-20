@@ -565,7 +565,11 @@ func (a *Agent) publishCapabilityAd() {
 
 	capacity := 1.0 // idle
 	if taskCount > 0 {
-		capacity = 0.5
+		// Linearly decrease: 1 task → 0.7, 2 → 0.4, 3+ → 0.1
+		capacity = 1.0 - float64(taskCount)*0.3
+		if capacity < 0.1 {
+			capacity = 0.1
+		}
 	}
 
 	// Build capabilities from role + skills

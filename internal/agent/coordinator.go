@@ -207,17 +207,21 @@ Rules:
 	return subs, false, nil
 }
 
-// dispatch sends subtasks to matching workers. Returns number dispatched.
+// dispatch sends subtasks to matching workers with load balancing. Returns number dispatched.
 func (a *Agent) dispatch(subs []subtask) int {
 	dispatched := 0
+	// Track how many subtasks each worker has been assigned in this batch
+	loadCount := make(map[string]int)
+
 	for i := range subs {
-		worker := a.matchWorker(subs[i].Skills)
+		worker := a.matchWorker(subs[i].Skills, loadCount)
 		if worker == nil {
 			fmt.Printf("   [%s] No worker matched for subtask %s (skills: %v)\n",
 				a.cfg.Agent.Name, subs[i].ID, subs[i].Skills)
 			continue
 		}
 		subs[i].AgentID = worker.AgentID
+		loadCount[worker.AgentID]++
 
 		// Send task request to worker
 		req := protocol.TaskRequest{
@@ -246,23 +250,26 @@ func (a *Agent) dispatch(subs []subtask) int {
 	return dispatched
 }
 
-// matchWorker finds the best worker for required skills.
-func (a *Agent) matchWorker(requiredSkills []string) *PeerInfo {
+// matchWorker finds the best worker for required skills, considering current batch load.
+func (a *Agent) matchWorker(requiredSkills []string, batchLoad map[string]int) *PeerInfo {
 	a.peersMu.RLock()
 	defer a.peersMu.RUnlock()
 
 	var best *PeerInfo
-	bestScore := 0
+	bestScore := -1
 
 	for _, peer := range a.peers {
 		// Skip self
 		if peer.AgentID == a.identity.PublicKeyHex()[:16] {
 			continue
 		}
-		// Skip peers with low capacity
-		if peer.Capacity < 0.2 {
-			continue
+		// Effective capacity = advertised capacity - batch load penalty
+		batchPenalty := float64(batchLoad[peer.AgentID]) * 0.3
+		effectiveCap := peer.Capacity - batchPenalty
+		if effectiveCap < 0.1 {
+			continue // fully loaded in this batch
 		}
+
 		// Score by skill overlap (case-insensitive, supports partial match)
 		score := 0
 		for _, req := range requiredSkills {
@@ -278,15 +285,15 @@ func (a *Agent) matchWorker(requiredSkills []string) *PeerInfo {
 				}
 			}
 		}
-		// Tie-break by capacity * reputation
+
+		// Compare: higher score wins; tie-break by effective capacity * reputation
 		if score > bestScore || (score == bestScore && best != nil &&
-			peer.Capacity*peer.Reputation > best.Capacity*best.Reputation) {
+			effectiveCap*peer.Reputation > (best.Capacity-float64(batchLoad[best.AgentID])*0.3)*best.Reputation) {
 			bestScore = score
 			best = peer
 		}
 	}
 
-	// Accept even with score 0 if there are workers (generic fallback)
 	return best
 }
 
@@ -334,12 +341,15 @@ func (a *Agent) handleTaskResult(result *protocol.TaskResult, fromAgent string) 
 
 	for _, state := range a.coordStates {
 		state.mu.Lock()
-		for _, sub := range state.subtasks {
+		// Find first unresolved subtask assigned to this agent
+		for i, sub := range state.subtasks {
 			if sub.AgentID == fromAgent {
 				if _, already := state.results[sub.ID]; !already {
 					state.results[sub.ID] = result
-					fmt.Printf("📩 [%s] Received subtask result for %s from %s: success=%v\n",
-						a.cfg.Agent.Name, sub.ID, fromAgent[:8], result.Success)
+					fmt.Printf("📩 [%s] Subtask %s (%d/%d) from %s: success=%v\n",
+						a.cfg.Agent.Name, sub.ID, len(state.results), len(state.subtasks),
+						fromAgent[:8], result.Success)
+					_ = i // used implicitly
 					// Check completion
 					if len(state.results) >= len(state.subtasks) {
 						select {
