@@ -182,6 +182,14 @@ func (s *Swarm) Bus() network.Bus {
 	return s.bus
 }
 
+// PeerID returns the P2P peer ID if using P2PBus, empty string otherwise.
+func (s *Swarm) PeerID() string {
+	if p2p, ok := s.bus.(*network.P2PBus); ok {
+		return p2p.PeerID()
+	}
+	return ""
+}
+
 // LogTask records a task event in the swarm's task log.
 func (s *Swarm) LogTask(evt TaskEvent) {
 	s.taskLogMu.Lock()

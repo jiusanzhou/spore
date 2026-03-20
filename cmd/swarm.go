@@ -75,7 +75,29 @@ func (c *swarmCmd) run() error {
 		return err
 	}
 
-	sw := swarm.New(dir, len(configs)+5)
+	// Create swarm with appropriate transport
+	var sw *swarm.Swarm
+	transport := globalCfg.Network.Transport
+	if transport == "libp2p" || transport == "p2p" {
+		// Use first agent's identity for P2P node key
+		firstID, err := agent.NewIdentity(configs[0].Agent.Name)
+		if err != nil {
+			return fmt.Errorf("generating P2P identity: %w", err)
+		}
+		sw, err = swarm.NewP2PSwarm(
+			dir,
+			len(configs)+5,
+			firstID.PrivateKey,
+			globalCfg.Network.Listen,
+			globalCfg.Network.Bootstrap,
+		)
+		if err != nil {
+			return fmt.Errorf("creating P2P swarm: %w", err)
+		}
+		fmt.Printf("🌐 P2P transport enabled (peer: %s)\n", sw.PeerID())
+	} else {
+		sw = swarm.New(dir, len(configs)+5)
+	}
 
 	for _, cfg := range configs {
 		// Override with env/flags

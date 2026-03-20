@@ -83,7 +83,27 @@ func (c *runCmd) run() error {
 	// Inherit from global config
 	applyGlobalConfig(cfg)
 
-	sw := swarm.New(dir, 5)
+	// Create swarm with appropriate transport
+	var sw *swarm.Swarm
+	transport := globalCfg.Network.Transport
+	if transport == "libp2p" || transport == "p2p" {
+		id, err := agent.NewIdentity(cfg.Agent.Name)
+		if err != nil {
+			return fmt.Errorf("generating P2P identity: %w", err)
+		}
+		sw, err = swarm.NewP2PSwarm(
+			dir, 5,
+			id.PrivateKey,
+			globalCfg.Network.Listen,
+			globalCfg.Network.Bootstrap,
+		)
+		if err != nil {
+			return fmt.Errorf("creating P2P swarm: %w", err)
+		}
+		fmt.Printf("🌐 P2P transport enabled (peer: %s)\n", sw.PeerID())
+	} else {
+		sw = swarm.New(dir, 5)
+	}
 	if _, err := sw.AddAgent(cfg); err != nil {
 		return fmt.Errorf("creating agent %s: %w", cfg.Agent.Name, err)
 	}
