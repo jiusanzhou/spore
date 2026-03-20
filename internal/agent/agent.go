@@ -106,6 +106,9 @@ type Agent struct {
 
 	// Task lifecycle callback (set by Swarm)
 	onTaskUpdate func(taskID, status, runtime, result, errMsg string)
+
+	// Coordinator state for tracking delegated subtasks
+	coordStates map[string]*coordinatorState
 }
 
 // SetOnTaskUpdate registers a callback for task lifecycle events.
@@ -408,7 +411,17 @@ func (a *Agent) taskWorker(ctx context.Context) {
 }
 
 func (a *Agent) executeTask(ctx context.Context, entry *taskEntry) error {
-	// Determine which runtime to use
+	// Coordinator agents decompose and delegate
+	if a.cfg.Agent.Role == "coordinator" && a.cfg.Agent.CanDelegate && a.bus != nil {
+		return a.coordinatorExecute(ctx, entry)
+	}
+
+	return a.executeTaskDirect(ctx, entry)
+}
+
+// executeTaskDirect runs a task via runtime without coordinator decomposition.
+func (a *Agent) executeTaskDirect(ctx context.Context, entry *taskEntry) error {
+	// Worker/specialist: direct execution
 	var rt runtime.Runtime
 	var err error
 
@@ -454,10 +467,13 @@ func (a *Agent) executeTask(ctx context.Context, entry *taskEntry) error {
 				fmt.Printf("⚠️  [%s] Balance debit failed: %v\n", a.cfg.Agent.Name, err)
 			}
 		}
+		// Broadcast result to bus (for coordinator collection)
+		a.broadcastTaskResult(entry.ID, output.Result, true, "")
 	} else {
 		if a.onTaskUpdate != nil {
 			a.onTaskUpdate(entry.ID, "failed", rt.Info().Name, "", output.Error)
 		}
+		a.broadcastTaskResult(entry.ID, "", false, output.Error)
 		return fmt.Errorf("task failed: %s", output.Error)
 	}
 	return nil
@@ -485,6 +501,12 @@ func (a *Agent) handleMessage(msg *protocol.Message) error {
 			return fmt.Errorf("unmarshaling capability_ad: %w", err)
 		}
 		a.registerPeer(&ad)
+	case protocol.MsgTaskResult:
+		var result protocol.TaskResult
+		if err := json.Unmarshal(msg.Payload, &result); err != nil {
+			return fmt.Errorf("unmarshaling task_result: %w", err)
+		}
+		a.handleTaskResult(&result, msg.From)
 	}
 	return nil
 }
@@ -508,6 +530,29 @@ func (a *Agent) registerPeer(ad *protocol.CapabilityAd) {
 			p2pBus.RegisterPeer(ad.AgentID, pid)
 		}
 	}
+}
+
+// broadcastTaskResult sends task result to the bus for coordinator collection.
+func (a *Agent) broadcastTaskResult(taskID, output string, success bool, errMsg string) {
+	if a.bus == nil {
+		return
+	}
+	result := protocol.TaskResult{
+		TaskID:  taskID,
+		Output:  output,
+		Success: success,
+		Error:   errMsg,
+	}
+	msg, err := protocol.NewMessage(
+		a.identity.PublicKeyHex()[:16],
+		"broadcast",
+		protocol.MsgTaskResult,
+		result,
+	)
+	if err != nil {
+		return
+	}
+	a.bus.Send(msg)
 }
 
 func (a *Agent) publishCapabilityAd() {
