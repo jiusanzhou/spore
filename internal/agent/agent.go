@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -94,9 +95,10 @@ type Agent struct {
 	bus      network.Bus
 	registry *runtime.Registry
 
-	status    Status
-	taskQueue chan *taskEntry
-	mu        sync.RWMutex
+	status      Status
+	taskQueue   chan *taskEntry
+	mu          sync.RWMutex
+	activeTasks int32 // atomic: number of currently executing tasks
 	taskCount int
 	startedAt time.Time
 
@@ -276,7 +278,14 @@ func (a *Agent) Run() error {
 	fmt.Printf("   Role:    %s\n", a.cfg.Agent.Role)
 	fmt.Printf("   Balance: %.4f\n", a.identity.Balance)
 
-	go a.taskWorker(ctx)
+	// Start concurrent task workers
+	numWorkers := 3
+	if a.cfg.Agent.Role == "coordinator" {
+		numWorkers = 1 // coordinator only needs 1 (subtasks go to workers)
+	}
+	for i := 0; i < numWorkers; i++ {
+		go a.taskWorker(ctx)
+	}
 
 	// Publish initial CapabilityAd
 	a.publishCapabilityAd()
@@ -382,11 +391,12 @@ func (a *Agent) taskWorker(ctx context.Context) {
 				continue
 			}
 
+			active := atomic.AddInt32(&a.activeTasks, 1)
 			a.mu.Lock()
 			a.status = StatusBusy
 			a.mu.Unlock()
 
-			fmt.Printf("📋 [%s] Starting task: %s\n", a.cfg.Agent.Name, entry.Description)
+			fmt.Printf("📋 [%s] Starting task (%d active): %s\n", a.cfg.Agent.Name, active, entry.Description)
 			if a.onTaskUpdate != nil {
 				a.onTaskUpdate(entry.ID, "running", "", "", "")
 			}
@@ -396,13 +406,13 @@ func (a *Agent) taskWorker(ctx context.Context) {
 				fmt.Printf("❌ [%s] Task failed: %s\n", a.cfg.Agent.Name, err)
 			}
 
+			remaining := atomic.AddInt32(&a.activeTasks, -1)
 			a.mu.Lock()
 			a.taskCount++
-			// Check if we should hibernate
 			if a.cfg.Economy.HibernateThreshold > 0 && a.identity.Balance <= 0 {
 				a.status = StatusHibernate
 				fmt.Printf("💤 [%s] Entering hibernate (balance depleted)\n", a.cfg.Agent.Name)
-			} else {
+			} else if remaining == 0 {
 				a.status = StatusIdle
 			}
 			a.mu.Unlock()
@@ -560,13 +570,14 @@ func (a *Agent) publishCapabilityAd() {
 		return
 	}
 	a.mu.RLock()
-	taskCount := a.taskCount
+	_ = a.taskCount // keep for stats
 	a.mu.RUnlock()
 
+	active := atomic.LoadInt32(&a.activeTasks)
 	capacity := 1.0 // idle
-	if taskCount > 0 {
+	if active > 0 {
 		// Linearly decrease: 1 task → 0.7, 2 → 0.4, 3+ → 0.1
-		capacity = 1.0 - float64(taskCount)*0.3
+		capacity = 1.0 - float64(active)*0.3
 		if capacity < 0.1 {
 			capacity = 0.1
 		}
@@ -606,11 +617,15 @@ func (a *Agent) heartbeat() {
 	status := a.status
 	a.mu.RUnlock()
 
+	active := atomic.LoadInt32(&a.activeTasks)
 	capacity := 1.0
-	if status == StatusBusy {
+	if status == StatusHibernate {
 		capacity = 0.0
-	} else if status == StatusHibernate {
-		capacity = 0.0
+	} else if active > 0 {
+		capacity = 1.0 - float64(active)*0.3
+		if capacity < 0.1 {
+			capacity = 0.1
+		}
 	}
 
 	payload := protocol.HeartbeatPayload{

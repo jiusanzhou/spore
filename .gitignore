@@ -23,3 +23,9 @@ Thumbs.db
 *.key
 *.pem
 .env
+
+# LLM-generated files (from builtin runtime tool calls)
+example*.go
+example*.py
+concurrency_example*
+channel_example*
