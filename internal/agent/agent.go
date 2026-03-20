@@ -98,6 +98,7 @@ type Agent struct {
 
 	evolution   *EvolutionEngine
 	peerEvo     *PeerEvolution
+	evoFS       *EvolutionFS // file-based evolution persistence (OpenAgent layout)
 
 	status      Status
 	taskQueue   chan *taskEntry
@@ -120,6 +121,22 @@ type Agent struct {
 // SetOnTaskUpdate registers a callback for task lifecycle events.
 func (a *Agent) SetOnTaskUpdate(fn func(taskID, status, runtime, result, errMsg string)) {
 	a.onTaskUpdate = fn
+}
+
+// SetWorkDir sets the agent's working directory and enables file-based evolution persistence.
+// The directory follows the OpenAgent spec layout: experience/, evolution/, agent.yaml.
+func (a *Agent) SetWorkDir(dir string) {
+	if dir == "" {
+		return
+	}
+	a.evoFS = NewEvolutionFS(dir, a)
+	// Try loading file-based state (supplements SQLite)
+	if a.evolution != nil {
+		a.evoFS.LoadEvolutionState(a.evolution)
+	}
+	if a.peerEvo != nil {
+		a.evoFS.LoadPeerEvolution(a.peerEvo)
+	}
 }
 
 // taskEntry wraps a task with optional runtime preference.
@@ -325,6 +342,10 @@ func (a *Agent) Run() error {
 				a.evolution.Evolve(ctx, deepReflectInterval)
 				if a.peerEvo != nil {
 					a.peerEvo.Persist()
+				}
+				// Sync evolution state to OpenAgent directory layout
+				if a.evoFS != nil {
+					a.evoFS.SyncToDisk(a.evolution, a.peerEvo)
 				}
 				// Share experience with the swarm
 				a.ShareExperience()

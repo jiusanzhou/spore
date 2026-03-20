@@ -19,6 +19,8 @@ package swarm
 import (
 	"crypto/ed25519"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -47,6 +49,7 @@ type Swarm struct {
 	bus     network.Bus
 	agents  map[string]*agent.Agent
 	spawner *spawner.Spawner
+	baseDir string
 	mu      sync.RWMutex
 
 	startedAt      time.Time
@@ -63,6 +66,7 @@ func New(baseDir string, maxAgents int) *Swarm {
 		bus:       network.NewLocalBus(),
 		agents:    make(map[string]*agent.Agent),
 		spawner:   spawner.New(baseDir, maxAgents),
+		baseDir:   baseDir,
 		startedAt: time.Now(),
 	}
 }
@@ -81,6 +85,7 @@ func NewP2PSwarm(baseDir string, maxAgents int, privKey ed25519.PrivateKey, list
 		bus:       bus,
 		agents:    make(map[string]*agent.Agent),
 		spawner:   spawner.New(baseDir, maxAgents),
+		baseDir:   baseDir,
 		startedAt: time.Now(),
 	}, nil
 }
@@ -94,6 +99,11 @@ func (s *Swarm) AddAgent(cfg *agent.Config) (*agent.Agent, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Set working directory for file-based evolution (OpenAgent layout)
+	agentDir := filepath.Join(s.baseDir, cfg.Agent.Name)
+	os.MkdirAll(agentDir, 0755)
+	a.SetWorkDir(agentDir)
 
 	// Register task lifecycle callback
 	agentName := cfg.Agent.Name
