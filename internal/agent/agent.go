@@ -97,6 +97,7 @@ type Agent struct {
 	registry *runtime.Registry
 
 	evolution   *EvolutionEngine
+	peerEvo     *PeerEvolution
 
 	status      Status
 	taskQueue   chan *taskEntry
@@ -229,6 +230,9 @@ func New(cfg *Config) (*Agent, error) {
 	a.evolution = NewEvolutionEngine(a)
 	a.evolution.RestoreState()
 
+	// Initialize peer evolution tracker (for coordinators)
+	a.peerEvo = NewPeerEvolution(a)
+
 	return a, nil
 }
 
@@ -302,6 +306,12 @@ func (a *Agent) Run() error {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
+	// Evolution cycle: every 10 heartbeats (~5 min)
+	evolveCounter := 0
+	const evolveEvery = 10
+	// Deep LLM reflection: every 30 min
+	const deepReflectInterval = 30 * time.Minute
+
 	for {
 		select {
 		case <-sigCh:
@@ -309,6 +319,14 @@ func (a *Agent) Run() error {
 			return a.shutdown()
 		case <-ticker.C:
 			a.heartbeat()
+			evolveCounter++
+			if evolveCounter >= evolveEvery && a.evolution != nil {
+				evolveCounter = 0
+				a.evolution.Evolve(ctx, deepReflectInterval)
+				if a.peerEvo != nil {
+					a.peerEvo.Persist()
+				}
+			}
 		}
 	}
 }

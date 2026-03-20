@@ -254,13 +254,14 @@ func (a *Agent) dispatch(subs []subtask) int {
 	return dispatched
 }
 
-// matchWorker finds the best worker for required skills, considering current batch load.
+// matchWorker finds the best worker for required skills, considering current batch load
+// and evolutionary fitness (peer performance history).
 func (a *Agent) matchWorker(requiredSkills []string, batchLoad map[string]int) *PeerInfo {
 	a.peersMu.RLock()
 	defer a.peersMu.RUnlock()
 
 	var best *PeerInfo
-	bestScore := -1
+	bestScore := -1.0
 
 	for _, peer := range a.peers {
 		// Skip self
@@ -275,7 +276,7 @@ func (a *Agent) matchWorker(requiredSkills []string, batchLoad map[string]int) *
 		}
 
 		// Score by skill overlap (case-insensitive, supports partial match)
-		score := 0
+		skillScore := 0
 		for _, req := range requiredSkills {
 			req = strings.ToLower(strings.TrimSpace(req))
 			if req == "" {
@@ -284,16 +285,23 @@ func (a *Agent) matchWorker(requiredSkills []string, batchLoad map[string]int) *
 			for _, cap := range peer.Capabilities {
 				cap = strings.ToLower(cap)
 				if cap == req || strings.Contains(cap, req) || strings.Contains(req, cap) {
-					score++
+					skillScore++
 					break // count each required skill once
 				}
 			}
 		}
 
-		// Compare: higher score wins; tie-break by effective capacity * reputation
-		if score > bestScore || (score == bestScore && best != nil &&
-			effectiveCap*peer.Reputation > (best.Capacity-float64(batchLoad[best.AgentID])*0.3)*best.Reputation) {
-			bestScore = score
+		// Get evolutionary fitness from peer tracking
+		fitness := 0.5 // neutral default
+		if a.peerEvo != nil {
+			fitness = a.peerEvo.Fitness(peer.AgentID)
+		}
+
+		// Composite score: skill_match * 10 + fitness * capacity * reputation
+		compositeScore := float64(skillScore)*10.0 + fitness*effectiveCap*peer.Reputation
+
+		if compositeScore > bestScore {
+			bestScore = compositeScore
 			best = peer
 		}
 	}
@@ -340,6 +348,15 @@ Synthesize these results into a clear, concise final answer.`, originalTask, str
 
 // handleTaskResult processes a task result from a worker.
 func (a *Agent) handleTaskResult(result *protocol.TaskResult, fromAgent string) {
+	// Track peer performance for evolutionary selection
+	if a.peerEvo != nil {
+		if result.Success {
+			a.peerEvo.ObserveSuccess(fromAgent, 0) // duration unknown from result msg
+		} else {
+			a.peerEvo.ObserveFailure(fromAgent, 0)
+		}
+	}
+
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 

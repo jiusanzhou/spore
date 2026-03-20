@@ -181,50 +181,14 @@ func (e *EvolutionEngine) reflect() {
 	}
 	e.lastReflect = time.Now()
 
-	// 1. Find best runtime
-	bestRuntime := ""
-	bestScore := -999.0
-	for rt, score := range e.strategy.RuntimeScores {
-		if score > bestScore {
-			bestScore = score
-			bestRuntime = rt
-		}
-	}
-	if bestRuntime != "" {
-		e.strategy.PreferredRuntime = bestRuntime
-	}
-
-	// 2. Update skill confidence
-	for name, sp := range e.skills {
-		confidence := sp.SuccessRate
-		// Decay confidence for unused skills
-		daysSinceUse := float64(time.Now().Unix()-sp.LastUsed) / 86400
-		if daysSinceUse > 7 {
-			confidence *= 0.9 // 10% decay per week of non-use
-		}
-		// Boost for improving trend
-		if sp.Trend == "improving" {
-			confidence *= 1.1
-		}
-		if confidence > 1.0 {
-			confidence = 1.0
-		}
-		e.strategy.SkillConfidence[name] = confidence
-	}
-
-	// 3. Determine new skills (observed from task descriptions)
+	// Discover new skills (log only, don't acquire yet)
 	newSkills := e.discoverNewSkills()
 	if len(newSkills) > 0 {
 		fmt.Printf("🧬 [%s] Discovered potential new skills: %v\n", e.agent.cfg.Agent.Name, newSkills)
 	}
 
-	e.strategy.AdaptedAt = time.Now().Unix()
-
-	// 4. Persist evolution state to memory
-	e.persistState()
-
-	fmt.Printf("🔄 [%s] Self-reflection complete — %d experiences, %d skills, preferred runtime: %s\n",
-		e.agent.cfg.Agent.Name, len(e.journal), len(e.skills), e.strategy.PreferredRuntime)
+	// Delegate to localReflect for strategy update + persistence
+	e.localReflect()
 }
 
 // discoverNewSkills identifies skill patterns in task descriptions
