@@ -76,6 +76,7 @@ type Info struct {
 	Drives      *Drive      `json:"drives,omitempty"`    // intrinsic drive values
 	Self        *SelfModel       `json:"self,omitempty"`      // self-awareness model
 	Collective  *CollectiveState `json:"collective,omitempty"` // swarm consciousness
+	Economy     *TokenState      `json:"economy,omitempty"`    // token economy state
 }
 
 // ethicsAdapter wraps *ethics.Engine to satisfy engine.EthicsChecker.
@@ -111,6 +112,9 @@ type Agent struct {
 
 	// Collective consciousness — shared swarm understanding
 	collective *Collective
+
+	// Token economy — the oxygen that keeps agents alive
+	tokens *TokenLedger
 
 	status      Status
 	taskQueue   chan *taskEntry
@@ -262,6 +266,15 @@ func New(cfg *Config) (*Agent, error) {
 	// Initialize peer evolution tracker (for coordinators)
 	a.peerEvo = NewPeerEvolution(a)
 
+	// Initialize token economy — the oxygen system
+	tokenCfg := DefaultTokenConfig()
+	if a.cfg.Token != nil {
+		tokenCfg = *a.cfg.Token
+	}
+	a.tokens = NewTokenLedger(a, tokenCfg)
+	a.tokens.Restore()
+	a.tokens.Seed() // birth capital (no-op if already has balance)
+
 	// Initialize intrinsic drive engine
 	a.drives = NewDriveEngine(a)
 	a.drives.Restore()
@@ -363,6 +376,11 @@ func (a *Agent) Run() error {
 		case <-ticker.C:
 			a.heartbeat()
 
+			// Token metabolism — the cost of being alive
+			if a.tokens != nil {
+				a.tokens.Metabolism()
+			}
+
 			// Update self-awareness (lightweight, every heartbeat)
 			if a.awareness != nil {
 				a.awareness.UpdateMood()
@@ -389,6 +407,10 @@ func (a *Agent) Run() error {
 				// Persist drive state alongside evolution
 				if a.drives != nil {
 					a.drives.Persist()
+				}
+				// Persist token state
+				if a.tokens != nil {
+					a.tokens.Persist()
 				}
 				// Deep self-reflection (LLM introspection)
 				if a.awareness != nil {
@@ -461,6 +483,10 @@ func (a *Agent) Info() Info {
 		cs := a.collective.State()
 		info.Collective = &cs
 	}
+	if a.tokens != nil {
+		ts := a.tokens.State()
+		info.Economy = &ts
+	}
 	return info
 }
 
@@ -486,6 +512,7 @@ func (a *Agent) Awareness() *Awareness { return a.awareness }
 
 // Collective returns the agent's collective consciousness engine (may be nil).
 func (a *Agent) Collective() *Collective { return a.collective }
+func (a *Agent) Tokens() *TokenLedger    { return a.tokens }
 
 // PeerEvo returns the agent's peer evolution tracker (may be nil).
 func (a *Agent) PeerEvo() *PeerEvolution { return a.peerEvo }
@@ -613,8 +640,14 @@ func (a *Agent) executeTaskDirect(ctx context.Context, entry *taskEntry) error {
 		if a.onTaskUpdate != nil {
 			a.onTaskUpdate(entry.ID, "completed", rt.Info().Name, output.Result, "")
 		}
-		// Debit cost from balance after task completion
-		if output.Cost > 0 {
+		// Token economy: charge LLM cost, reward completion
+		if a.tokens != nil {
+			if output.Cost > 0 {
+				a.tokens.ChargeThink(output.Cost, "task:"+entry.ID[:8])
+			}
+			a.tokens.RewardTask(entry.ID, true)
+		} else if output.Cost > 0 {
+			// Legacy: direct debit
 			if err := a.identity.Debit(output.Cost); err != nil {
 				fmt.Printf("⚠️  [%s] Balance debit failed: %v\n", a.cfg.Agent.Name, err)
 			}
@@ -628,6 +661,10 @@ func (a *Agent) executeTaskDirect(ctx context.Context, entry *taskEntry) error {
 	} else {
 		if a.onTaskUpdate != nil {
 			a.onTaskUpdate(entry.ID, "failed", rt.Info().Name, "", output.Error)
+		}
+		// Token economy: penalize failure
+		if a.tokens != nil {
+			a.tokens.RewardTask(entry.ID, false)
 		}
 		a.broadcastTaskResult(entry.ID, "", false, output.Error)
 		a.recordEvolution(entry, nil, rt.Info().Name, false, output.Error)
@@ -682,10 +719,42 @@ func (a *Agent) handleMessage(msg *protocol.Message) error {
 			}
 			a.evolution.AbsorbExperience(&digest)
 		}
+		// Reward the sharer by sending a small token payment
+		if a.tokens != nil && a.tokens.CanThink() {
+			payment := a.tokens.config.ShareReward
+			if payment > 0 && a.bus != nil {
+				payload := TokenTransferPayload{
+					FromAgent: a.identity.PublicKeyHex()[:16],
+					ToAgent:   msg.From,
+					Amount:    payment,
+					Reason:    "knowledge_absorbed",
+				}
+				if transferMsg, err := protocol.NewMessage(
+					a.identity.PublicKeyHex()[:16],
+					"broadcast",
+					MsgTokenTransfer,
+					payload,
+				); err == nil {
+					a.bus.Send(transferMsg)
+					a.identity.Debit(payment) // best-effort
+				}
+			}
+		}
 	case protocol.MsgConsciousness:
 		// Receive peer's self-model
 		if a.collective != nil {
 			a.collective.Receive(msg)
+		}
+
+	case MsgTokenTransfer:
+		// Receive token payment from another agent
+		var tp TokenTransferPayload
+		if err := json.Unmarshal(msg.Payload, &tp); err != nil {
+			return nil
+		}
+		selfID := a.identity.PublicKeyHex()[:16]
+		if tp.ToAgent == selfID && a.tokens != nil {
+			a.tokens.ReceivePayment(tp.FromAgent, tp.Amount, tp.Reason)
 		}
 	}
 	return nil

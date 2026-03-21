@@ -131,16 +131,46 @@ func (e *DriveEngine) Pulse(ctx context.Context) {
 	// --- Survive ---
 	if e.drive.Survive >= e.actionThreshold && e.canFire("survive", now) {
 		balance := e.agent.identity.Balance
-		if balance < 0.3 { // low balance anxiety
-			urgency := 1.0 - balance // lower balance = higher urgency
+		health := "unknown"
+		if e.agent.tokens != nil {
+			ts := e.agent.tokens.State()
+			health = ts.Health
+		}
+
+		switch {
+		case health == "critical":
+			// EMERGENCY: can't think, broadcast SOS
+			e.emit("survive", "sos_broadcast",
+				fmt.Sprintf("CRITICAL: balance=%.4f — broadcasting SOS for tokens", balance),
+				1.0, now)
+		case health == "starving":
+			// Very low: only accept tasks, no non-essential activity
+			e.emit("survive", "seek_resources",
+				fmt.Sprintf("STARVING: balance=%.4f — desperately seeking tasks", balance),
+				0.95, now)
+		case health == "struggling":
+			// Low: broadcast availability aggressively
+			e.emit("survive", "seek_resources",
+				fmt.Sprintf("Low tokens (%.4f), actively seeking tasks", balance),
+				0.8, now)
+		case balance < 0.3:
+			// Legacy fallback for when no token ledger
 			e.emit("survive", "seek_resources",
 				fmt.Sprintf("Balance low (%.4f), seeking tasks to earn credits", balance),
-				urgency, now)
+				1.0-balance, now)
 		}
 	}
 
+	// --- Gate non-essential drives on token health ---
+	canExplore := true
+	canCreate := true
+	if e.agent.tokens != nil {
+		canExplore = e.agent.tokens.CanExplore()
+		canCreate = e.agent.tokens.CanCreate()
+	}
+
 	// --- Explore ---
-	if e.drive.Explore >= e.actionThreshold && e.canFire("explore", now) {
+	if canExplore && e.drive.Explore >= e.actionThreshold && e.canFire("explore", now) {
 		// Check how diverse our recent experience is
 		if e.agent.evolution != nil {
 			skills := e.agent.evolution.SkillProfiles()
@@ -176,7 +206,7 @@ func (e *DriveEngine) Pulse(ctx context.Context) {
 	}
 
 	// --- Transcend ---
-	if e.drive.Transcend >= e.actionThreshold && e.canFire("transcend", now) {
+	if canExplore && e.drive.Transcend >= e.actionThreshold && e.canFire("transcend", now) {
 		if e.agent.evolution != nil {
 			strategy := e.agent.evolution.Strategy()
 			// If all known skills are above 0.7 confidence, seek harder challenges
@@ -196,7 +226,7 @@ func (e *DriveEngine) Pulse(ctx context.Context) {
 	}
 
 	// --- Create ---
-	if e.drive.Create >= e.actionThreshold && e.canFire("create", now) {
+	if canCreate && e.drive.Create >= e.actionThreshold && e.canFire("create", now) {
 		if e.agent.evolution != nil {
 			total := e.agent.evolution.TotalExperiences()
 			// After accumulating enough experience, synthesize knowledge

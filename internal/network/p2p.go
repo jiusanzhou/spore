@@ -395,7 +395,29 @@ func (b *P2PBus) Send(msg *proto.Message) error {
 		if err != nil {
 			return fmt.Errorf("marshal broadcast: %w", err)
 		}
-		return b.topic.Publish(b.ctx, data)
+		// Publish to GossipSub for remote peers
+		if err := b.topic.Publish(b.ctx, data); err != nil {
+			fmt.Printf("warning: gossipsub publish: %v\n", err)
+		}
+		// Also dispatch locally to all handlers in this process
+		// (GossipSub skips messages from our own host)
+		// Must be async to avoid deadlock: handler may call bus.Send → broadcast → handler
+		b.mu.RLock()
+		handlers := make(map[string]func(*proto.Message) error, len(b.handlers))
+		for id, h := range b.handlers {
+			handlers[id] = h
+		}
+		b.mu.RUnlock()
+		for id, handler := range handlers {
+			if id != msg.From {
+				go func(id string, h func(*proto.Message) error) {
+					if err := h(msg); err != nil {
+						fmt.Printf("warning: local broadcast handler %s: %v\n", id, err)
+					}
+				}(id, handler)
+			}
+		}
+		return nil
 	}
 
 	// Point-to-point: resolve agent ID to peer ID.

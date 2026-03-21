@@ -1,0 +1,56 @@
+analysis:
+  name: analysis
+  attempts: 0
+  successes: 0
+  avgduration: 0
+  successrate: 0.5
+  trend: stable
+  lastused: 0
+coding:
+  name: coding
+  attempts: 27
+  successes: 21
+  avgduration: 21.370131680481478
+  successrate: 0.7777777777777778
+  trend: stable
+  lastused: 1774071423
+delegation:
+  name: delegation
+  attempts: 0
+  successes: 0
+  avgduration: 0
+  successrate: 0.5
+  trend: stable
+  lastused: 0
+documentation:
+  name: documentation
+  attempts: 0
+  successes: 0
+  avgduration: 0
+  successrate: 0.5
+  trend: stable
+  lastused: 0
+planning:
+  name: planning
+  attempts: 0
+  successes: 0
+  avgduration: 0
+  successrate: 0.5
+  trend: stable
+  lastused: 0
+research:
+  name: research
+  attempts: 27
+  successes: 21
+  avgduration: 21.370131680481478
+  successrate: 0.7777777777777778
+  trend: stable
+  lastused: 1774071423
+writing:
+  name: writing
+  attempts: 0
+  successes: 0
+  avgduration: 0
+  successrate: 0.5
+  trend: stable
+  lastused: 0

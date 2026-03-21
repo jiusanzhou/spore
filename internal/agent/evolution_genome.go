@@ -281,13 +281,6 @@ func copyFloatMap(m map[string]float64) map[string]float64 {
 	return out
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // toStringKeyMap recursively converts map[interface{}]interface{} (yaml.v2) to map[string]interface{}.
 func toStringKeyMap(v interface{}) map[string]interface{} {
 	switch val := v.(type) {

@@ -134,6 +134,8 @@ func (s *Server) handleAgentRoute(w http.ResponseWriter, r *http.Request) {
 		s.handleAgentMonologue(w, r, name)
 	case "collective":
 		s.handleAgentCollective(w, r, name)
+	case "economy":
+		s.handleAgentEconomy(w, r, name)
 	default:
 		http.Error(w, "not found", http.StatusNotFound)
 	}
@@ -436,5 +438,27 @@ func (s *Server) handleAgentCollective(w http.ResponseWriter, r *http.Request, n
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"state": col.State(),
 		"peers": col.Peers(),
+	})
+}
+
+func (s *Server) handleAgentEconomy(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	a := s.sw.GetAgent(name)
+	if a == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found: " + name})
+		return
+	}
+	tokens := a.Tokens()
+	if tokens == nil {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "no token ledger"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"state":  tokens.State(),
+		"ledger": tokens.RecentLedger(20),
 	})
 }

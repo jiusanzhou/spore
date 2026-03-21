@@ -1,0 +1,16 @@
+4865c9be95b67bea:
+  agentid: 4865c9be95b67bea
+  taskscompleted: 1
+  tasksfailed: 0
+  avgduration: 0
+  successrate: 1
+  fitness: 0.5
+  lastseen: 1774071403
+af12d00395a7f0d0:
+  agentid: af12d00395a7f0d0
+  taskscompleted: 1
+  tasksfailed: 1
+  avgduration: 0
+  successrate: 0.5
+  fitness: 0.5
+  lastseen: 1774071423

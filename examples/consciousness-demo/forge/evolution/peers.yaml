@@ -1,0 +1,16 @@
+39b71d0d4e653d27:
+  agentid: 39b71d0d4e653d27
+  taskscompleted: 1
+  tasksfailed: 0
+  avgduration: 0
+  successrate: 1
+  fitness: 0.5
+  lastseen: 1774071444
+af12d00395a7f0d0:
+  agentid: af12d00395a7f0d0
+  taskscompleted: 1
+  tasksfailed: 1
+  avgduration: 0
+  successrate: 0.5
+  fitness: 0.5
+  lastseen: 1774071423

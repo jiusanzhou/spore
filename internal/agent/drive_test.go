@@ -117,9 +117,14 @@ func TestDriveEngine_AdaptOnFailure(t *testing.T) {
 
 	after := a.drives.Drive()
 
-	// Survive should increase (failure triggers self-preservation)
-	if after.Survive <= before.Survive {
-		t.Errorf("survive should increase after failure: before=%.3f after=%.3f", before.Survive, after.Survive)
+	// With high balance (10.0), survive is capped at 0.3 regardless of failure.
+	// The balance-modulation overrides the failure bump.
+	if after.Survive > 0.3 {
+		t.Errorf("survive should be capped at 0.3 with high balance: got=%.3f", after.Survive)
+	}
+	// But Transcend should decrease after failure
+	if after.Transcend >= before.Transcend {
+		t.Errorf("transcend should decrease after failure: before=%.3f after=%.3f", before.Transcend, after.Transcend)
 	}
 }
 
