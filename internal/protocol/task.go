@@ -88,3 +88,23 @@ type HeartbeatPayload struct {
 	TaskCount int     `json:"task_count"`
 	Uptime    int64   `json:"uptime"`     // seconds since start
 }
+
+// ConsciousnessPayload carries an agent's self-model for collective awareness.
+type ConsciousnessPayload struct {
+	AgentID     string   `json:"agent_id"`
+	Name        string   `json:"name"`
+	Personality string   `json:"personality"`
+	Purpose     string   `json:"purpose"`
+	Mood        string   `json:"mood"`
+	Energy      float64  `json:"energy"`
+	Morale      float64  `json:"morale"`
+	Strengths   []string `json:"strengths,omitempty"`
+	Weaknesses  []string `json:"weaknesses,omitempty"`
+	Narrative   string   `json:"narrative"`
+	Skills      []string `json:"skills,omitempty"`
+	DriveDom    string   `json:"drive_dominant"`      // dominant drive name
+	DriveVal    float64  `json:"drive_dominant_value"` // dominant drive value
+	SwarmRole   string   `json:"swarm_role,omitempty"`
+	Age         int64    `json:"age_seconds"`
+	Timestamp   int64    `json:"timestamp"`
+}

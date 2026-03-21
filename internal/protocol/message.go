@@ -37,6 +37,7 @@ const (
 	MsgMemorySync    MessageType = "memory_sync"
 	MsgVote          MessageType = "vote"
 	MsgHeartbeat     MessageType = "heartbeat"
+	MsgConsciousness MessageType = "consciousness" // self-model sharing
 	MsgSpawnInit     MessageType = "spawn_init"
 	MsgSpawnAck      MessageType = "spawn_ack"
 )

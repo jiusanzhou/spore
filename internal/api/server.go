@@ -132,6 +132,8 @@ func (s *Server) handleAgentRoute(w http.ResponseWriter, r *http.Request) {
 		s.handleAgentAwareness(w, r, name)
 	case "monologue":
 		s.handleAgentMonologue(w, r, name)
+	case "collective":
+		s.handleAgentCollective(w, r, name)
 	default:
 		http.Error(w, "not found", http.StatusNotFound)
 	}
@@ -412,5 +414,27 @@ func (s *Server) handleAgentMonologue(w http.ResponseWriter, r *http.Request, na
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"thoughts": aw.Monologue(limit),
+	})
+}
+
+func (s *Server) handleAgentCollective(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	a := s.sw.GetAgent(name)
+	if a == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found: " + name})
+		return
+	}
+	col := a.Collective()
+	if col == nil {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "no collective engine"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"state": col.State(),
+		"peers": col.Peers(),
 	})
 }

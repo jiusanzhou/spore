@@ -74,7 +74,8 @@ type Info struct {
 	Balance     float64   `json:"balance"`
 	Evolution   string    `json:"evolution,omitempty"` // evolution engine stats
 	Drives      *Drive      `json:"drives,omitempty"`    // intrinsic drive values
-	Self        *SelfModel  `json:"self,omitempty"`      // self-awareness model
+	Self        *SelfModel       `json:"self,omitempty"`      // self-awareness model
+	Collective  *CollectiveState `json:"collective,omitempty"` // swarm consciousness
 }
 
 // ethicsAdapter wraps *ethics.Engine to satisfy engine.EthicsChecker.
@@ -107,6 +108,9 @@ type Agent struct {
 
 	// Self-awareness engine — internal self-model + introspection
 	awareness *Awareness
+
+	// Collective consciousness — shared swarm understanding
+	collective *Collective
 
 	status      Status
 	taskQueue   chan *taskEntry
@@ -266,6 +270,9 @@ func New(cfg *Config) (*Agent, error) {
 	a.awareness = NewAwareness(a)
 	a.awareness.Restore()
 
+	// Initialize collective consciousness
+	a.collective = NewCollective(a)
+
 	return a, nil
 }
 
@@ -388,6 +395,11 @@ func (a *Agent) Run() error {
 					a.awareness.Introspect(ctx)
 					a.awareness.Persist()
 				}
+				// Share consciousness + synthesize collective understanding
+				if a.collective != nil {
+					a.collective.Broadcast()
+					a.collective.Synthesize(ctx)
+				}
 			}
 		}
 	}
@@ -445,6 +457,10 @@ func (a *Agent) Info() Info {
 		s := a.awareness.Self()
 		info.Self = &s
 	}
+	if a.collective != nil {
+		cs := a.collective.State()
+		info.Collective = &cs
+	}
 	return info
 }
 
@@ -467,6 +483,9 @@ func (a *Agent) Drives() *DriveEngine { return a.drives }
 
 // Awareness returns the agent's self-awareness engine (may be nil).
 func (a *Agent) Awareness() *Awareness { return a.awareness }
+
+// Collective returns the agent's collective consciousness engine (may be nil).
+func (a *Agent) Collective() *Collective { return a.collective }
 
 // PeerEvo returns the agent's peer evolution tracker (may be nil).
 func (a *Agent) PeerEvo() *PeerEvolution { return a.peerEvo }
@@ -662,6 +681,11 @@ func (a *Agent) handleMessage(msg *protocol.Message) error {
 				return fmt.Errorf("unmarshaling experience digest: %w", err)
 			}
 			a.evolution.AbsorbExperience(&digest)
+		}
+	case protocol.MsgConsciousness:
+		// Receive peer's self-model
+		if a.collective != nil {
+			a.collective.Receive(msg)
 		}
 	}
 	return nil
