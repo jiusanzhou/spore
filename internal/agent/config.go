@@ -35,6 +35,7 @@ type Config struct {
 	Economy EconomyConfig  `toml:"economy" yaml:"economy" json:"economy"`
 	Privacy PrivacyConfig  `toml:"privacy" yaml:"privacy" json:"privacy"`
 	Spawner SpawnerConfig  `toml:"spawner" yaml:"spawner" json:"spawner"`
+	Drive   *Drive         `toml:"drive" yaml:"drive" json:"drive,omitempty"`
 }
 
 // AgentConfig defines the agent's basic identity and behavior.

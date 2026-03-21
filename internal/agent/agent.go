@@ -73,6 +73,7 @@ type Info struct {
 	StartedAt   time.Time `json:"started_at"`
 	Balance     float64   `json:"balance"`
 	Evolution   string    `json:"evolution,omitempty"` // evolution engine stats
+	Drives      *Drive    `json:"drives,omitempty"`    // intrinsic drive values
 }
 
 // ethicsAdapter wraps *ethics.Engine to satisfy engine.EthicsChecker.
@@ -99,6 +100,9 @@ type Agent struct {
 	evolution   *EvolutionEngine
 	peerEvo     *PeerEvolution
 	evoFS       *EvolutionFS // file-based evolution persistence (OpenAgent layout)
+
+	// Intrinsic drive engine — autonomous behavior generation
+	drives *DriveEngine
 
 	status      Status
 	taskQueue   chan *taskEntry
@@ -250,6 +254,10 @@ func New(cfg *Config) (*Agent, error) {
 	// Initialize peer evolution tracker (for coordinators)
 	a.peerEvo = NewPeerEvolution(a)
 
+	// Initialize intrinsic drive engine
+	a.drives = NewDriveEngine(a)
+	a.drives.Restore()
+
 	return a, nil
 }
 
@@ -334,8 +342,17 @@ func (a *Agent) Run() error {
 		case <-sigCh:
 			fmt.Println("\n🛑 Shutting down...")
 			return a.shutdown()
+		case action := <-a.drives.Actions():
+			// Execute autonomous drive-generated actions
+			go a.executeAutonomousAction(ctx, action)
 		case <-ticker.C:
 			a.heartbeat()
+
+			// Drive pulse: evaluate intrinsic motivations
+			if a.drives != nil {
+				a.drives.Pulse(ctx)
+			}
+
 			evolveCounter++
 			if evolveCounter >= evolveEvery && a.evolution != nil {
 				evolveCounter = 0
@@ -349,6 +366,10 @@ func (a *Agent) Run() error {
 				}
 				// Share experience with the swarm
 				a.ShareExperience()
+				// Persist drive state alongside evolution
+				if a.drives != nil {
+					a.drives.Persist()
+				}
 			}
 		}
 	}
@@ -398,6 +419,10 @@ func (a *Agent) Info() Info {
 	if a.evolution != nil {
 		info.Evolution = a.evolution.Stats()
 	}
+	if a.drives != nil {
+		d := a.drives.Drive()
+		info.Drives = &d
+	}
 	return info
 }
 
@@ -414,6 +439,9 @@ func (a *Agent) Config() *Config { return a.cfg }
 
 // Evolution returns the agent's evolution engine (may be nil).
 func (a *Agent) Evolution() *EvolutionEngine { return a.evolution }
+
+// Drives returns the agent's drive engine (may be nil).
+func (a *Agent) Drives() *DriveEngine { return a.drives }
 
 // PeerEvo returns the agent's peer evolution tracker (may be nil).
 func (a *Agent) PeerEvo() *PeerEvolution { return a.peerEvo }
@@ -673,6 +701,11 @@ func (a *Agent) recordEvolution(entry *taskEntry, output *runtime.TaskOutput, rt
 		Skills:      a.cfg.Agent.Skills, // use declared skills for now
 	}
 	a.evolution.Record(rec)
+
+	// Adapt intrinsic drives based on experience
+	if a.drives != nil {
+		a.drives.Adapt(rec)
+	}
 }
 
 // broadcastTaskResult sends task result to the bus for coordinator collection.
