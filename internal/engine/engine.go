@@ -170,6 +170,12 @@ func (e *Engine) tick(ctx context.Context, task *Task) (*Step, bool, error) {
 		return step, true, nil
 	}
 
+	// No action parsed — LLM didn't follow format, treat as thinking-only step
+	if action.ToolName == "" {
+		step.Reflection = "no action parsed from LLM response"
+		return step, false, nil
+	}
+
 	// 4. Ethics check — validate before execution
 	if e.ethics != nil {
 		actionStr := fmt.Sprintf("%s %s", action.ToolName, action.ToolInput)

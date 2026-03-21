@@ -144,6 +144,30 @@ func (a *Agent) executeAutonomousAction(ctx context.Context, action *DriveAction
 			}
 		}
 
+	// --- Create: spawn new agent ---
+	case "spawn_child":
+		if a.onSpawnRequest != nil {
+			// Determine child specialization
+			weakSkills := []string{}
+			if a.evolution != nil {
+				for name, profile := range a.evolution.SkillProfiles() {
+					if profile.SuccessRate < 0.6 {
+						weakSkills = append(weakSkills, name)
+					}
+				}
+			}
+			if len(weakSkills) == 0 {
+				weakSkills = a.cfg.Agent.Skills // fallback to parent skills
+			}
+
+			childName, err := a.RequestSpawn("worker", weakSkills, action.Description)
+			if err != nil {
+				fmt.Printf("⚠️  [%s] Spawn failed: %v\n", a.cfg.Agent.Name, err)
+			} else {
+				fmt.Printf("🐣 [%s] Successfully spawned child: %s\n", a.cfg.Agent.Name, childName)
+			}
+		}
+
 	default:
 		fmt.Printf("❓ [%s] Unknown drive action: %s\n", a.cfg.Agent.Name, action.Action)
 	}

@@ -6,6 +6,14 @@
   successrate: 1
   fitness: 0.9
   lastseen: 1774088631
+acc286f54949a8d4:
+  agentid: acc286f54949a8d4
+  taskscompleted: 3
+  tasksfailed: 1
+  avgduration: 0
+  successrate: 0.75
+  fitness: 0.6000000000000001
+  lastseen: 1774095434
 fea0ae2cdc9da35d:
   agentid: fea0ae2cdc9da35d
   taskscompleted: 1

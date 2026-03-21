@@ -131,6 +131,9 @@ type Agent struct {
 	// Task lifecycle callback (set by Swarm)
 	onTaskUpdate func(taskID, status, runtime, result, errMsg string)
 
+	// Spawn callback (set by Swarm) — returns child agent name or error
+	onSpawnRequest func(parentName string, childRole string, childSkills []string, reason string) (string, error)
+
 	// Coordinator state for tracking delegated subtasks
 	coordStates map[string]*coordinatorState
 }
@@ -138,6 +141,27 @@ type Agent struct {
 // SetOnTaskUpdate registers a callback for task lifecycle events.
 func (a *Agent) SetOnTaskUpdate(fn func(taskID, status, runtime, result, errMsg string)) {
 	a.onTaskUpdate = fn
+}
+
+// SetOnSpawnRequest registers a callback for runtime spawn requests.
+func (a *Agent) SetOnSpawnRequest(fn func(parentName string, childRole string, childSkills []string, reason string) (string, error)) {
+	a.onSpawnRequest = fn
+}
+
+// RequestSpawn asks the swarm to spawn a child agent.
+func (a *Agent) RequestSpawn(role string, skills []string, reason string) (string, error) {
+	if a.onSpawnRequest == nil {
+		return "", fmt.Errorf("spawn not available (not in a swarm)")
+	}
+	// Check spawn budget
+	minBal := a.cfg.Spawner.MinBalanceToSpawn
+	if minBal <= 0 {
+		minBal = 10.0
+	}
+	if a.identity.Balance < minBal {
+		return "", fmt.Errorf("insufficient balance to spawn: have %.2f, need %.2f", a.identity.Balance, minBal)
+	}
+	return a.onSpawnRequest(a.cfg.Agent.Name, role, skills, reason)
 }
 
 // SetWorkDir sets the agent's working directory and enables file-based evolution persistence.

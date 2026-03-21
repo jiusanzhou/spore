@@ -1,11 +1,11 @@
 coding:
   name: coding
-  attempts: 13
-  successes: 11
-  avgduration: 60.65116957353847
-  successrate: 0.8461538461538461
+  attempts: 24
+  successes: 19
+  avgduration: 64.34539594437503
+  successrate: 0.7916666666666666
   trend: stable
-  lastused: 1774088950
+  lastused: 1774096151
 documentation:
   name: documentation
   attempts: 0
@@ -16,12 +16,12 @@ documentation:
   lastused: 0
 research:
   name: research
-  attempts: 13
-  successes: 11
-  avgduration: 60.65116957353847
-  successrate: 0.8461538461538461
+  attempts: 24
+  successes: 19
+  avgduration: 64.34539594437503
+  successrate: 0.7916666666666666
   trend: stable
-  lastused: 1774088950
+  lastused: 1774096151
 writing:
   name: writing
   attempts: 0

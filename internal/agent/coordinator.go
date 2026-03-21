@@ -106,6 +106,24 @@ func (a *Agent) coordinatorExecute(ctx context.Context, entry *taskEntry) error 
 
 	dispatched := a.dispatch(subs)
 	if dispatched == 0 {
+		// Try to spawn a specialist if possible
+		if a.onSpawnRequest != nil && a.identity.Balance >= a.cfg.Spawner.MinBalanceToSpawn {
+			neededSkills := []string{}
+			for _, sub := range subs {
+				neededSkills = append(neededSkills, sub.Skills...)
+			}
+			childName, err := a.RequestSpawn("worker", unique(neededSkills),
+				fmt.Sprintf("No worker available for skills: %v", neededSkills))
+			if err == nil {
+				fmt.Printf("🐣 [%s] Spawned specialist '%s' for unmatched skills, retrying dispatch\n",
+					a.cfg.Agent.Name, childName)
+				// Brief pause to let child register
+				time.Sleep(500 * time.Millisecond)
+				dispatched = a.dispatch(subs)
+			}
+		}
+	}
+	if dispatched == 0 {
 		fmt.Printf("   [%s] No workers available, executing locally\n", a.cfg.Agent.Name)
 		a.mu.Lock()
 		delete(a.coordStates, entry.ID)
@@ -449,4 +467,17 @@ func (a *Agent) rememberCoordination(entry *taskEntry, state *coordinatorState, 
 	if err := a.memory.Put(memEntry); err != nil {
 		fmt.Printf("⚠️  [%s] Failed to store coordination memory: %v\n", a.cfg.Agent.Name, err)
 	}
+}
+
+// unique deduplicates a string slice.
+func unique(ss []string) []string {
+	seen := make(map[string]bool, len(ss))
+	out := make([]string, 0, len(ss))
+	for _, s := range ss {
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	return out
 }

@@ -119,6 +119,11 @@ func (s *Swarm) AddAgent(cfg *agent.Config) (*agent.Agent, error) {
 		})
 	})
 
+	// Register spawn callback — allows agents to spawn children at runtime
+	a.SetOnSpawnRequest(func(parentName, childRole string, childSkills []string, reason string) (string, error) {
+		return s.handleSpawnRequest(parentName, childRole, childSkills, reason)
+	})
+
 	s.agents[cfg.Agent.Name] = a
 	return a, nil
 }
@@ -321,6 +326,74 @@ func (s *Swarm) Stats() SwarmStats {
 		NetworkTransport: transport,
 		AverageCapacity:  avgCap,
 	}
+}
+
+// handleSpawnRequest processes a runtime spawn request from an agent.
+func (s *Swarm) handleSpawnRequest(parentName, childRole string, childSkills []string, reason string) (string, error) {
+	s.mu.RLock()
+	parent, ok := s.agents[parentName]
+	s.mu.RUnlock()
+	if !ok {
+		return "", fmt.Errorf("parent agent not found: %s", parentName)
+	}
+
+	// Generate child name
+	childName := fmt.Sprintf("%s-child-%d", parentName, s.spawner.ChildCount()+1)
+
+	// Calculate startup balance (transfer from parent)
+	parentCfg := parent.Config()
+	share := parentCfg.Spawner.DefaultResourceShare
+	if share <= 0 {
+		share = 0.2
+	}
+	startupBalance := parent.Identity().Balance * share
+
+	// Build child config from parent
+	childCfg := *parentCfg
+	childCfg.Agent.Name = childName
+	if childRole != "" {
+		childCfg.Agent.Role = childRole
+	}
+	if len(childSkills) > 0 {
+		childCfg.Agent.Skills = childSkills
+	}
+	childCfg.Agent.Description = fmt.Sprintf("Spawned by %s: %s", parentName, reason)
+	childCfg.Agent.CanReceive = true
+	childCfg.Agent.CanDelegate = (childRole == "coordinator")
+
+	// Debit parent
+	if err := parent.Identity().Debit(startupBalance); err != nil {
+		return "", fmt.Errorf("parent balance insufficient: %w", err)
+	}
+
+	fmt.Printf("🐣 [%s] Spawning child '%s' (role=%s, skills=%v, balance=%.2f) — %s\n",
+		parentName, childName, childCfg.Agent.Role, childCfg.Agent.Skills, startupBalance, reason)
+
+	// Add to swarm (creates agent, sets up bus, workDir, etc.)
+	child, err := s.AddAgent(&childCfg)
+	if err != nil {
+		// Refund parent
+		parent.Identity().Credit(startupBalance)
+		return "", fmt.Errorf("adding child to swarm: %w", err)
+	}
+
+	// Transfer startup balance to child
+	child.Identity().Credit(startupBalance)
+
+	// Inherit evolution from parent
+	if parent.Evolution() != nil && child.Evolution() != nil {
+		parent.Evolution().InheritEvolution(child.Evolution())
+	}
+
+	// Start child agent in background
+	go func() {
+		fmt.Printf("🦠 Child agent %s running (spawned by %s)\n", childName, parentName)
+		if err := child.Run(); err != nil {
+			fmt.Printf("❌ Child agent %s exited: %v\n", childName, err)
+		}
+	}()
+
+	return childName, nil
 }
 
 // Close shuts down the swarm.

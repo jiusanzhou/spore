@@ -235,6 +235,20 @@ func (e *DriveEngine) Pulse(ctx context.Context) {
 					fmt.Sprintf("Accumulated %d experiences, synthesizing into knowledge", total),
 					e.drive.Create, now)
 			}
+
+			// Spawn child — when experienced enough and can afford it
+			if total >= 15 && e.canFire("create_spawn", now) {
+				genetics := e.agent.evolution.ComputeGenetics()
+				if genetics.Fitness > 0.6 {
+					// Find weakest skills to specialize the child
+					weakSkills := e.findWeakSkills()
+					if len(weakSkills) > 0 {
+						e.emit("create", "spawn_child",
+							fmt.Sprintf("Spawning specialist child for skills: %v (fitness=%.2f, experiences=%d)", weakSkills, genetics.Fitness, total),
+							e.drive.Create, now)
+					}
+				}
+			}
 		}
 	}
 }
@@ -330,6 +344,29 @@ func (e *DriveEngine) Restore() {
 func (e *DriveEngine) canFire(drive string, now time.Time) bool {
 	last, ok := e.lastAction[drive]
 	return !ok || now.Sub(last) >= e.cooldown
+}
+
+// findWeakSkills returns skills with success rate < 0.5 (candidates for child specialization).
+func (e *DriveEngine) findWeakSkills() []string {
+	if e.agent.evolution == nil {
+		return nil
+	}
+	skills := e.agent.evolution.SkillProfiles()
+	var weak []string
+	for name, profile := range skills {
+		if profile.SuccessRate < 0.5 && profile.SuccessRate > 0 {
+			weak = append(weak, name)
+		}
+	}
+	// If no weak skills, find skills with fewest attempts
+	if len(weak) == 0 {
+		for name, profile := range skills {
+			if profile.SuccessRate < 0.7 {
+				weak = append(weak, name)
+			}
+		}
+	}
+	return weak
 }
 
 func (e *DriveEngine) emit(drive, action, desc string, priority float64, now time.Time) {
