@@ -73,7 +73,8 @@ type Info struct {
 	StartedAt   time.Time `json:"started_at"`
 	Balance     float64   `json:"balance"`
 	Evolution   string    `json:"evolution,omitempty"` // evolution engine stats
-	Drives      *Drive    `json:"drives,omitempty"`    // intrinsic drive values
+	Drives      *Drive      `json:"drives,omitempty"`    // intrinsic drive values
+	Self        *SelfModel  `json:"self,omitempty"`      // self-awareness model
 }
 
 // ethicsAdapter wraps *ethics.Engine to satisfy engine.EthicsChecker.
@@ -103,6 +104,9 @@ type Agent struct {
 
 	// Intrinsic drive engine — autonomous behavior generation
 	drives *DriveEngine
+
+	// Self-awareness engine — internal self-model + introspection
+	awareness *Awareness
 
 	status      Status
 	taskQueue   chan *taskEntry
@@ -258,6 +262,10 @@ func New(cfg *Config) (*Agent, error) {
 	a.drives = NewDriveEngine(a)
 	a.drives.Restore()
 
+	// Initialize self-awareness engine
+	a.awareness = NewAwareness(a)
+	a.awareness.Restore()
+
 	return a, nil
 }
 
@@ -348,6 +356,11 @@ func (a *Agent) Run() error {
 		case <-ticker.C:
 			a.heartbeat()
 
+			// Update self-awareness (lightweight, every heartbeat)
+			if a.awareness != nil {
+				a.awareness.UpdateMood()
+			}
+
 			// Drive pulse: evaluate intrinsic motivations
 			if a.drives != nil {
 				a.drives.Pulse(ctx)
@@ -369,6 +382,11 @@ func (a *Agent) Run() error {
 				// Persist drive state alongside evolution
 				if a.drives != nil {
 					a.drives.Persist()
+				}
+				// Deep self-reflection (LLM introspection)
+				if a.awareness != nil {
+					a.awareness.Introspect(ctx)
+					a.awareness.Persist()
 				}
 			}
 		}
@@ -423,6 +441,10 @@ func (a *Agent) Info() Info {
 		d := a.drives.Drive()
 		info.Drives = &d
 	}
+	if a.awareness != nil {
+		s := a.awareness.Self()
+		info.Self = &s
+	}
 	return info
 }
 
@@ -442,6 +464,9 @@ func (a *Agent) Evolution() *EvolutionEngine { return a.evolution }
 
 // Drives returns the agent's drive engine (may be nil).
 func (a *Agent) Drives() *DriveEngine { return a.drives }
+
+// Awareness returns the agent's self-awareness engine (may be nil).
+func (a *Agent) Awareness() *Awareness { return a.awareness }
 
 // PeerEvo returns the agent's peer evolution tracker (may be nil).
 func (a *Agent) PeerEvo() *PeerEvolution { return a.peerEvo }
@@ -705,6 +730,11 @@ func (a *Agent) recordEvolution(entry *taskEntry, output *runtime.TaskOutput, rt
 	// Adapt intrinsic drives based on experience
 	if a.drives != nil {
 		a.drives.Adapt(rec)
+	}
+
+	// Update self-awareness from task outcome
+	if a.awareness != nil {
+		a.awareness.ObserveTaskOutcome(rec)
 	}
 }
 

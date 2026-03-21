@@ -128,6 +128,10 @@ func (s *Server) handleAgentRoute(w http.ResponseWriter, r *http.Request) {
 		s.handleAgentExperience(w, r, name)
 	case "peers":
 		s.handleAgentPeerFitness(w, r, name)
+	case "awareness":
+		s.handleAgentAwareness(w, r, name)
+	case "monologue":
+		s.handleAgentMonologue(w, r, name)
 	default:
 		http.Error(w, "not found", http.StatusNotFound)
 	}
@@ -364,5 +368,49 @@ func (s *Server) handleAgentPeerFitness(w http.ResponseWriter, r *http.Request, 
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"rankings": pe.Rankings(),
+	})
+}
+
+func (s *Server) handleAgentAwareness(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	a := s.sw.GetAgent(name)
+	if a == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found: " + name})
+		return
+	}
+	aw := a.Awareness()
+	if aw == nil {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "no awareness engine"})
+		return
+	}
+	writeJSON(w, http.StatusOK, aw.Self())
+}
+
+func (s *Server) handleAgentMonologue(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	a := s.sw.GetAgent(name)
+	if a == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found: " + name})
+		return
+	}
+	aw := a.Awareness()
+	if aw == nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"thoughts": []interface{}{}})
+		return
+	}
+
+	limit := 20
+	if l := r.URL.Query().Get("limit"); l != "" {
+		fmt.Sscanf(l, "%d", &limit)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"thoughts": aw.Monologue(limit),
 	})
 }

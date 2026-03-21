@@ -50,7 +50,7 @@ func (d *Drive) Clamp() {
 }
 
 // Dominant returns the highest drive name and value.
-func (d *Drive) Dominant() (string, float64) {
+func (d Drive) Dominant() (string, float64) {
 	best, bestV := "survive", d.Survive
 	for name, v := range map[string]float64{
 		"explore": d.Explore, "connect": d.Connect,
