@@ -436,6 +436,13 @@ func (b *P2PBus) Send(msg *proto.Message) error {
 	// Open stream and send.
 	s, err := b.host.NewStream(b.ctx, peerID, protocol.ID(protocolID))
 	if err != nil {
+		// Stream failed (e.g., dial to self in same process) — try local handler
+		b.mu.RLock()
+		handler, ok := b.handlers[msg.To]
+		b.mu.RUnlock()
+		if ok {
+			return handler(msg)
+		}
 		return fmt.Errorf("open stream to %s: %w", peerID.String(), err)
 	}
 	defer s.Close()

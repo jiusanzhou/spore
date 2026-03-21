@@ -8,12 +8,12 @@ analysis:
   lastused: 0
 coding:
   name: coding
-  attempts: 13
-  successes: 13
-  avgduration: 19.274321221
+  attempts: 16
+  successes: 16
+  avgduration: 18.791734117062504
   successrate: 1
   trend: stable
-  lastused: 1774071403
+  lastused: 1774077133
 delegation:
   name: delegation
   attempts: 0
@@ -24,12 +24,12 @@ delegation:
   lastused: 0
 documentation:
   name: documentation
-  attempts: 13
-  successes: 13
-  avgduration: 19.274321221
+  attempts: 16
+  successes: 16
+  avgduration: 18.791734117062504
   successrate: 1
   trend: stable
-  lastused: 1774071403
+  lastused: 1774077133
 planning:
   name: planning
   attempts: 0
@@ -48,9 +48,9 @@ research:
   lastused: 0
 writing:
   name: writing
-  attempts: 13
-  successes: 13
-  avgduration: 19.274321221
+  attempts: 16
+  successes: 16
+  avgduration: 18.791734117062504
   successrate: 1
   trend: stable
-  lastused: 1774071403
+  lastused: 1774077133

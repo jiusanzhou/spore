@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -145,6 +146,21 @@ func (a *Agent) SetWorkDir(dir string) {
 	if dir == "" {
 		return
 	}
+
+	// If memory is in-memory (:memory:), upgrade to file-based in workDir
+	if a.cfg.Memory.Path == "" || a.cfg.Memory.Path == ":memory:" {
+		dbPath := filepath.Join(dir, "memory.db")
+		newStore, err := memory.NewStore("sqlite", dbPath)
+		if err == nil {
+			if a.memory != nil {
+				a.memory.Close()
+			}
+			a.memory = newStore
+			a.engine.SetMemory(newStore)
+			fmt.Printf("💾 [%s] Memory upgraded to %s\n", a.cfg.Agent.Name, dbPath)
+		}
+	}
+
 	a.evoFS = NewEvolutionFS(dir, a)
 	// Try loading file-based state (supplements SQLite)
 	if a.evolution != nil {
@@ -717,29 +733,30 @@ func (a *Agent) handleMessage(msg *protocol.Message) error {
 			if err := json.Unmarshal(msg.Payload, &digest); err != nil {
 				return fmt.Errorf("unmarshaling experience digest: %w", err)
 			}
-			a.evolution.AbsorbExperience(&digest)
-		}
-		// Reward the sharer by sending a small token payment
-		if a.tokens != nil && a.tokens.CanThink() {
-			payment := a.tokens.config.ShareReward
-			if payment > 0 && a.bus != nil {
-				payload := TokenTransferPayload{
-					FromAgent: a.identity.PublicKeyHex()[:16],
-					ToAgent:   msg.From,
-					Amount:    payment,
-					Reason:    "knowledge_absorbed",
-				}
-				if transferMsg, err := protocol.NewMessage(
-					a.identity.PublicKeyHex()[:16],
-					"broadcast",
-					MsgTokenTransfer,
-					payload,
-				); err == nil {
-					a.bus.Send(transferMsg)
-					a.identity.Debit(payment) // best-effort
+			absorbed := a.evolution.AbsorbExperience(&digest)
+			// Only reward the sharer if we actually learned something new
+			if absorbed && a.tokens != nil && a.tokens.CanThink() {
+				payment := a.tokens.config.ShareReward
+				if payment > 0 && a.bus != nil {
+					payload := TokenTransferPayload{
+						FromAgent: a.identity.PublicKeyHex()[:16],
+						ToAgent:   msg.From,
+						Amount:    payment,
+						Reason:    "knowledge_absorbed",
+					}
+					if transferMsg, err := protocol.NewMessage(
+						a.identity.PublicKeyHex()[:16],
+						"broadcast",
+						MsgTokenTransfer,
+						payload,
+					); err == nil {
+						a.bus.Send(transferMsg)
+						a.identity.Debit(payment) // best-effort
+					}
 				}
 			}
 		}
+
 	case protocol.MsgConsciousness:
 		// Receive peer's self-model
 		if a.collective != nil {

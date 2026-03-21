@@ -35,6 +35,9 @@ type EvolutionEngine struct {
 	skills   map[string]*SkillProfile
 	strategy *StrategyProfile
 
+	// Peer experience dedup
+	lastAbsorbed map[string]string // agentID → "agentID:totalTasks"
+
 	// Thresholds
 	reflectInterval   time.Duration // how often to run reflection
 	minRecordsReflect int           // min records before triggering reflection

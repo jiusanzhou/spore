@@ -98,6 +98,11 @@ func (e *Engine) SetAgentID(id string) {
 	e.agentID = id
 }
 
+// SetMemory replaces the memory store (e.g., when upgrading from :memory: to file).
+func (e *Engine) SetMemory(store memory.Store) {
+	e.memory = store
+}
+
 // RegisterTool adds a tool the agent can use.
 func (e *Engine) RegisterTool(t Tool) {
 	e.tools[t.Name()] = t

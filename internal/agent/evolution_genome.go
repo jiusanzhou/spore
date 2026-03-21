@@ -385,9 +385,19 @@ func (a *Agent) ShareExperience() error {
 
 // AbsorbExperience integrates a peer's experience digest into local knowledge.
 // Doesn't blindly copy — uses it to inform strategy.
-func (e *EvolutionEngine) AbsorbExperience(digest *ExperienceDigest) {
+func (e *EvolutionEngine) AbsorbExperience(digest *ExperienceDigest) bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+
+	// Dedup: skip if we already absorbed this exact state from this peer
+	dedupeKey := fmt.Sprintf("%s:%d", digest.AgentID, digest.TotalTasks)
+	if e.lastAbsorbed == nil {
+		e.lastAbsorbed = make(map[string]string)
+	}
+	if e.lastAbsorbed[digest.AgentID] == dedupeKey {
+		return false // no new experience from this peer
+	}
+	e.lastAbsorbed[digest.AgentID] = dedupeKey
 
 	// Learn about skills we don't know about
 	for skill, rate := range digest.Skills {
@@ -415,6 +425,7 @@ func (e *EvolutionEngine) AbsorbExperience(digest *ExperienceDigest) {
 
 	fmt.Printf("🌐 [%s] Absorbed experience from %s: %d tasks, %.0f%% success\n",
 		e.agent.cfg.Agent.Name, digest.AgentID[:8], digest.TotalTasks, digest.SuccessRate*100)
+	return true
 }
 
 // persistPeerDigest saves a received digest to memory.
