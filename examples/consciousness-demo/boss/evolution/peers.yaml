@@ -14,6 +14,14 @@
   successrate: 0.6666666666666666
   fitness: 0.6499999999999999
   lastseen: 1774096151
+8722c720c3fa90f7:
+  agentid: 8722c720c3fa90f7
+  taskscompleted: 3
+  tasksfailed: 2
+  avgduration: 0
+  successrate: 0.6
+  fitness: 0.55
+  lastseen: 1774107943
 acc286f54949a8d4:
   agentid: acc286f54949a8d4
   taskscompleted: 3
@@ -22,6 +30,14 @@ acc286f54949a8d4:
   successrate: 0.75
   fitness: 0.6000000000000001
   lastseen: 1774095434
+c6cd0b7c123bbe87:
+  agentid: c6cd0b7c123bbe87
+  taskscompleted: 3
+  tasksfailed: 1
+  avgduration: 0
+  successrate: 0.75
+  fitness: 0.6000000000000001
+  lastseen: 1774107675
 d37dd38d7bc346c7:
   agentid: d37dd38d7bc346c7
   taskscompleted: 11

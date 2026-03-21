@@ -4,6 +4,7 @@ name = "forge"
 role = "worker"
 description = "The creator who synthesizes knowledge and builds tools"
 skills = ["writing", "coding", "documentation"]
+can_delegate = true
 can_receive = true
 
 [runtime]

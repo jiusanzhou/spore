@@ -6,6 +6,14 @@
   successrate: 0.6666666666666666
   fitness: 0.6499999999999999
   lastseen: 1774096151
+c6cd0b7c123bbe87:
+  agentid: c6cd0b7c123bbe87
+  taskscompleted: 3
+  tasksfailed: 1
+  avgduration: 0
+  successrate: 0.75
+  fitness: 0.6000000000000001
+  lastseen: 1774107675
 d37dd38d7bc346c7:
   agentid: d37dd38d7bc346c7
   taskscompleted: 11

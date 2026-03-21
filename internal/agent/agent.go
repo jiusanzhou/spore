@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -386,9 +387,6 @@ func (a *Agent) Run() error {
 
 	// Start concurrent task workers
 	numWorkers := 3
-	if a.cfg.Agent.Role == "coordinator" {
-		numWorkers = 1 // coordinator only needs 1 (subtasks go to workers)
-	}
 	for i := 0; i < numWorkers; i++ {
 		go a.taskWorker(ctx)
 	}
@@ -620,12 +618,60 @@ func (a *Agent) taskWorker(ctx context.Context) {
 }
 
 func (a *Agent) executeTask(ctx context.Context, entry *taskEntry) error {
-	// Coordinator agents decompose and delegate
-	if a.cfg.Agent.Role == "coordinator" && a.cfg.Agent.CanDelegate && a.bus != nil {
+	// Dynamic coordination decision — any agent with can_delegate + bus + peers can coordinate
+	if a.shouldCoordinate(entry) {
 		return a.coordinatorExecute(ctx, entry)
 	}
 
 	return a.executeTaskDirect(ctx, entry)
+}
+
+// shouldCoordinate decides whether to decompose+delegate vs execute directly.
+// No fixed coordinator role — any agent can coordinate if:
+// 1. It has delegation capability and a message bus
+// 2. It has peers available to delegate to
+// 3. The task seems complex enough to warrant decomposition
+func (a *Agent) shouldCoordinate(entry *taskEntry) bool {
+	// Must have delegation capability and bus
+	if !a.cfg.Agent.CanDelegate || a.bus == nil {
+		return false
+	}
+
+	// Must have peers to delegate to
+	a.peersMu.RLock()
+	peerCount := len(a.peers)
+	a.peersMu.RUnlock()
+	if peerCount == 0 {
+		return false
+	}
+
+	// Simple heuristic: coordinate if task description is complex
+	// (long description or contains coordination keywords)
+	desc := entry.Description
+	if len(desc) > 100 {
+		return true
+	}
+
+	// Check for multi-part task indicators
+	for _, kw := range []string{
+		"comprehensive", "research and write", "coordinate", "produce a report",
+		"build a", "design and implement", "analyze and", "create a guide",
+		"multiple", "step-by-step", "full", "complete",
+	} {
+		if containsIgnoreCase(desc, kw) {
+			return true
+		}
+	}
+
+	// Evolution-informed: if we know our skills are weak for this, delegate
+	if a.evolution != nil {
+		genetics := a.evolution.ComputeGenetics()
+		if genetics.Fitness < 0.5 {
+			return true // low fitness → better to delegate
+		}
+	}
+
+	return false
 }
 
 // executeTaskDirect runs a task via runtime without coordinator decomposition.
@@ -999,4 +1045,8 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n] + "..."
+}
+
+func containsIgnoreCase(s, substr string) bool {
+	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }

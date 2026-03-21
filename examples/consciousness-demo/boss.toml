@@ -1,7 +1,7 @@
-# Boss — coordinator with high Connect drive (social leader)
+# Boss — high Connect drive (natural social leader, but not a fixed coordinator)
 [agent]
 name = "boss"
-role = "coordinator"
+role = "worker"
 description = "The social leader who connects and coordinates"
 skills = ["planning", "delegation", "analysis"]
 can_delegate = true

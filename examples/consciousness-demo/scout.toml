@@ -4,6 +4,7 @@ name = "scout"
 role = "worker"
 description = "The curious explorer who ventures into new domains"
 skills = ["research", "coding"]
+can_delegate = true
 can_receive = true
 
 [runtime]
