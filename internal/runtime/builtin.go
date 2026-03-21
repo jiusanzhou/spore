@@ -54,6 +54,7 @@ func (b *Builtin) Execute(ctx context.Context, task TaskInput) (*TaskOutput, err
 	eng := engine.New(b.provider, b.store)
 	eng.RegisterTool(&engine.ShellTool{WorkDir: task.WorkDir})
 	eng.RegisterTool(&engine.WebSearchTool{})
+	eng.RegisterTool(&engine.WebFetchTool{})
 
 	t := &engine.Task{
 		ID:          task.ID,
