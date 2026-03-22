@@ -1132,27 +1132,23 @@ body {
     return response.json();
   }
 
-  async function poll() {
+  function handleStateUpdate(data) {
     try {
-      const [health, agents, stats, tasks, peers] = await Promise.all([
-        get('/api/health'),
-        get('/api/agents'),
-        get('/api/stats'),
-        get('/api/tasks'),
-        get('/api/peers').catch(() => ({ count: 0 }))
-      ]);
+      const agents = { agents: data.agents || [], count: (data.agents || []).length };
+      const stats = data.stats || {};
+      const tasks = data.tasks || [];
+      const net = data.network || {};
 
       failCount = 0;
       document.getElementById('disconnected').classList.remove('show');
 
       // Update header info
-      document.getElementById('version').textContent = `v${health.version || '0.1.0'}`;
       document.getElementById('uptime').textContent = `Uptime: ${fmt(stats.uptime_seconds)}`;
       document.getElementById('agent-count').textContent = 
-        `${agents.count || 0} agent${(agents.count || 0) !== 1 ? 's' : ''}`;
+        `${agents.count} agent${agents.count !== 1 ? 's' : ''}`;
 
       // Update swarm status
-      const swarmStatus = (agents.agents || []).length > 0 ? 'Active' : 'Dormant';
+      const swarmStatus = agents.count > 0 ? 'Active' : 'Dormant';
       document.getElementById('swarm-status').textContent = swarmStatus;
 
       // Update statistics
@@ -1166,7 +1162,7 @@ body {
       let totalBalance = 0;
       let agentCount = 0;
 
-      for (const agent of (agents.agents || [])) {
+      for (const agent of agents.agents) {
         if (agent.evolution) {
           const evo = parseEvolution(agent.evolution);
           totalXP += evo.experiences;
@@ -1184,28 +1180,56 @@ body {
            agentCount > 0 ? (totalBalance / agentCount).toFixed(2) : '0.00');
 
       // Update network panel
-      document.getElementById('net-transport').textContent = stats.network_transport || 'local';
-      document.getElementById('net-peers').textContent = peers.count || 0;
+      document.getElementById('net-transport').textContent = net.transport || stats.network_transport || 'local';
+      document.getElementById('net-peers').textContent = net.peers || 0;
       document.getElementById('net-uptime').textContent = fmt(stats.uptime_seconds);
 
       // Render components
-      renderAgents(agents.agents || []);
-      renderCollective(agents.agents || []);
-      renderTasks(tasks.tasks || []);
+      renderAgents(agents.agents);
+      renderCollective(agents.agents);
+      renderTasks(tasks);
 
-      globalSwarmData = { agents, stats, tasks, peers };
+      globalSwarmData = { agents, stats, tasks: { tasks }, peers: { count: net.peers || 0 } };
 
     } catch (error) {
-      console.error('Polling error:', error);
-      if (++failCount >= 3) {
-        document.getElementById('disconnected').classList.add('show');
-      }
+      console.error('State update error:', error);
     }
   }
 
-  // Initial poll and start polling
-  poll();
-  setInterval(poll, 3000);
+  // --- SSE Connection ---
+  function connectSSE() {
+    const es = new EventSource('/api/events');
+
+    es.onmessage = function(e) {
+      try {
+        const data = JSON.parse(e.data);
+        handleStateUpdate(data);
+      } catch (err) {
+        console.error('SSE parse error:', err);
+      }
+    };
+
+    es.onerror = function() {
+      es.close();
+      if (++failCount >= 3) {
+        document.getElementById('disconnected').classList.add('show');
+      }
+      // Reconnect after 3s
+      setTimeout(connectSSE, 3000);
+    };
+
+    es.onopen = function() {
+      failCount = 0;
+      document.getElementById('disconnected').classList.remove('show');
+    };
+  }
+
+  // Also do one initial fetch for version info (SSE doesn't include it)
+  get('/api/health').then(h => {
+    document.getElementById('version').textContent = `v${h.version || '0.1.0'}`;
+  }).catch(() => {});
+
+  connectSSE();
 })();
 </script>
 </body>

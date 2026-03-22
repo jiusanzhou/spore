@@ -17,11 +17,13 @@
 package api
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"go.zoe.im/spore/internal/network"
@@ -37,22 +39,33 @@ type Server struct {
 	port int
 	mux  *http.ServeMux
 	srv  *http.Server
+
+	// SSE
+	sseClients   map[chan []byte]struct{}
+	sseMu        sync.Mutex
+	sseCtx       context.Context
+	sseCancel    context.CancelFunc
 }
 
 // NewServer creates a new API server.
 func NewServer(sw *swarm.Swarm, port int) *Server {
+	ctx, cancel := context.WithCancel(context.Background())
 	s := &Server{
-		sw:   sw,
-		port: port,
-		mux:  http.NewServeMux(),
+		sw:         sw,
+		port:       port,
+		mux:        http.NewServeMux(),
+		sseClients: make(map[chan []byte]struct{}),
+		sseCtx:     ctx,
+		sseCancel:  cancel,
 	}
 	s.routes()
 	s.srv = &http.Server{
 		Addr:         fmt.Sprintf(":%d", port),
 		Handler:      s.mux,
 		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
+		WriteTimeout: 0, // SSE needs no write timeout
 	}
+	go s.sseBroadcastLoop()
 	return s
 }
 
@@ -63,6 +76,7 @@ func (s *Server) ListenAndServe() error {
 
 // Close gracefully shuts down the server.
 func (s *Server) Close() error {
+	s.sseCancel()
 	return s.srv.Close()
 }
 
@@ -76,6 +90,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/peers/connect", s.handlePeerConnect)
 	s.mux.HandleFunc("/api/stats", s.handleStats)
 	s.mux.HandleFunc("/api/tasks", s.handleTasks)
+	s.mux.HandleFunc("/api/events", s.handleSSE)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -484,4 +499,126 @@ func (s *Server) handleAgentReputation(w http.ResponseWriter, r *http.Request, n
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"records": rep.All(),
 	})
+}
+
+// --- SSE (Server-Sent Events) ---
+
+// handleSSE streams real-time state updates to the client.
+func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	ch := make(chan []byte, 8)
+	s.sseMu.Lock()
+	s.sseClients[ch] = struct{}{}
+	s.sseMu.Unlock()
+
+	defer func() {
+		s.sseMu.Lock()
+		delete(s.sseClients, ch)
+		s.sseMu.Unlock()
+	}()
+
+	// Send initial full state immediately
+	s.sendFullState(ch)
+	flusher.Flush()
+
+	ctx := r.Context()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-s.sseCtx.Done():
+			return
+		case data, ok := <-ch:
+			if !ok {
+				return
+			}
+			fmt.Fprintf(w, "data: %s\n\n", data)
+			flusher.Flush()
+		}
+	}
+}
+
+// sseBroadcastLoop periodically collects swarm state and pushes to all SSE clients.
+func (s *Server) sseBroadcastLoop() {
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.sseCtx.Done():
+			return
+		case <-ticker.C:
+			s.sseMu.Lock()
+			if len(s.sseClients) == 0 {
+				s.sseMu.Unlock()
+				continue
+			}
+			clients := make([]chan []byte, 0, len(s.sseClients))
+			for ch := range s.sseClients {
+				clients = append(clients, ch)
+			}
+			s.sseMu.Unlock()
+
+			data := s.buildStatePayload()
+			for _, ch := range clients {
+				select {
+				case ch <- data:
+				default:
+					// Client too slow, skip this frame
+				}
+			}
+		}
+	}
+}
+
+// sendFullState pushes current state into a single client channel.
+func (s *Server) sendFullState(ch chan []byte) {
+	data := s.buildStatePayload()
+	select {
+	case ch <- data:
+	default:
+	}
+}
+
+// buildStatePayload assembles the full dashboard state as JSON.
+func (s *Server) buildStatePayload() []byte {
+	infos := s.sw.List()
+	stats := s.sw.Stats()
+	tasks := s.sw.TaskLog()
+
+	// Peers
+	var peerCount int
+	var transport string
+	bus := s.sw.Bus()
+	if p2pBus, ok := bus.(*network.P2PBus); ok {
+		peerCount = len(p2pBus.ConnectedPeers())
+		transport = "p2p"
+	} else {
+		transport = "local"
+	}
+
+	payload := map[string]interface{}{
+		"type":    "state",
+		"agents":  infos,
+		"stats":   stats,
+		"tasks":   tasks,
+		"network": map[string]interface{}{
+			"transport": transport,
+			"peers":     peerCount,
+		},
+		"ts": time.Now().UnixMilli(),
+	}
+
+	data, _ := json.Marshal(payload)
+	return data
 }

@@ -1,19 +1,19 @@
 coding:
   name: coding
-  attempts: 17
-  successes: 14
-  avgduration: 89.13667286529413
-  successrate: 0.8235294117647058
+  attempts: 18
+  successes: 15
+  avgduration: 90.48130992366667
+  successrate: 0.8333333333333334
   trend: declining
-  lastused: 1774107943
+  lastused: 1774177986
 documentation:
   name: documentation
-  attempts: 17
-  successes: 14
-  avgduration: 89.13667286529413
-  successrate: 0.8235294117647058
+  attempts: 18
+  successes: 15
+  avgduration: 90.48130992366667
+  successrate: 0.8333333333333334
   trend: declining
-  lastused: 1774107943
+  lastused: 1774177986
 research:
   name: research
   attempts: 0
@@ -24,9 +24,9 @@ research:
   lastused: 0
 writing:
   name: writing
-  attempts: 17
-  successes: 14
-  avgduration: 89.13667286529413
-  successrate: 0.8235294117647058
+  attempts: 18
+  successes: 15
+  avgduration: 90.48130992366667
+  successrate: 0.8333333333333334
   trend: declining
-  lastused: 1774107943
+  lastused: 1774177986
