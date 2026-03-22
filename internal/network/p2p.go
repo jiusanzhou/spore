@@ -34,6 +34,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
+	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
 	ma "github.com/multiformats/go-multiaddr"
 
 	"go.zoe.im/spore/internal/ethics"
@@ -118,10 +119,32 @@ func NewP2PBus(cfg P2PConfig) (*P2PBus, error) {
 		addrs = append(addrs, a)
 	}
 
-	// Create libp2p host.
+	// Create libp2p host with NAT traversal.
 	h, err := libp2p.New(
 		libp2p.Identity(privKey),
 		libp2p.ListenAddrs(addrs...),
+		libp2p.NATPortMap(),                // UPnP/NAT-PMP auto port mapping
+		libp2p.EnableHolePunching(),         // direct connection through NAT
+		libp2p.EnableAutoRelayWithPeerSource( // relay via public peers when behind NAT
+			func(ctx context.Context, numPeers int) <-chan peer.AddrInfo {
+				ch := make(chan peer.AddrInfo, numPeers)
+				go func() {
+					defer close(ch)
+					// Use DHT to find relay-capable peers
+					for _, bp := range defaultBootstrapPeers() {
+						select {
+						case ch <- bp:
+						case <-ctx.Done():
+							return
+						}
+					}
+				}()
+				return ch
+			},
+			autorelay.WithBackoff(30*time.Second),
+			autorelay.WithMaxCandidates(3),
+		),
+		libp2p.EnableRelayService(), // also serve as relay for others
 	)
 	if err != nil {
 		cancel()
@@ -190,7 +213,16 @@ func NewP2PBus(cfg P2PConfig) (*P2PBus, error) {
 	h.SetStreamHandler(protocol.ID(protocolID), bus.handleStream)
 
 	// Connect to bootstrap peers in background.
-	go bus.connectBootstrapPeers(cfg.BootstrapPeers)
+	// If no custom bootstrap peers, use IPFS public bootstrap nodes.
+	bootstrapPeers := cfg.BootstrapPeers
+	if len(bootstrapPeers) == 0 {
+		for _, pi := range defaultBootstrapPeers() {
+			for _, addr := range pi.Addrs {
+				bootstrapPeers = append(bootstrapPeers, fmt.Sprintf("%s/p2p/%s", addr.String(), pi.ID.String()))
+			}
+		}
+	}
+	go bus.connectBootstrapPeers(bootstrapPeers)
 
 	// Start mDNS discovery for local network.
 	mdnsSvc := mdns.NewMdnsService(h, rendezvous, bus)
@@ -290,6 +322,30 @@ func (b *P2PBus) HandlePeerFound(pi peer.AddrInfo) {
 	if err := b.host.Connect(ctx, pi); err != nil {
 		fmt.Printf("warning: mDNS connect to %s failed: %v\n", pi.ID.String(), err)
 	}
+}
+
+// defaultBootstrapPeers returns IPFS public bootstrap nodes for global connectivity.
+func defaultBootstrapPeers() []peer.AddrInfo {
+	bootstrapAddrs := []string{
+		"/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
+		"/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
+		"/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
+		"/dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
+		"/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
+	}
+	peers := make([]peer.AddrInfo, 0, len(bootstrapAddrs))
+	for _, s := range bootstrapAddrs {
+		maddr, err := ma.NewMultiaddr(s)
+		if err != nil {
+			continue
+		}
+		pi, err := peer.AddrInfoFromP2pAddr(maddr)
+		if err != nil {
+			continue
+		}
+		peers = append(peers, *pi)
+	}
+	return peers
 }
 
 // connectBootstrapPeers dials bootstrap peers in background.

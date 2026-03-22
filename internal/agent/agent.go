@@ -172,6 +172,22 @@ func (a *Agent) SetWorkDir(dir string) {
 		return
 	}
 
+	// Persist identity — load existing key or save current key
+	keyPath := filepath.Join(dir, "identity.key")
+	if existing, err := LoadIdentity(keyPath); err == nil {
+		// Reuse persisted identity (preserves agent ID across restarts)
+		a.identity = existing
+		a.identity.Name = a.cfg.Agent.Name
+		fmt.Printf("🔑 [%s] Identity restored: %s\n", a.cfg.Agent.Name, a.identity.PublicKeyHex()[:16])
+	} else {
+		// First run — save identity to disk
+		if err := a.identity.Save(keyPath); err != nil {
+			fmt.Printf("⚠️  [%s] Failed to save identity: %v\n", a.cfg.Agent.Name, err)
+		} else {
+			fmt.Printf("🔑 [%s] Identity persisted: %s\n", a.cfg.Agent.Name, a.identity.PublicKeyHex()[:16])
+		}
+	}
+
 	// If memory is in-memory (:memory:), upgrade to file-based in workDir
 	if a.cfg.Memory.Path == "" || a.cfg.Memory.Path == ":memory:" {
 		dbPath := filepath.Join(dir, "memory.db")
