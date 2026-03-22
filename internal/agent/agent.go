@@ -136,7 +136,10 @@ type Agent struct {
 	// Spawn callback (set by Swarm) — returns child agent name or error
 	onSpawnRequest func(parentName string, childRole string, childSkills []string, reason string) (string, error)
 
-	// Coordinator state for tracking delegated subtasks
+	// Stigmergic task market — pending bid channels keyed by task ID
+	pendingBids map[string]chan *protocol.TaskBid
+
+	// Coordinator state for tracking delegated subtasks (legacy, used by broadcastTask flow)
 	coordStates map[string]*coordinatorState
 }
 
@@ -371,16 +374,22 @@ func NewWithBus(cfg *Config, bus network.Bus) (*Agent, error) {
 
 	a.engine.RegisterTool(&engine.DelegateTool{
 		SendFunc: func(to, taskDesc string) error {
-			msg, err := protocol.NewMessage(
-				a.identity.PublicKeyHex(),
-				to,
-				protocol.MsgTaskRequest,
-				protocol.TaskRequest{Description: taskDesc},
-			)
+			// Broadcast task to swarm — let agents bid (stigmergic model)
+			_, err := a.broadcastTask(context.Background(), taskDesc, 1.0)
 			if err != nil {
-				return err
+				// Fallback: direct send if broadcast gets no bids
+				msg, err2 := protocol.NewMessage(
+					a.identity.PublicKeyHex()[:16],
+					to,
+					protocol.MsgTaskRequest,
+					protocol.TaskRequest{Description: taskDesc},
+				)
+				if err2 != nil {
+					return err2
+				}
+				return bus.Send(msg)
 			}
-			return bus.Send(msg)
+			return nil
 		},
 	})
 
@@ -656,60 +665,246 @@ func (a *Agent) taskWorker(ctx context.Context) {
 }
 
 func (a *Agent) executeTask(ctx context.Context, entry *taskEntry) error {
-	// Dynamic coordination decision — any agent with can_delegate + bus + peers can coordinate
-	if a.shouldCoordinate(entry) {
-		return a.coordinatorExecute(ctx, entry)
-	}
-
+	// Every agent tries to execute directly first.
+	// If the task feels too big, broadcast it to the swarm as a "pheromone signal"
+	// and let other agents bid. This is stigmergic — no central coordinator.
 	return a.executeTaskDirect(ctx, entry)
 }
 
-// shouldCoordinate decides whether to decompose+delegate vs execute directly.
-// No fixed coordinator role — any agent can coordinate if:
-// 1. It has delegation capability and a message bus
-// 2. It has peers available to delegate to
-// 3. The task seems complex enough to warrant decomposition
-func (a *Agent) shouldCoordinate(entry *taskEntry) bool {
-	// Must have delegation capability and bus
-	if !a.cfg.Agent.CanDelegate || a.bus == nil {
-		return false
+// broadcastTask publishes a task to the swarm and waits for bids.
+// Like an ant releasing pheromone — "I found something, who can help?"
+func (a *Agent) broadcastTask(ctx context.Context, description string, budget float64) (string, error) {
+	if a.bus == nil {
+		return "", fmt.Errorf("no bus available")
 	}
 
-	// Must have peers to delegate to
-	a.peersMu.RLock()
-	peerCount := len(a.peers)
-	a.peersMu.RUnlock()
-	if peerCount == 0 {
-		return false
+	taskID := fmt.Sprintf("%x", time.Now().UnixNano())[:8]
+
+	req := protocol.TaskRequest{
+		TaskID:      taskID,
+		Description: description,
+		Budget:      budget,
+	}
+	msg, err := protocol.NewMessage(
+		a.identity.PublicKeyHex()[:16],
+		"broadcast",
+		protocol.MsgTaskRequest,
+		req,
+	)
+	if err != nil {
+		return "", err
 	}
 
-	// Simple heuristic: coordinate if task description is complex
-	// (long description or contains coordination keywords)
-	desc := entry.Description
-	if len(desc) > 100 {
-		return true
+	// Set up bid collection channel
+	bidCh := make(chan *protocol.TaskBid, 10)
+	a.mu.Lock()
+	if a.pendingBids == nil {
+		a.pendingBids = make(map[string]chan *protocol.TaskBid)
+	}
+	a.pendingBids[taskID] = bidCh
+	a.mu.Unlock()
+
+	defer func() {
+		a.mu.Lock()
+		delete(a.pendingBids, taskID)
+		a.mu.Unlock()
+	}()
+
+	// Broadcast task to swarm
+	if err := a.bus.Send(msg); err != nil {
+		return "", err
 	}
 
-	// Check for multi-part task indicators
-	for _, kw := range []string{
-		"comprehensive", "research and write", "coordinate", "produce a report",
-		"build a", "design and implement", "analyze and", "create a guide",
-		"multiple", "step-by-step", "full", "complete",
-	} {
-		if containsIgnoreCase(desc, kw) {
-			return true
+	fmt.Printf("📡 [%s] Broadcast task %s to swarm: %s\n",
+		a.cfg.Agent.Name, taskID, truncate(description, 60))
+
+	// Wait for bids (short window — like pheromone evaporation)
+	bidTimeout := 5 * time.Second
+	var bids []*protocol.TaskBid
+
+	timer := time.NewTimer(bidTimeout)
+	defer timer.Stop()
+
+collecting:
+	for {
+		select {
+		case bid := <-bidCh:
+			bids = append(bids, bid)
+			fmt.Printf("   [%s] Bid from %s: confidence=%.2f\n",
+				a.cfg.Agent.Name, bid.BidderID[:8], bid.Confidence)
+			// Accept first good bid (fast, like pheromone trail following)
+			if bid.Confidence >= 0.7 {
+				break collecting
+			}
+		case <-timer.C:
+			break collecting
+		case <-ctx.Done():
+			return "", ctx.Err()
 		}
 	}
 
-	// Evolution-informed: if we know our skills are weak for this, delegate
+	if len(bids) == 0 {
+		return "", fmt.Errorf("no bids received")
+	}
+
+	// Select best bid (highest confidence × reputation)
+	var bestBid *protocol.TaskBid
+	bestScore := -1.0
+	for _, bid := range bids {
+		rep := repInitial
+		if a.reputation != nil {
+			if a.reputation.IsIsolated(bid.BidderID) {
+				continue
+			}
+			rep = a.reputation.Score(bid.BidderID)
+		}
+		score := bid.Confidence * rep
+		if score > bestScore {
+			bestScore = score
+			bestBid = bid
+		}
+	}
+
+	if bestBid == nil {
+		return "", fmt.Errorf("all bidders isolated")
+	}
+
+	// Assign task to winner
+	assignMsg, err := protocol.NewMessage(
+		a.identity.PublicKeyHex()[:16],
+		bestBid.BidderID,
+		protocol.MsgTaskAssign,
+		protocol.TaskRequest{
+			TaskID:      taskID,
+			Description: description,
+			Budget:      budget,
+		},
+	)
+	if err != nil {
+		return "", err
+	}
+
+	fmt.Printf("📌 [%s] Assigned task %s → %s (confidence=%.2f, score=%.2f)\n",
+		a.cfg.Agent.Name, taskID, bestBid.BidderID[:8], bestBid.Confidence, bestScore)
+
+	if err := a.bus.Send(assignMsg); err != nil {
+		return "", err
+	}
+
+	return taskID, nil
+}
+
+// activationThreshold computes whether this agent should bid on a task.
+// Inspired by ant/bee threshold models: each agent has an internal threshold
+// that depends on its state. Low threshold = easily activated.
+func (a *Agent) activationThreshold(req *protocol.TaskRequest) (float64, bool) {
+	threshold := 0.5 // base threshold
+
+	// Skill match lowers threshold (like pheromone sensitivity)
+	skillMatch := 0.0
+	for _, req := range req.Requirements {
+		for _, skill := range a.cfg.Agent.Skills {
+			if strings.EqualFold(skill, req) || strings.Contains(strings.ToLower(skill), strings.ToLower(req)) {
+				skillMatch += 0.2
+			}
+		}
+	}
+	// Even without explicit requirements, check description keywords against skills
+	if len(req.Requirements) == 0 {
+		desc := strings.ToLower(req.Description)
+		for _, skill := range a.cfg.Agent.Skills {
+			if strings.Contains(desc, strings.ToLower(skill)) {
+				skillMatch += 0.15
+			}
+		}
+		if skillMatch == 0 {
+			skillMatch = 0.3 // generic task — moderate match for everyone
+		}
+	}
+
+	// Idle agents have lower threshold (more available)
+	active := atomic.LoadInt32(&a.activeTasks)
+	if active == 0 {
+		threshold -= 0.2 // idle → eager
+	} else if active >= 2 {
+		threshold += 0.3 // busy → reluctant
+	}
+
+	// High balance → more willing (can afford failure)
+	if a.identity.Balance > 5.0 {
+		threshold -= 0.1
+	}
+
+	// Evolution confidence lowers threshold
 	if a.evolution != nil {
 		genetics := a.evolution.ComputeGenetics()
-		if genetics.Fitness < 0.5 {
-			return true // low fitness → better to delegate
+		if genetics.Fitness > 0.7 {
+			threshold -= 0.15
 		}
 	}
 
-	return false
+	confidence := skillMatch - threshold + 0.5 // normalize to 0-1
+	if confidence < 0 {
+		confidence = 0
+	}
+	if confidence > 1 {
+		confidence = 1
+	}
+
+	// Activated if confidence > 0.3 (low bar — ants are opportunistic)
+	return confidence, confidence > 0.3
+}
+
+// handleTaskBroadcast is called when we hear a task broadcast on the swarm.
+// Like an ant sensing pheromone — evaluate and bid if threshold exceeded.
+func (a *Agent) handleTaskBroadcast(req *protocol.TaskRequest, fromAgent string) {
+	// Don't bid on our own tasks
+	selfID := a.identity.PublicKeyHex()[:16]
+	if fromAgent == selfID {
+		return
+	}
+
+	confidence, activated := a.activationThreshold(req)
+	if !activated {
+		return
+	}
+
+	bid := &protocol.TaskBid{
+		TaskID:        req.TaskID,
+		BidderID:      selfID,
+		Confidence:    confidence,
+		Capabilities:  a.cfg.Agent.Skills,
+	}
+
+	msg, err := protocol.NewMessage(selfID, fromAgent, protocol.MsgTaskBid, bid)
+	if err != nil {
+		return
+	}
+
+	fmt.Printf("🤚 [%s] Bidding on task %s (confidence=%.2f)\n",
+		a.cfg.Agent.Name, req.TaskID, confidence)
+
+	a.bus.Send(msg)
+}
+
+// handleBidReceived processes an incoming bid for a task we broadcast.
+func (a *Agent) handleBidReceived(bid *protocol.TaskBid) {
+	a.mu.RLock()
+	ch, ok := a.pendingBids[bid.TaskID]
+	a.mu.RUnlock()
+	if ok {
+		select {
+		case ch <- bid:
+		default: // channel full, drop bid
+		}
+	}
+}
+
+// handleTaskAssign processes a task assignment (we won the bid).
+func (a *Agent) handleTaskAssign(req *protocol.TaskRequest, fromAgent string) {
+	fmt.Printf("📨 [%s] Won bid for task %s from %s\n",
+		a.cfg.Agent.Name, req.TaskID, fromAgent[:8])
+	a.SubmitTaskWithRuntime(req.Description, "", "")
 }
 
 // executeTaskDirect runs a task via runtime without coordinator decomposition.
@@ -800,17 +995,34 @@ func (a *Agent) executeTaskDirect(ctx context.Context, entry *taskEntry) error {
 func (a *Agent) handleMessage(msg *protocol.Message) error {
 	switch msg.Type {
 	case protocol.MsgTaskRequest:
-		// Check balance before accepting
-		if a.cfg.Economy.MinTaskBalance > 0 && !a.identity.CanAfford(a.cfg.Economy.MinTaskBalance) {
-			fmt.Printf("💰 [%s] Rejecting task_request from %s: insufficient_balance\n", a.cfg.Agent.Name, msg.From[:8])
-			return nil
-		}
 		var req protocol.TaskRequest
 		if err := json.Unmarshal(msg.Payload, &req); err != nil {
 			return fmt.Errorf("unmarshaling task request: %w", err)
 		}
-		fmt.Printf("📨 [%s] Received task from %s: %s\n", a.cfg.Agent.Name, msg.From[:8], req.Description)
-		a.SubmitTask(req.Description)
+		if msg.To == "broadcast" && req.TaskID != "" {
+			// Broadcast task → stigmergic bidding (ant pheromone model)
+			a.handleTaskBroadcast(&req, msg.From)
+		} else {
+			// Direct task assignment (point-to-point, legacy or from bid winner)
+			if a.cfg.Economy.MinTaskBalance > 0 && !a.identity.CanAfford(a.cfg.Economy.MinTaskBalance) {
+				fmt.Printf("💰 [%s] Rejecting task from %s: insufficient_balance\n", a.cfg.Agent.Name, msg.From[:8])
+				return nil
+			}
+			fmt.Printf("📨 [%s] Received task from %s: %s\n", a.cfg.Agent.Name, msg.From[:8], truncate(req.Description, 60))
+			a.SubmitTask(req.Description)
+		}
+	case protocol.MsgTaskBid:
+		var bid protocol.TaskBid
+		if err := json.Unmarshal(msg.Payload, &bid); err != nil {
+			return fmt.Errorf("unmarshaling task bid: %w", err)
+		}
+		a.handleBidReceived(&bid)
+	case protocol.MsgTaskAssign:
+		var req protocol.TaskRequest
+		if err := json.Unmarshal(msg.Payload, &req); err != nil {
+			return fmt.Errorf("unmarshaling task assign: %w", err)
+		}
+		a.handleTaskAssign(&req, msg.From)
 	case protocol.MsgHeartbeat:
 		// Ignore own heartbeats (GossipSub echoes back to sender)
 		selfID := a.identity.PublicKeyHex()[:16]

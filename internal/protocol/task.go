@@ -18,6 +18,7 @@ package protocol
 
 // TaskRequest is the payload for a task request message.
 type TaskRequest struct {
+	TaskID       string   `json:"task_id"`
 	Description  string   `json:"description"`
 	Requirements []string `json:"requirements,omitempty"`
 	Budget       float64  `json:"budget,omitempty"`
@@ -26,9 +27,11 @@ type TaskRequest struct {
 
 // TaskBid is the payload for a task bid message.
 type TaskBid struct {
-	TaskID        string  `json:"task_id"`
-	EstimatedCost float64 `json:"estimated_cost"`
-	EstimatedTime int64   `json:"estimated_time"` // seconds
+	TaskID        string   `json:"task_id"`
+	BidderID      string   `json:"bidder_id"`
+	Confidence    float64  `json:"confidence"`      // 0.0-1.0, how confident am I
+	EstimatedCost float64  `json:"estimated_cost"`
+	EstimatedTime int64    `json:"estimated_time"`  // seconds
 	Capabilities  []string `json:"capabilities,omitempty"`
 }
 

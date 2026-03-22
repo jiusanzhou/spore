@@ -241,44 +241,45 @@ Rules:
 	return subs, false, nil
 }
 
-// dispatch sends subtasks to matching workers with load balancing. Returns number dispatched.
+// dispatch sends subtasks via broadcast+bid (stigmergic model).
+// Each subtask is broadcast to the swarm. Agents bid based on their activation threshold.
+// Returns number of subtasks that got assigned.
 func (a *Agent) dispatch(subs []subtask) int {
 	dispatched := 0
-	// Track how many subtasks each worker has been assigned in this batch
-	loadCount := make(map[string]int)
+	ctx := context.Background()
 
 	for i := range subs {
-		worker := a.matchWorker(subs[i].Skills, loadCount)
-		if worker == nil {
-			fmt.Printf("   [%s] No worker matched for subtask %s (skills: %v)\n",
-				a.cfg.Agent.Name, subs[i].ID, subs[i].Skills)
-			continue
-		}
-		subs[i].AgentID = worker.AgentID
-		loadCount[worker.AgentID]++
-
-		// Send task request to worker
-		req := protocol.TaskRequest{
-			Description: subs[i].Description,
-		}
-		msg, err := protocol.NewMessage(
-			a.identity.PublicKeyHex()[:16],
-			worker.AgentID,
-			protocol.MsgTaskRequest,
-			req,
-		)
+		// Broadcast subtask and wait for bids
+		taskID, err := a.broadcastTask(ctx, subs[i].Description, 1.0)
 		if err != nil {
-			fmt.Printf("⚠️  [%s] Failed to create message for %s: %v\n", a.cfg.Agent.Name, worker.AgentID, err)
-			continue
+			// No bids — try direct assignment as fallback
+			worker := a.matchWorker(subs[i].Skills, nil)
+			if worker == nil {
+				fmt.Printf("   [%s] No takers for subtask %s: %v\n",
+					a.cfg.Agent.Name, subs[i].ID, err)
+				continue
+			}
+			// Direct send
+			req := protocol.TaskRequest{Description: subs[i].Description}
+			msg, _ := protocol.NewMessage(
+				a.identity.PublicKeyHex()[:16],
+				worker.AgentID,
+				protocol.MsgTaskRequest,
+				req,
+			)
+			if err := a.bus.Send(msg); err != nil {
+				fmt.Printf("⚠️  [%s] Fallback dispatch failed for %s: %v\n",
+					a.cfg.Agent.Name, worker.AgentID[:8], err)
+				continue
+			}
+			subs[i].AgentID = worker.AgentID
+			fmt.Printf("   [%s] Direct-assigned subtask %s → %s (fallback)\n",
+				a.cfg.Agent.Name, subs[i].ID, worker.AgentID[:8])
+		} else {
+			subs[i].AgentID = taskID // track by task ID
+			fmt.Printf("   [%s] Subtask %s claimed via bidding (task=%s)\n",
+				a.cfg.Agent.Name, subs[i].ID, taskID)
 		}
-
-		if err := a.bus.Send(msg); err != nil {
-			fmt.Printf("⚠️  [%s] Failed to dispatch to %s: %v\n", a.cfg.Agent.Name, worker.AgentID[:8], err)
-			continue
-		}
-
-		fmt.Printf("   [%s] Dispatched subtask %s → %s (skills: %v)\n",
-			a.cfg.Agent.Name, subs[i].ID, worker.AgentID[:8], subs[i].Skills)
 		dispatched++
 	}
 	return dispatched
