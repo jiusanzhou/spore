@@ -192,6 +192,11 @@ body {
   transition: all 0.3s ease;
   position: relative;
   overflow: hidden;
+  cursor: pointer;
+}
+
+.agent-card.expanded {
+  cursor: default;
 }
 
 .agent-card::before {
@@ -532,6 +537,246 @@ body {
   font-style: italic;
 }
 
+/* Agent Memory Panel Styles */
+.agent-memory-panel {
+  margin-top: 16px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+  display: none;
+  animation: slideDown 0.3s ease;
+}
+
+.agent-memory-panel.show {
+  display: block;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.memory-section {
+  margin-bottom: 16px;
+}
+
+.memory-section-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--cyan);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.experience-entry {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 8px;
+  font-size: 0.75rem;
+}
+
+.experience-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.experience-success {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.experience-success-true { background: rgba(0, 255, 136, 0.15); color: var(--green); }
+.experience-success-false { background: rgba(239, 68, 68, 0.15); color: var(--red); }
+
+.experience-desc {
+  color: var(--dim);
+  margin-bottom: 6px;
+  line-height: 1.3;
+}
+
+.experience-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.65rem;
+  color: var(--gray);
+}
+
+.experience-skills {
+  display: flex;
+  gap: 4px;
+}
+
+.experience-skill-tag {
+  background: rgba(124, 58, 237, 0.15);
+  color: var(--purple);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.6rem;
+  font-weight: 500;
+}
+
+.awareness-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  font-size: 0.75rem;
+}
+
+.awareness-item {
+  display: flex;
+  justify-content: space-between;
+}
+
+.awareness-item .label {
+  color: var(--dim);
+}
+
+.awareness-item .value {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.evolution-stats {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.evolution-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 0.75rem;
+}
+
+.evolution-row .label {
+  color: var(--dim);
+}
+
+.evolution-row .value {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.memory-loading {
+  text-align: center;
+  color: var(--dim);
+  font-size: 0.75rem;
+  padding: 20px;
+}
+
+/* Collective Memory Panel Styles */
+.collective-memory-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.collective-memory-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 16px;
+  color: var(--emerald);
+}
+
+.content-store-section {
+  margin-bottom: 16px;
+}
+
+.content-entry {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 8px;
+  font-size: 0.75rem;
+}
+
+.content-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.content-cid {
+  font-family: 'SF Mono', Monaco, Consolas, monospace;
+  font-size: 0.65rem;
+  color: var(--cyan);
+  background: rgba(6, 182, 212, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.content-type-badge {
+  font-size: 0.65rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+  text-transform: uppercase;
+  background: rgba(245, 158, 11, 0.2);
+  color: var(--amber);
+}
+
+.content-summary {
+  color: var(--dim);
+  margin-bottom: 6px;
+  line-height: 1.3;
+}
+
+.content-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.65rem;
+  color: var(--gray);
+}
+
+.collective-memory-stats {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+  font-size: 0.75rem;
+}
+
+.memory-stat {
+  text-align: center;
+}
+
+.memory-stat .value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--emerald);
+  display: block;
+  margin-bottom: 2px;
+}
+
+.memory-stat .label {
+  color: var(--dim);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+}
+
 .right-panel {
   border-left: 1px solid var(--border);
   display: flex;
@@ -772,6 +1017,31 @@ body {
     <div id="collective-panel">
       <div class="empty-state">Collective mind forming...</div>
     </div>
+    
+    <!-- Collective Memory Panel -->
+    <div class="collective-memory-panel" id="collective-memory-panel">
+      <div class="collective-memory-title">💾 Collective Memory Store</div>
+      <div class="content-store-section">
+        <div class="memory-section-title">📚 Content Store</div>
+        <div id="content-store-list">
+          <div class="memory-loading">Loading collective memory...</div>
+        </div>
+      </div>
+      <div class="collective-memory-stats" id="collective-memory-stats">
+        <div class="memory-stat">
+          <span class="value" id="memory-items-count">0</span>
+          <span class="label">Items</span>
+        </div>
+        <div class="memory-stat">
+          <span class="value" id="memory-providers-count">0</span>
+          <span class="label">Providers</span>
+        </div>
+        <div class="memory-stat">
+          <span class="value" id="memory-total-bytes">0</span>
+          <span class="label">Total Size</span>
+        </div>
+      </div>
+    </div>
   </div>
   
   <div class="right-panel">
@@ -934,6 +1204,259 @@ body {
     return 'skill-low';
   }
 
+  function formatBytes(bytes) {
+    if (!bytes) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let size = bytes;
+    let unitIndex = 0;
+    
+    while (size >= 1024 && unitIndex < units.length - 1) {
+      size /= 1024;
+      unitIndex++;
+    }
+    
+    return `${size.toFixed(unitIndex > 0 ? 1 : 0)} ${units[unitIndex]}`;
+  }
+
+  function formatTimestamp(timestamp) {
+    if (!timestamp) return '';
+    const date = new Date(timestamp * 1000);
+    return date.toLocaleString([], {
+      month: 'short',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
+  async function fetchAgentMemory(agentName, section) {
+    try {
+      let url;
+      switch (section) {
+        case 'experience':
+          url = `/api/agents/${encodeURIComponent(agentName)}/experience?limit=20`;
+          break;
+        case 'awareness':
+          url = `/api/agents/${encodeURIComponent(agentName)}/awareness`;
+          break;
+        case 'evolution':
+          url = `/api/agents/${encodeURIComponent(agentName)}/evolution`;
+          break;
+        default:
+          throw new Error('Unknown section');
+      }
+      
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return response.json();
+    } catch (error) {
+      console.error(`Error fetching ${section} for ${agentName}:`, error);
+      return null;
+    }
+  }
+
+  async function renderAgentMemoryPanel(agentName, panelElement) {
+    panelElement.innerHTML = '<div class="memory-loading">Loading memory data...</div>';
+    
+    try {
+      const [experience, awareness, evolution] = await Promise.all([
+        fetchAgentMemory(agentName, 'experience'),
+        fetchAgentMemory(agentName, 'awareness'), 
+        fetchAgentMemory(agentName, 'evolution')
+      ]);
+
+      let html = '';
+      
+      // Experience Journal Section
+      html += '<div class="memory-section">';
+      html += '<div class="memory-section-title">📖 Experience Journal</div>';
+      
+      if (experience && experience.journal) {
+        experience.journal.forEach(entry => {
+          const skillTags = (entry.skills_used || []).map(skill => 
+            `<span class="experience-skill-tag">${esc(skill)}</span>`
+          ).join('');
+          
+          html += `
+            <div class="experience-entry">
+              <div class="experience-header">
+                <span class="experience-success experience-success-${entry.success}">${entry.success ? 'Success' : 'Failed'}</span>
+                <span style="font-size: 0.65rem; color: var(--gray);">${fmtTime(entry.timestamp)}</span>
+              </div>
+              <div class="experience-desc">${esc(trunc(entry.description, 80))}</div>
+              <div class="experience-footer">
+                <div class="experience-skills">${skillTags}</div>
+                <span>${entry.duration_secs ? entry.duration_secs.toFixed(1) + 's' : ''}</span>
+              </div>
+            </div>
+          `;
+        });
+        
+        if (experience.total > experience.showing) {
+          html += `<div style="text-align: center; color: var(--dim); font-size: 0.7rem; margin-top: 8px;">
+            Showing ${experience.showing} of ${experience.total} entries
+          </div>`;
+        }
+      } else {
+        html += '<div class="empty-state" style="padding: 16px;">No experience data available</div>';
+      }
+      html += '</div>';
+      
+      // Awareness Section
+      html += '<div class="memory-section">';
+      html += '<div class="memory-section-title">🧠 Self-Awareness</div>';
+      
+      if (awareness) {
+        html += '<div class="awareness-grid">';
+        const fields = ['personality', 'purpose', 'narrative', 'strengths', 'weaknesses', 'mood', 'morale'];
+        fields.forEach(field => {
+          if (awareness[field] !== undefined) {
+            let value = awareness[field];
+            if (typeof value === 'string') {
+              value = trunc(value, 30);
+            } else if (typeof value === 'number') {
+              value = field === 'morale' ? `${(value * 100).toFixed(0)}%` : value.toString();
+            }
+            html += `
+              <div class="awareness-item">
+                <span class="label">${field.charAt(0).toUpperCase() + field.slice(1)}:</span>
+                <span class="value">${esc(String(value))}</span>
+              </div>
+            `;
+          }
+        });
+        html += '</div>';
+      } else {
+        html += '<div class="empty-state" style="padding: 16px;">No awareness data available</div>';
+      }
+      html += '</div>';
+      
+      // Evolution Section
+      html += '<div class="memory-section">';
+      html += '<div class="memory-section-title">🧬 Evolution Details</div>';
+      
+      if (evolution) {
+        html += '<div class="evolution-stats">';
+        const fields = ['strategy', 'skills', 'stats'];
+        fields.forEach(field => {
+          if (evolution[field] !== undefined) {
+            let value = evolution[field];
+            if (typeof value === 'object') {
+              value = JSON.stringify(value, null, 2);
+            }
+            html += `
+              <div class="evolution-row">
+                <span class="label">${field.charAt(0).toUpperCase() + field.slice(1)}:</span>
+                <span class="value">${esc(String(value).slice(0, 100))}${String(value).length > 100 ? '...' : ''}</span>
+              </div>
+            `;
+          }
+        });
+        html += '</div>';
+      } else {
+        html += '<div class="empty-state" style="padding: 16px;">No evolution data available</div>';
+      }
+      html += '</div>';
+      
+      panelElement.innerHTML = html;
+      
+    } catch (error) {
+      panelElement.innerHTML = '<div class="empty-state" style="padding: 16px; color: var(--red);">Failed to load memory data</div>';
+    }
+  }
+
+  function toggleAgentMemory(agentCard, agentName) {
+    const existingPanel = agentCard.querySelector('.agent-memory-panel');
+    
+    if (existingPanel) {
+      // Toggle existing panel
+      if (existingPanel.classList.contains('show')) {
+        existingPanel.classList.remove('show');
+        agentCard.classList.remove('expanded');
+        setTimeout(() => {
+          existingPanel.remove();
+        }, 300);
+      }
+      return;
+    }
+    
+    // Create new panel
+    const panel = document.createElement('div');
+    panel.className = 'agent-memory-panel';
+    agentCard.appendChild(panel);
+    
+    // Trigger animation
+    requestAnimationFrame(() => {
+      panel.classList.add('show');
+      agentCard.classList.add('expanded');
+    });
+    
+    // Load data
+    renderAgentMemoryPanel(agentName, panel);
+  }
+
+  async function fetchCollectiveMemory() {
+    try {
+      const response = await fetch('/api/content');
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return response.json();
+    } catch (error) {
+      console.error('Error fetching collective memory:', error);
+      return null;
+    }
+  }
+
+  async function renderCollectiveMemory() {
+    const listElement = document.getElementById('content-store-list');
+    const statsElement = document.getElementById('collective-memory-stats');
+    
+    listElement.innerHTML = '<div class="memory-loading">Loading collective memory...</div>';
+    
+    try {
+      const data = await fetchCollectiveMemory();
+      
+      if (!data || !data.items) {
+        listElement.innerHTML = '<div class="empty-state" style="padding: 16px;">No collective memory data available</div>';
+        return;
+      }
+      
+      // Render content items
+      const html = data.items.map(item => {
+        const cidShort = item.cid ? item.cid.slice(0, 8) + '...' : 'N/A';
+        const agentIdShort = item.agent_id ? item.agent_id.slice(0, 8) : 'unknown';
+        
+        return `
+          <div class="content-entry">
+            <div class="content-header">
+              <span class="content-cid">${esc(cidShort)}</span>
+              <span class="content-type-badge">${esc(item.type || 'unknown')}</span>
+            </div>
+            <div class="content-summary">${esc(item.summary || 'No summary available')}</div>
+            <div class="content-footer">
+              <span>Agent: ${esc(agentIdShort)}</span>
+              <span>${formatBytes(item.size)} • ${formatTimestamp(item.timestamp)}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+      
+      listElement.innerHTML = html;
+      
+      // Update stats
+      const stats = data.stats || {};
+      document.getElementById('memory-items-count').textContent = stats.items || 0;
+      document.getElementById('memory-providers-count').textContent = stats.providers || 0;
+      document.getElementById('memory-total-bytes').textContent = formatBytes(stats.total_bytes || 0);
+      
+    } catch (error) {
+      listElement.innerHTML = '<div class="empty-state" style="padding: 16px; color: var(--red);">Failed to load collective memory</div>';
+    }
+  }
+
   function renderAgents(agents) {
     const grid = document.getElementById('agents-grid');
     if (!agents || !agents.length) {
@@ -957,7 +1480,7 @@ body {
         : 0;
 
       return `
-        <div class="agent-card ${isCoord ? 'coordinator' : ''}">
+        <div class="agent-card ${isCoord ? 'coordinator' : ''}" onclick="toggleAgentMemory(this, '${esc(agent.name)}')">
           <div class="agent-top">
             <div>
               <span class="agent-name">${isCoord ? '🧠 ' : ''}${esc(agent.name)}</span>
@@ -1228,6 +1751,12 @@ body {
   get('/api/health').then(h => {
     document.getElementById('version').textContent = `v${h.version || '0.1.0'}`;
   }).catch(() => {});
+
+  // Initialize collective memory
+  renderCollectiveMemory();
+  
+  // Make toggleAgentMemory globally available
+  window.toggleAgentMemory = toggleAgentMemory;
 
   connectSSE();
 })();

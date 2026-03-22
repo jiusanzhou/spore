@@ -621,13 +621,19 @@ func (s *Server) buildStatePayload() []byte {
 	stats := s.sw.Stats()
 	tasks := s.sw.TaskLog()
 
-	// Peers
+	// Peers + content store
 	var peerCount int
 	var transport string
+	var contentItems []network.ContentRef
+	var contentStats map[string]interface{}
 	bus := s.sw.Bus()
 	if p2pBus, ok := bus.(*network.P2PBus); ok {
 		peerCount = len(p2pBus.ConnectedPeers())
 		transport = "p2p"
+		if p2pBus.Content != nil {
+			contentItems = p2pBus.Content.ListRefs()
+			contentStats = p2pBus.Content.Stats()
+		}
 	} else {
 		transport = "local"
 	}
@@ -640,6 +646,10 @@ func (s *Server) buildStatePayload() []byte {
 		"network": map[string]interface{}{
 			"transport": transport,
 			"peers":     peerCount,
+		},
+		"content": map[string]interface{}{
+			"items": contentItems,
+			"stats": contentStats,
 		},
 		"ts": time.Now().UnixMilli(),
 	}

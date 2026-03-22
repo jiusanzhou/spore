@@ -1,10 +1,10 @@
 preferredruntime: builtin
 runtimescores:
-  builtin: 21.999999999999993
+  builtin: 22.199999999999992
 skillconfidence:
   coding: 0.7857142857142857
   documentation: 0.45
   research: 0.7857142857142857
   writing: 0.45
 delegatethreshold: 0.3
-adaptedat: 1774188547
+adaptedat: 1774189021
