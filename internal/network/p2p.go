@@ -489,6 +489,25 @@ func (b *P2PBus) Send(msg *proto.Message) error {
 		return fmt.Errorf("resolve peer for agent %s: %w", msg.To, err)
 	}
 
+	// If target peer is ourselves, skip network — dispatch locally.
+	if peerID == b.host.ID() {
+		b.mu.RLock()
+		handler, ok := b.handlers[msg.To]
+		b.mu.RUnlock()
+		if ok {
+			return handler(msg)
+		}
+		// Handler not found for local agent — might be agent ID mismatch
+		// List available handlers for debugging
+		b.mu.RLock()
+		var keys []string
+		for k := range b.handlers {
+			keys = append(keys, k)
+		}
+		b.mu.RUnlock()
+		fmt.Printf("⚠️  P2P local dispatch: no handler for %q, registered: %v\n", msg.To, keys)
+	}
+
 	// Open stream and send.
 	s, err := b.host.NewStream(b.ctx, peerID, protocol.ID(protocolID))
 	if err != nil {

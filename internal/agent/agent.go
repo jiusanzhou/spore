@@ -175,6 +175,7 @@ func (a *Agent) SetWorkDir(dir string) {
 
 	// Persist identity — load existing key or save current key
 	keyPath := filepath.Join(dir, "identity.key")
+	oldID := a.identity.PublicKeyHex()[:16]
 	if existing, err := LoadIdentity(keyPath); err == nil {
 		// Reuse persisted identity (preserves agent ID across restarts)
 		a.identity = existing
@@ -187,6 +188,13 @@ func (a *Agent) SetWorkDir(dir string) {
 		} else {
 			fmt.Printf("🔑 [%s] Identity persisted: %s\n", a.cfg.Agent.Name, a.identity.PublicKeyHex()[:16])
 		}
+	}
+
+	// Re-register bus handler if identity changed (old Subscribe used pre-restore ID)
+	newID := a.identity.PublicKeyHex()[:16]
+	if a.bus != nil && oldID != newID {
+		a.bus.Unsubscribe(oldID)
+		a.bus.Subscribe(newID, a.handleMessage)
 	}
 
 	// If memory is in-memory (:memory:), upgrade to file-based in workDir

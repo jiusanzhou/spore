@@ -1,0 +1,35 @@
+{
+  "10e7733c4db351dc": {
+    "agent_id": "10e7733c4db351dc",
+    "score": 0.2925,
+    "tasks_completed": 1,
+    "tasks_failed": 1,
+    "tasks_timeout": 1,
+    "total_rating": 0.7,
+    "violations": 0,
+    "last_interact": "2026-03-22T18:42:29.870275+08:00",
+    "isolated": false
+  },
+  "3e5c61afd9a5cb22": {
+    "agent_id": "3e5c61afd9a5cb22",
+    "score": 0.04999999999999999,
+    "tasks_completed": 0,
+    "tasks_failed": 0,
+    "tasks_timeout": 3,
+    "total_rating": 0,
+    "violations": 0,
+    "last_interact": "2026-03-22T18:43:03.956346+08:00",
+    "isolated": true
+  },
+  "6948243aefe41f5c": {
+    "agent_id": "6948243aefe41f5c",
+    "score": 0.5425,
+    "tasks_completed": 1,
+    "tasks_failed": 0,
+    "tasks_timeout": 0,
+    "total_rating": 0.7,
+    "violations": 0,
+    "last_interact": "2026-03-22T18:09:54.221645+08:00",
+    "isolated": false
+  }
+}

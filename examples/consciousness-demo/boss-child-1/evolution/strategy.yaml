@@ -1,0 +1,13 @@
+preferredruntime: builtin
+runtimescores:
+  builtin: 5.400000000000001
+skillconfidence:
+  analysis: 0.8
+  coding: 0.4
+  delegation: 0.8
+  documentation: 1
+  planning: 0.8
+  research: 1
+  writing: 1
+delegatethreshold: 0.3
+adaptedat: 1774175933
