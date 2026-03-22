@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -189,6 +190,11 @@ func (s *Swarm) List() []agent.Info {
 	for _, a := range s.agents {
 		infos = append(infos, a.Info())
 	}
+
+	// Stable sort: by name
+	sort.Slice(infos, func(i, j int) bool {
+		return infos[i].Name < infos[j].Name
+	})
 	return infos
 }
 
