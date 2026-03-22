@@ -104,7 +104,8 @@ type Agent struct {
 
 	evolution   *EvolutionEngine
 	peerEvo     *PeerEvolution
-	evoFS       *EvolutionFS // file-based evolution persistence (OpenAgent layout)
+	reputation  *ReputationEngine // per-peer trust scores
+	evoFS       *EvolutionFS      // file-based evolution persistence (OpenAgent layout)
 
 	// Intrinsic drive engine — autonomous behavior generation
 	drives *DriveEngine
@@ -209,6 +210,9 @@ func (a *Agent) SetWorkDir(dir string) {
 	}
 	if a.peerEvo != nil {
 		a.evoFS.LoadPeerEvolution(a.peerEvo)
+	}
+	if a.reputation != nil {
+		a.reputation.SetWorkDir(dir)
 	}
 }
 
@@ -320,8 +324,11 @@ func New(cfg *Config) (*Agent, error) {
 	a.evolution = NewEvolutionEngine(a)
 	a.evolution.RestoreState()
 
-	// Initialize peer evolution tracker (for coordinators)
+		// Initialize peer evolution tracker
 	a.peerEvo = NewPeerEvolution(a)
+
+	// Initialize reputation engine — trust network
+	a.reputation = NewReputationEngine()
 
 	// Initialize token economy — the oxygen system
 	tokenCfg := DefaultTokenConfig()
@@ -476,6 +483,10 @@ func (a *Agent) Run() error {
 					a.collective.Broadcast()
 					a.collective.Synthesize(ctx)
 				}
+				// Reputation decay — scores drift toward neutral over time
+				if a.reputation != nil {
+					a.reputation.Decay()
+				}
 			}
 		}
 	}
@@ -570,6 +581,9 @@ func (a *Agent) Tokens() *TokenLedger    { return a.tokens }
 
 // PeerEvo returns the agent's peer evolution tracker (may be nil).
 func (a *Agent) PeerEvo() *PeerEvolution { return a.peerEvo }
+
+// Reputation returns the agent's reputation engine (may be nil).
+func (a *Agent) Reputation() *ReputationEngine { return a.reputation }
 
 // Peers returns the current peer registry.
 func (a *Agent) Peers() map[string]*PeerInfo {

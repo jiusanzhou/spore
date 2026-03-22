@@ -138,6 +138,18 @@ func (a *Agent) coordinatorExecute(ctx context.Context, entry *taskEntry) error 
 		fmt.Printf("   [%s] All subtask results collected\n", a.cfg.Agent.Name)
 	case <-time.After(subtaskTimeout):
 		fmt.Printf("⚠️  [%s] Subtask timeout, proceeding with partial results\n", a.cfg.Agent.Name)
+		// Record timeout reputation for agents that didn't deliver
+		if a.reputation != nil {
+			state.mu.Lock()
+			for _, sub := range state.subtasks {
+				if _, done := state.results[sub.ID]; !done {
+					a.reputation.RecordTimeout(sub.AgentID)
+					fmt.Printf("⏰ [%s] Reputation timeout for %s on subtask %s\n",
+						a.cfg.Agent.Name, sub.AgentID[:8], sub.ID)
+				}
+			}
+			state.mu.Unlock()
+		}
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -315,8 +327,17 @@ func (a *Agent) matchWorker(requiredSkills []string, batchLoad map[string]int) *
 			fitness = a.peerEvo.Fitness(peer.AgentID)
 		}
 
+		// Get reputation score (real trust data, not fixed 1.0)
+		rep := repInitial
+		if a.reputation != nil {
+			if a.reputation.IsIsolated(peer.AgentID) {
+				continue // skip quarantined peers
+			}
+			rep = a.reputation.Score(peer.AgentID)
+		}
+
 		// Composite score: skill_match * 10 + fitness * capacity * reputation
-		compositeScore := float64(skillScore)*10.0 + fitness*effectiveCap*peer.Reputation
+		compositeScore := float64(skillScore)*10.0 + fitness*effectiveCap*rep
 
 		if compositeScore > bestScore {
 			bestScore = compositeScore
@@ -389,6 +410,22 @@ func (a *Agent) handleTaskResult(result *protocol.TaskResult, fromAgent string) 
 						a.cfg.Agent.Name, sub.ID, len(state.results), len(state.subtasks),
 						fromAgent[:8], result.Success)
 					_ = i // used implicitly
+
+					// Update reputation based on task result
+					if a.reputation != nil {
+						if result.Success {
+							// Rating heuristic: result length as quality proxy
+							rating := 0.7
+							if len(result.Output) > 500 {
+								rating = 0.9
+							} else if len(result.Output) < 50 {
+								rating = 0.5
+							}
+							a.reputation.RecordSuccess(fromAgent, rating)
+						} else {
+							a.reputation.RecordFailure(fromAgent)
+						}
+					}
 					// Check completion
 					if len(state.results) >= len(state.subtasks) {
 						select {
