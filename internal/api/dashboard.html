@@ -9,117 +9,721 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Spore Swarm Dashboard</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-:root{
-  --bg:#0a0a0a;--card:#1a1a2e;--border:#2a2a3e;
-  --text:#e0e0e0;--dim:#888;--green:#00ff88;--purple:#7c3aed;--blue:#3b82f6;
-  --amber:#f59e0b;--red:#ef4444;--gray:#6b7280;--cyan:#06b6d4;
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #0a0a0a;
+  --card: #1a1a2e;
+  --border: #2a2a3e;
+  --text: #e0e0e0;
+  --dim: #888;
+  --green: #00ff88;
+  --purple: #7c3aed;
+  --blue: #3b82f6;
+  --amber: #f59e0b;
+  --red: #ef4444;
+  --gray: #6b7280;
+  --cyan: #06b6d4;
+  --orange: #f97316;
+  --emerald: #10b981;
 }
-body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
-a{color:var(--blue);text-decoration:none}
 
-.header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--border);background:#0f0f1a;flex-wrap:wrap;gap:12px}
-.header-left{display:flex;align-items:center;gap:12px}
-.header h1{font-size:1.3rem;font-weight:700;white-space:nowrap}
-.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:12px;font-size:.75rem;font-weight:600}
-.badge-green{background:rgba(0,255,136,.15);color:var(--green)}
-.badge-purple{background:rgba(124,58,237,.2);color:var(--purple)}
-.header-meta{display:flex;gap:16px;font-size:.8rem;color:var(--dim);flex-wrap:wrap}
-.header-meta span{white-space:nowrap}
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
 
-.stats-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;padding:16px 24px;border-bottom:1px solid var(--border)}
-.stat-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;text-align:center}
-.stat-val{font-size:1.6rem;font-weight:700;font-variant-numeric:tabular-nums}
-.stat-label{font-size:.7rem;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(135deg, #0f0f1a, #1a0f20);
+  flex-wrap: wrap;
+  gap: 12px;
+}
 
-.main{display:grid;grid-template-columns:1fr 380px;gap:0;min-height:calc(100vh - 160px)}
-@media(max-width:900px){.main{grid-template-columns:1fr}}
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
 
-.agents-section{padding:16px 24px;overflow-y:auto}
-.section-title{font-size:.85rem;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);margin-bottom:12px}
-.agents-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.header h1 {
+  font-size: 1.4rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--purple), var(--cyan));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
 
-.agent-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;transition:border-color .2s,transform .15s}
-.agent-card:hover{border-color:var(--purple);transform:translateY(-1px)}
-.agent-card.coordinator{border-left:3px solid var(--purple)}
-.agent-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
-.agent-name{font-size:1.05rem;font-weight:700}
-.agent-desc{font-size:.72rem;color:var(--dim);margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.status-dot{width:10px;height:10px;border-radius:50%;display:inline-block;flex-shrink:0}
-.status-idle{background:var(--green);box-shadow:0 0 6px var(--green)}
-.status-busy{background:var(--amber);animation:pulse 1.2s infinite}
-.status-hibernate{background:var(--gray)}
-@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}
-.role-badge{font-size:.65rem;padding:2px 8px;border-radius:8px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
-.role-coordinator{background:rgba(124,58,237,.2);color:var(--purple)}
-.role-worker{background:rgba(59,130,246,.2);color:var(--blue)}
-.role-specialist{background:rgba(0,255,136,.15);color:var(--green)}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
 
-.skills-row{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}
-.skill-tag{font-size:.6rem;padding:2px 6px;border-radius:6px;background:rgba(6,182,212,.12);color:var(--cyan);border:1px solid rgba(6,182,212,.2);font-weight:500}
+.badge-green { background: rgba(0, 255, 136, 0.15); color: var(--green); }
+.badge-purple { background: rgba(124, 58, 237, 0.2); color: var(--purple); }
 
-.agent-details{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;font-size:.75rem}
-.agent-detail{display:flex;justify-content:space-between}
-.agent-detail .label{color:var(--dim)}
-.agent-detail .value{font-family:'SF Mono',Monaco,Consolas,monospace;font-size:.7rem;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px}
-.progress-bar{height:3px;background:#333;border-radius:2px;overflow:hidden;margin-top:8px;display:none}
-.progress-bar.active{display:block}
-.progress-bar-inner{height:100%;background:linear-gradient(90deg,var(--amber),var(--green));animation:progress-anim 2s ease-in-out infinite;width:60%}
-@keyframes progress-anim{0%{transform:translateX(-100%)}100%{transform:translateX(200%)}}
+.header-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 0.8rem;
+  color: var(--dim);
+  flex-wrap: wrap;
+}
 
-.right-panel{border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
-@media(max-width:900px){.right-panel{border-left:none;border-top:1px solid var(--border)}}
+.header-meta span { white-space: nowrap; }
 
-.task-feed{flex:1;padding:16px;overflow-y:auto}
-.task-entry{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;animation:slideIn .3s ease}
-.task-entry.is-coordinator{border-left:3px solid var(--purple)}
-@keyframes slideIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
-.task-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
-.task-agent{font-weight:600;font-size:.8rem}
-.task-status{font-size:.65rem;padding:2px 6px;border-radius:6px;font-weight:600;text-transform:uppercase}
-.task-status-queued{background:rgba(59,130,246,.2);color:var(--blue)}
-.task-status-running{background:rgba(245,158,11,.2);color:var(--amber)}
-.task-status-completed{background:rgba(0,255,136,.15);color:var(--green)}
-.task-status-failed{background:rgba(239,68,68,.2);color:var(--red)}
-.task-desc{font-size:.75rem;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.task-result{font-size:.7rem;color:var(--text);margin-top:4px;padding:6px 8px;background:rgba(255,255,255,.03);border-radius:4px;max-height:60px;overflow:hidden;display:none}
-.task-result.show{display:block}
-.task-runtime{font-size:.6rem;color:#555;margin-top:3px}
-.task-runtime .rt-badge{color:var(--purple);font-weight:600}
-.task-time{font-size:.65rem;color:#555;margin-top:2px}
-.empty-state{color:var(--dim);font-size:.8rem;text-align:center;padding:40px 16px}
+.stats-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(26, 26, 46, 0.3);
+}
 
-.evo-bar{margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
-.evo-bar-title{font-size:.65rem;color:var(--cyan);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;font-weight:600}
-.evo-skills{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:6px}
-.evo-skill{font-size:.6rem;padding:2px 6px;border-radius:4px;font-weight:500}
-.evo-skill-high{background:rgba(0,255,136,.12);color:var(--green);border:1px solid rgba(0,255,136,.2)}
-.evo-skill-mid{background:rgba(245,158,11,.1);color:var(--amber);border:1px solid rgba(245,158,11,.2)}
-.evo-skill-low{background:rgba(239,68,68,.1);color:var(--red);border:1px solid rgba(239,68,68,.2)}
-.evo-detail{display:flex;justify-content:space-between;font-size:.65rem;color:var(--dim);margin-top:4px}
-.evo-detail .evo-val{color:var(--text);font-family:monospace}
-.fitness-bar{height:4px;background:#333;border-radius:2px;overflow:hidden;margin-top:4px}
-.fitness-bar-inner{height:100%;border-radius:2px;transition:width .5s ease}
+.stat-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+  transition: transform 0.2s, border-color 0.2s;
+}
 
-.network-panel{padding:16px;border-top:1px solid var(--border)}
-.net-row{display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:6px}
-.net-row .label{color:var(--dim)}
-.heartbeat{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);animation:hb 2s infinite}
-@keyframes hb{0%,100%{opacity:1;box-shadow:0 0 4px var(--green)}50%{opacity:.3;box-shadow:none}}
+.stat-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--purple);
+}
 
-.disconnected{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,10,10,.9);z-index:100;align-items:center;justify-content:center;flex-direction:column;gap:12px}
-.disconnected.show{display:flex}
-.disconnected h2{color:var(--red);font-size:1.2rem}
-.disconnected p{color:var(--dim);font-size:.85rem}
+.stat-val {
+  font-size: 1.8rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  font-size: 0.7rem;
+  color: var(--dim);
+  teorm: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.main {
+  display: grid;
+  grid-template-columns: 2fr 1fr 400px;
+  gap: 0;
+  min-height: calc(100vh - 180px);
+}
+
+@media (max-width: 1200px) {
+  .main {
+    grid-template-columns: 1fr 400px;
+  }
+  .collective-section { display: none; }
+}
+
+@media (max-width: 900px) {
+  .main {
+    grid-template-columns: 1fr;
+  }
+  .collective-section, .right-panel { 
+    border-left: none; 
+    border-top: 1px solid var(--border); 
+  }
+}
+
+.agents-section {
+  padding: 20px 24px;
+  overflow-y: auto;
+}
+
+.collective-section {
+  padding: 20px 24px;
+  border-left: 1px solid var(--border);
+  background: rgba(26, 26, 46, 0.2);
+  overflow-y: auto;
+}
+
+.section-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--purple);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-title::before {
+  content: "";
+  width: 3px;
+  height: 16px;
+  background: var(--purple);
+  border-radius: 2px;
+}
+
+.agents-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.agent-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.agent-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--purple), var(--cyan));
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.agent-card:hover {
+  border-color: var(--purple);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 32px rgba(124, 58, 237, 0.2);
+}
+
+.agent-card:hover::before {
+  opacity: 1;
+}
+
+.agent-card.coordinator {
+  border-left: 3px solid var(--purple);
+  background: linear-gradient(135deg, var(--card), rgba(124, 58, 237, 0.05));
+}
+
+.agent-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.agent-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.agent-id {
+  font-size: 0.7rem;
+  color: var(--dim);
+  font-family: 'SF Mono', Monaco, Consolas, monospace;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 8px;
+}
+
+.agent-desc {
+  font-size: 0.8rem;
+  color: var(--dim);
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+
+.status-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-idle { background: var(--green); box-shadow: 0 0 8px var(--green); }
+.status-busy { background: var(--amber); animation: pulse 1.2s infinite; }
+.status-hibernate { background: var(--gray); }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.3); }
+}
+
+.role-badge {
+  font-size: 0.65rem;
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.role-coordinator { background: rgba(124, 58, 237, 0.2); color: var(--purple); }
+.role-worker { background: rgba(59, 130, 246, 0.2); color: var(--blue); }
+.role-specialist { background: rgba(0, 255, 136, 0.15); color: var(--green); }
+
+.personality-mood {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  font-size: 0.8rem;
+}
+
+.personality {
+  color: var(--cyan);
+  font-weight: 600;
+}
+
+.mood {
+  color: var(--amber);
+  font-weight: 500;
+}
+
+.drives-section {
+  margin-bottom: 16px;
+}
+
+.drives-title {
+  font-size: 0.75rem;
+  color: var(--purple);
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.drives-radar {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.skills-section {
+  margin-bottom: 16px;
+}
+
+.skills-title {
+  font-size: 0.75rem;
+  color: var(--cyan);
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.skills-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.skill-tag {
+  font-size: 0.65rem;
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-weight: 600;
+  border: 1px solid;
+  transition: all 0.2s;
+}
+
+.skill-high {
+  background: rgba(0, 255, 136, 0.12);
+  color: var(--green);
+  border-color: rgba(0, 255, 136, 0.3);
+}
+
+.skill-mid {
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--amber);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.skill-low {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--red);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.agent-details {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+  font-size: 0.75rem;
+  margin-bottom: 16px;
+}
+
+.agent-detail {
+  display: flex;
+  justify-content: space-between;
+}
+
+.agent-detail .label {
+  color: var(--dim);
+}
+
+.agent-detail .value {
+  font-family: 'SF Mono', Monaco, Consolas, monospace;
+  font-size: 0.7rem;
+  text-align: right;
+  font-weight: 600;
+}
+
+.economy-section {
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.economy-title {
+  font-size: 0.75rem;
+  color: var(--emerald);
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.economy-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  margin-bottom: 4px;
+}
+
+.economy-health {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.health-stable { background: rgba(0, 255, 136, 0.15); color: var(--green); }
+.health-thriving { background: rgba(16, 185, 129, 0.15); color: var(--emerald); }
+.health-struggling { background: rgba(245, 158, 11, 0.15); color: var(--amber); }
+.health-critical { background: rgba(239, 68, 68, 0.15); color: var(--red); }
+
+.narrative-section {
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  margin-top: 16px;
+}
+
+.narrative-title {
+  font-size: 0.75rem;
+  color: var(--purple);
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.narrative-text {
+  font-size: 0.7rem;
+  color: var(--text);
+  line-height: 1.4;
+  font-style: italic;
+}
+
+.collective-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.collective-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 16px;
+  color: var(--purple);
+}
+
+.collective-info {
+  margin-bottom: 16px;
+}
+
+.collective-purpose {
+  font-size: 0.8rem;
+  color: var(--dim);
+  line-height: 1.4;
+  margin-bottom: 12px;
+}
+
+.morale-section {
+  margin-bottom: 16px;
+}
+
+.morale-label {
+  font-size: 0.75rem;
+  color: var(--amber);
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.morale-bar {
+  height: 8px;
+  background: rgba(245, 158, 11, 0.2);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.morale-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--amber), var(--green));
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+.roles-section {
+  margin-bottom: 16px;
+}
+
+.roles-title {
+  font-size: 0.75rem;
+  color: var(--cyan);
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.roles-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.role-tag {
+  font-size: 0.65rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--blue);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  font-weight: 500;
+}
+
+.collective-narrative {
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  font-size: 0.7rem;
+  color: var(--text);
+  line-height: 1.4;
+  font-style: italic;
+}
+
+.right-panel {
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.task-feed {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.task-entry {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+  animation: slideIn 0.3s ease;
+  transition: all 0.2s;
+}
+
+.task-entry:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--purple);
+}
+
+.task-entry.is-coordinator {
+  border-left: 3px solid var(--purple);
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.task-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.task-agent {
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.task-status {
+  font-size: 0.65rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.task-status-queued { background: rgba(59, 130, 246, 0.2); color: var(--blue); }
+.task-status-running { background: rgba(245, 158, 11, 0.2); color: var(--amber); }
+.task-status-completed { background: rgba(0, 255, 136, 0.15); color: var(--green); }
+.task-status-failed { background: rgba(239, 68, 68, 0.2); color: var(--red); }
+
+.task-desc {
+  font-size: 0.75rem;
+  color: var(--dim);
+  line-height: 1.3;
+  margin-bottom: 6px;
+}
+
+.task-time {
+  font-size: 0.65rem;
+  color: #555;
+  font-family: 'SF Mono', Monaco, Consolas, monospace;
+}
+
+.network-panel {
+  padding: 20px;
+  border-top: 1px solid var(--border);
+  background: rgba(26, 26, 46, 0.3);
+}
+
+.network-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  font-size: 0.8rem;
+}
+
+.net-row {
+  display: flex;
+  justify-content: space-between;
+}
+
+.net-row .label {
+  color: var(--dim);
+}
+
+.net-row .value {
+  font-weight: 600;
+}
+
+.heartbeat {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: hb 2s infinite;
+}
+
+@keyframes hb {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 4px var(--green);
+  }
+  50% {
+    opacity: 0.3;
+    box-shadow: none;
+  }
+}
+
+.empty-state {
+  color: var(--dim);
+  font-size: 0.8rem;
+  text-align: center;
+  padding: 40px 16px;
+  font-style: italic;
+}
+
+.disconnected {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(10, 10, 10, 0.95);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.disconnected.show {
+  display: flex;
+}
+
+.disconnected h2 {
+  color: var(--red);
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.disconnected p {
+  color: var(--dim);
+  font-size: 0.9rem;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border);
+  border-top: 3px solid var(--purple);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
 </style>
 </head>
 <body>
-<div class="disconnected" id="disconnected"><h2>Connection Lost</h2><p>Attempting to reconnect...</p></div>
+<div class="disconnected" id="disconnected">
+  <div class="loading-spinner"></div>
+  <h2>Connection Lost</h2>
+  <p>Attempting to reconnect...</p>
+</div>
 
 <header class="header">
   <div class="header-left">
     <h1>🦠 Spore Swarm</h1>
     <span class="badge badge-green" id="agent-count">0 agents</span>
+    <span class="badge badge-purple" id="swarm-status">Initializing</span>
   </div>
   <div class="header-meta">
     <span id="version">v0.1.0</span>
@@ -129,159 +733,479 @@ a{color:var(--blue);text-decoration:none}
 </header>
 
 <div class="stats-bar" id="stats-bar">
-  <div class="stat-card"><div class="stat-val" id="stat-completed">0</div><div class="stat-label">Completed</div></div>
-  <div class="stat-card"><div class="stat-val" id="stat-failed">0</div><div class="stat-label">Failed</div></div>
-  <div class="stat-card"><div class="stat-val" id="stat-active">0 / 0</div><div class="stat-label">Active / Total</div></div>
-  <div class="stat-card"><div class="stat-val" id="stat-capacity">--</div><div class="stat-label">Capacity</div></div>
-  <div class="stat-card"><div class="stat-val" id="stat-queued">0</div><div class="stat-label">Queued</div></div>
-  <div class="stat-card"><div class="stat-val" style="color:var(--cyan)" id="stat-evo-xp">0</div><div class="stat-label">🧬 Experiences</div></div>
-  <div class="stat-card"><div class="stat-val" style="color:var(--purple)" id="stat-evo-skills">0</div><div class="stat-label">🎯 Skills</div></div>
+  <div class="stat-card">
+    <div class="stat-val" id="stat-completed" style="color: var(--green)">0</div>
+    <div class="stat-label">✅ Completed</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-val" id="stat-failed" style="color: var(--red)">0</div>
+    <div class="stat-label">❌ Failed</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-val" id="stat-queued" style="color: var(--amber)">0</div>
+    <div class="stat-label">⏳ Queued</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-val" id="stat-evo-xp" style="color: var(--cyan)">0</div>
+    <div class="stat-label">🧬 Total XP</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-val" id="stat-evo-skills" style="color: var(--purple)">0</div>
+    <div class="stat-label">🎯 Total Skills</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-val" id="stat-avg-balance" style="color: var(--emerald)">0</div>
+    <div class="stat-label">💰 Avg Balance</div>
+  </div>
 </div>
 
 <div class="main">
   <div class="agents-section">
-    <div class="section-title">Agents</div>
-    <div class="agents-grid" id="agents-grid"><div class="empty-state">No agents yet.</div></div>
+    <div class="section-title">🤖 Agent Swarm</div>
+    <div class="agents-grid" id="agents-grid">
+      <div class="empty-state">No agents discovered yet...</div>
+    </div>
   </div>
+  
+  <div class="collective-section">
+    <div class="section-title">🧠 Collective Consciousness</div>
+    <div id="collective-panel">
+      <div class="empty-state">Collective mind forming...</div>
+    </div>
+  </div>
+  
   <div class="right-panel">
     <div class="task-feed">
-      <div class="section-title">Task Activity</div>
-      <div id="task-list"><div class="empty-state">No tasks yet.</div></div>
+      <div class="section-title">📋 Task Activity Stream</div>
+      <div id="task-list">
+        <div class="empty-state">Awaiting task events...</div>
+      </div>
     </div>
     <div class="network-panel">
-      <div class="section-title" style="margin-bottom:10px">Network</div>
-      <div class="net-row"><span class="label">Transport</span><span id="net-transport">--</span></div>
-      <div class="net-row"><span class="label">Peers</span><span id="net-peers">0</span></div>
-      <div class="net-row"><span class="label">Status</span><span><span class="heartbeat"></span> Connected</span></div>
+      <div class="section-title">🌐 Network Status</div>
+      <div class="network-stats">
+        <div class="net-row">
+          <span class="label">Transport:</span>
+          <span class="value" id="net-transport">--</span>
+        </div>
+        <div class="net-row">
+          <span class="label">Peers:</span>
+          <span class="value" id="net-peers">0</span>
+        </div>
+        <div class="net-row">
+          <span class="label">Status:</span>
+          <span class="value"><span class="heartbeat"></span> Connected</span>
+        </div>
+        <div class="net-row">
+          <span class="label">Uptime:</span>
+          <span class="value" id="net-uptime">--</span>
+        </div>
+      </div>
     </div>
   </div>
 </div>
 
 <script>
-(function(){
+(function() {
   let failCount = 0;
+  let globalSwarmData = null;
 
   function fmt(sec) {
     if (!sec || sec < 0) return '--';
-    const d = Math.floor(sec/86400), h = Math.floor((sec%86400)/3600), m = Math.floor((sec%3600)/60), s = Math.floor(sec%60);
-    if (d > 0) return d+'d '+h+'h';
-    if (h > 0) return h+'h '+m+'m';
-    return m+'m '+s+'s';
+    const d = Math.floor(sec / 86400);
+    const h = Math.floor((sec % 86400) / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = Math.floor(sec % 60);
+    if (d > 0) return `${d}d ${h}h`;
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m ${s}s`;
   }
+
   function fmtTime(iso) {
     if (!iso) return '';
-    return new Date(iso).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    return new Date(iso).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
   }
-  function trunc(s, n) { return s && s.length > n ? s.slice(0,n)+'…' : (s||''); }
-  function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-  function anim(el, v) { if (el.textContent !== String(v)) { el.textContent = v; el.style.transition='none'; el.style.color='#fff'; requestAnimationFrame(()=>{el.style.transition='color 1s'; el.style.color=''}); } }
 
-  function roleClass(r) { return r==='coordinator'?'role-coordinator':r==='specialist'?'role-specialist':'role-worker'; }
+  function trunc(s, n) {
+    return s && s.length > n ? s.slice(0, n) + '…' : (s || '');
+  }
+
+  function esc(s) {
+    const div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+  }
+
+  function anim(el, v) {
+    if (el.textContent !== String(v)) {
+      el.textContent = v;
+      el.style.transition = 'none';
+      el.style.transform = 'scale(1.1)';
+      requestAnimationFrame(() => {
+        el.style.transition = 'transform 0.3s ease';
+        el.style.transform = 'scale(1)';
+      });
+    }
+  }
+
+  function createRadarChart(drives, size = 80) {
+    const driveNames = ['survive', 'explore', 'connect', 'transcend', 'create'];
+    const angles = driveNames.map((_, i) => (i * 2 * Math.PI) / 5 - Math.PI / 2);
+    const center = size / 2;
+    const maxRadius = center - 10;
+
+    let svg = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">`;
+    
+    // Background circles
+    for (let i = 1; i <= 5; i++) {
+      const r = (maxRadius * i) / 5;
+      svg += `<circle cx="${center}" cy="${center}" r="${r}" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>`;
+    }
+
+    // Grid lines
+    angles.forEach(angle => {
+      const x = center + maxRadius * Math.cos(angle);
+      const y = center + maxRadius * Math.sin(angle);
+      svg += `<line x1="${center}" y1="${center}" x2="${x}" y2="${y}" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>`;
+    });
+
+    // Data polygon
+    const points = angles.map(angle => {
+      const driveName = driveNames[angles.indexOf(angle)];
+      const value = drives[driveName] || 0;
+      const r = maxRadius * value;
+      const x = center + r * Math.cos(angle);
+      const y = center + r * Math.sin(angle);
+      return `${x},${y}`;
+    }).join(' ');
+
+    svg += `<polygon points="${points}" fill="rgba(124, 58, 237, 0.3)" stroke="#7c3aed" stroke-width="2"/>`;
+
+    // Data points
+    angles.forEach((angle, i) => {
+      const driveName = driveNames[i];
+      const value = drives[driveName] || 0;
+      const r = maxRadius * value;
+      const x = center + r * Math.cos(angle);
+      const y = center + r * Math.sin(angle);
+      svg += `<circle cx="${x}" cy="${y}" r="3" fill="#7c3aed"/>`;
+    });
+
+    // Labels
+    angles.forEach((angle, i) => {
+      const driveName = driveNames[i];
+      const labelR = maxRadius + 8;
+      const x = center + labelR * Math.cos(angle);
+      const y = center + labelR * Math.sin(angle);
+      svg += `<text x="${x}" y="${y}" text-anchor="middle" alignment-baseline="central" font-size="9" fill="#888" font-weight="600">${driveName.slice(0, 3).toUpperCase()}</text>`;
+    });
+
+    svg += '</svg>';
+    return svg;
+  }
+
+  function parseEvolution(evolutionStr) {
+    if (!evolutionStr) return { experiences: 0, successRate: 0, skills: {} };
+    
+    const experiences = parseInt(evolutionStr.match(/experiences=(\d+)/)?.[1] || '0');
+    const successRate = parseFloat(evolutionStr.match(/success_rate=(\d+)%/)?.[1] || '0');
+    
+    const skillsMatch = evolutionStr.match(/skills=\[([^\]]*)\]/);
+    const skills = {};
+    if (skillsMatch) {
+      skillsMatch[1].split(', ').forEach(skill => {
+        const match = skill.match(/([^(]+)\((\d+)%\)/);
+        if (match) {
+          skills[match[1]] = parseInt(match[2]);
+        }
+      });
+    }
+    
+    return { experiences, successRate, skills };
+  }
+
+  function getSkillClass(percentage) {
+    if (percentage > 80) return 'skill-high';
+    if (percentage >= 50) return 'skill-mid';
+    return 'skill-low';
+  }
 
   function renderAgents(agents) {
     const grid = document.getElementById('agents-grid');
-    if (!agents || !agents.length) { grid.innerHTML = '<div class="empty-state">No agents yet.</div>'; return; }
+    if (!agents || !agents.length) {
+      grid.innerHTML = '<div class="empty-state">No agents discovered yet...</div>';
+      return;
+    }
 
-    grid.innerHTML = agents.map(a => {
-      const up = a.started_at ? (Date.now() - new Date(a.started_at).getTime())/1000 : 0;
-      const busy = a.status === 'busy';
-      const isCoord = a.role === 'coordinator';
-      const skills = (a.skills || []).map(s => '<span class="skill-tag">'+esc(s)+'</span>').join('');
+    grid.innerHTML = agents.map(agent => {
+      const isCoord = agent.role === 'coordinator';
+      const evolution = parseEvolution(agent.evolution);
+      const drives = agent.drives || {};
+      
+      const skillTags = Object.entries(evolution.skills)
+        .map(([skill, percentage]) => {
+          return `<span class="skill-tag ${getSkillClass(percentage)}">${esc(skill)} ${percentage}%</span>`;
+        })
+        .join('');
 
-      return '<div class="agent-card'+(isCoord?' coordinator':'')+'">' +
-        '<div class="agent-top">' +
-          '<span class="agent-name">'+(isCoord?'🧠 ':'')+esc(a.name)+'</span>' +
-          '<span style="display:flex;align-items:center;gap:8px">' +
-            '<span class="role-badge '+roleClass(a.role)+'">'+esc(a.role)+'</span>' +
-            '<span class="status-dot status-'+(a.status||'idle')+'"></span>' +
-          '</span>' +
-        '</div>' +
-        (a.description ? '<div class="agent-desc">'+esc(a.description)+'</div>' : '') +
-        (skills ? '<div class="skills-row">'+skills+'</div>' : '') +
-        '<div class="agent-details">' +
-          '<div class="agent-detail"><span class="label">ID</span><span class="value">'+esc(a.id)+'</span></div>' +
-          '<div class="agent-detail"><span class="label">Runtime</span><span class="value">'+esc(a.runtime)+'</span></div>' +
-          '<div class="agent-detail"><span class="label">Model</span><span class="value">'+esc(a.model)+'</span></div>' +
-          '<div class="agent-detail"><span class="label">Tasks</span><span class="value">'+(a.task_count||0)+'</span></div>' +
-          '<div class="agent-detail"><span class="label">Balance</span><span class="value">💰 '+(a.balance!=null?a.balance.toFixed(4):'0')+'</span></div>' +
-          '<div class="agent-detail"><span class="label">Uptime</span><span class="value">'+fmt(up)+'</span></div>' +
-        '</div>' +
-        (a.evolution ? '<div class="evo-bar"><div class="evo-bar-title">🧬 Evolution</div><div class="evo-detail"><span>'+esc(a.evolution)+'</span></div></div>' : '') +
-        '<div class="progress-bar'+(busy?' active':'')+'"><div class="progress-bar-inner"></div></div>' +
-      '</div>';
+      const uptime = agent.started_at 
+        ? (Date.now() - new Date(agent.started_at).getTime()) / 1000 
+        : 0;
+
+      return `
+        <div class="agent-card ${isCoord ? 'coordinator' : ''}">
+          <div class="agent-top">
+            <div>
+              <span class="agent-name">${isCoord ? '🧠 ' : ''}${esc(agent.name)}</span>
+              <span class="agent-id">${esc(agent.id)}</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="role-badge role-${agent.role}">${esc(agent.role)}</span>
+              <span class="status-dot status-${agent.status || 'idle'}"></span>
+            </div>
+          </div>
+          
+          ${agent.description ? `<div class="agent-desc">${esc(trunc(agent.description, 100))}</div>` : ''}
+          
+          <div class="personality-mood">
+            <span class="personality">${esc(agent.self?.personality || 'Unknown')}</span>
+            <span class="mood">Mood: ${esc(agent.self?.mood || 'unknown')}</span>
+          </div>
+          
+          <div class="drives-section">
+            <div class="drives-title">Five Drives</div>
+            <div class="drives-radar">${createRadarChart(drives)}</div>
+          </div>
+          
+          <div class="skills-section">
+            <div class="skills-title">Skills & Performance</div>
+            <div class="skills-row">${skillTags || '<span class="skill-tag skill-low">No skills yet</span>'}</div>
+          </div>
+          
+          <div class="agent-details">
+            <div class="agent-detail">
+              <span class="label">Runtime:</span>
+              <span class="value">${esc(agent.runtime)}</span>
+            </div>
+            <div class="agent-detail">
+              <span class="label">Model:</span>
+              <span class="value">${esc(agent.model)}</span>
+            </div>
+            <div class="agent-detail">
+              <span class="label">Tasks:</span>
+              <span class="value">${agent.task_count || 0}</span>
+            </div>
+            <div class="agent-detail">
+              <span class="label">Energy:</span>
+              <span class="value">${((agent.self?.energy || 0) * 100).toFixed(0)}%</span>
+            </div>
+            <div class="agent-detail">
+              <span class="label">Morale:</span>
+              <span class="value">${((agent.self?.morale || 0) * 100).toFixed(0)}%</span>
+            </div>
+            <div class="agent-detail">
+              <span class="label">Uptime:</span>
+              <span class="value">${fmt(uptime)}</span>
+            </div>
+          </div>
+          
+          <div class="economy-section">
+            <div class="economy-title">💰 Economy</div>
+            <div class="economy-row">
+              <span>Balance:</span>
+              <span style="font-weight: 600;">${(agent.balance || 0).toFixed(4)}</span>
+            </div>
+            <div class="economy-row">
+              <span>Health:</span>
+              <span class="economy-health health-${agent.economy?.health || 'stable'}">${esc(agent.economy?.health || 'stable')}</span>
+            </div>
+            <div class="economy-row">
+              <span>Earned:</span>
+              <span>${(agent.economy?.stats?.total_earned || 0).toFixed(2)}</span>
+            </div>
+            <div class="economy-row">
+              <span>Spent:</span>
+              <span>${(agent.economy?.stats?.total_spent || 0).toFixed(2)}</span>
+            </div>
+          </div>
+          
+          ${agent.self?.narrative ? `
+            <div class="narrative-section">
+              <div class="narrative-title">🎭 Self Narrative</div>
+              <div class="narrative-text">"${esc(trunc(agent.self.narrative, 150))}"</div>
+            </div>
+          ` : ''}
+        </div>
+      `;
     }).join('');
+  }
+
+  function renderCollective(agents) {
+    const panel = document.getElementById('collective-panel');
+    if (!agents || !agents.length) {
+      panel.innerHTML = '<div class="empty-state">Collective mind forming...</div>';
+      return;
+    }
+
+    // Use the first agent's collective data as representative
+    const collective = agents[0]?.collective;
+    if (!collective) {
+      panel.innerHTML = '<div class="empty-state">Collective consciousness not yet formed...</div>';
+      return;
+    }
+
+    const explorers = collective.explorers || [];
+    const creators = collective.creators || [];
+    const allRoles = [...explorers.map(name => ({ name, type: 'explorer' })), 
+                     ...creators.map(name => ({ name, type: 'creator' }))];
+
+    panel.innerHTML = `
+      <div class="collective-panel">
+        <div class="collective-title">${esc(collective.swarm_personality || 'Unnamed Collective')}</div>
+        <div class="collective-info">
+          <div class="collective-purpose">${esc(collective.swarm_purpose || 'No purpose defined yet')}</div>
+          
+          <div class="morale-section">
+            <div class="morale-label">Average Morale</div>
+            <div class="morale-bar">
+              <div class="morale-fill" style="width: ${(collective.average_morale || 0) * 100}%"></div>
+            </div>
+            <div style="font-size: 0.7rem; color: var(--dim); margin-top: 4px;">
+              ${((collective.average_morale || 0) * 100).toFixed(1)}% • ${collective.total_agents || 0} agents
+            </div>
+          </div>
+          
+          <div class="roles-section">
+            <div class="roles-title">Role Distribution</div>
+            <div class="roles-list">
+              ${allRoles.map(role => 
+                `<span class="role-tag">${esc(role.name)} (${role.type})</span>`
+              ).join('')}
+            </div>
+          </div>
+        </div>
+        
+        ${collective.narrative ? `
+          <div class="collective-narrative">
+            "${esc(collective.narrative)}"
+          </div>
+        ` : ''}
+      </div>
+    `;
   }
 
   function renderTasks(tasks) {
     const list = document.getElementById('task-list');
-    if (!tasks || !tasks.length) { list.innerHTML = '<div class="empty-state">No tasks yet.</div>'; return; }
+    if (!tasks || !tasks.length) {
+      list.innerHTML = '<div class="empty-state">Awaiting task events...</div>';
+      return;
+    }
 
-    // Show newest first
-    const sorted = [...tasks].reverse();
-    list.innerHTML = sorted.map(t => {
-      const isCoord = t.runtime === 'coordinator';
-      const hasResult = t.result && t.result.length > 0;
-      return '<div class="task-entry'+(isCoord?' is-coordinator':'')+'">' +
-        '<div class="task-header">' +
-          '<span class="task-agent">'+(isCoord?'🧠 ':'')+esc(t.agent)+'</span>' +
-          '<span class="task-status task-status-'+(t.status||'queued')+'">'+esc(t.status)+'</span>' +
-        '</div>' +
-        '<div class="task-desc">'+esc(trunc(t.description, 80))+'</div>' +
-        (t.runtime ? '<div class="task-runtime">via <span class="rt-badge">'+esc(t.runtime)+'</span></div>' : '') +
-        (hasResult ? '<div class="task-result show">'+esc(trunc(t.result, 200))+'</div>' : '') +
-        '<div class="task-time">'+fmtTime(t.submitted_at) +
-          (t.completed_at && !t.completed_at.startsWith('0001') ? ' → '+fmtTime(t.completed_at) : '') +
-        '</div>' +
-      '</div>';
+    // Show newest first, limit to recent tasks
+    const sorted = [...tasks].reverse().slice(0, 20);
+    list.innerHTML = sorted.map(task => {
+      const isCoord = task.runtime === 'coordinator';
+      return `
+        <div class="task-entry ${isCoord ? 'is-coordinator' : ''}">
+          <div class="task-header">
+            <span class="task-agent">${isCoord ? '🧠 ' : ''}${esc(task.agent)}</span>
+            <span class="task-status task-status-${task.status || 'queued'}">${esc(task.status)}</span>
+          </div>
+          <div class="task-desc">${esc(trunc(task.description, 100))}</div>
+          <div class="task-time">
+            ${fmtTime(task.submitted_at)}${task.completed_at && !task.completed_at.startsWith('0001') 
+              ? ' → ' + fmtTime(task.completed_at) 
+              : ''}
+          </div>
+        </div>
+      `;
     }).join('');
   }
 
-  async function get(u) { const r = await fetch(u); if (!r.ok) throw r.status; return r.json(); }
+  async function get(url) {
+    const response = await fetch(url);
+    if (!response.ok) throw response.status;
+    return response.json();
+  }
 
   async function poll() {
     try {
       const [health, agents, stats, tasks, peers] = await Promise.all([
-        get('/api/health'), get('/api/agents'), get('/api/stats'),
-        get('/api/tasks'), get('/api/peers').catch(()=>({count:0}))
+        get('/api/health'),
+        get('/api/agents'),
+        get('/api/stats'),
+        get('/api/tasks'),
+        get('/api/peers').catch(() => ({ count: 0 }))
       ]);
+
       failCount = 0;
       document.getElementById('disconnected').classList.remove('show');
 
-      document.getElementById('version').textContent = 'v'+(health.version||'0.1.0');
-      document.getElementById('uptime').textContent = 'Uptime: '+fmt(stats.uptime_seconds);
-      document.getElementById('agent-count').textContent = (agents.count||0)+' agent'+((agents.count||0)!==1?'s':'');
+      // Update header info
+      document.getElementById('version').textContent = `v${health.version || '0.1.0'}`;
+      document.getElementById('uptime').textContent = `Uptime: ${fmt(stats.uptime_seconds)}`;
+      document.getElementById('agent-count').textContent = 
+        `${agents.count || 0} agent${(agents.count || 0) !== 1 ? 's' : ''}`;
 
-      anim(document.getElementById('stat-completed'), stats.total_tasks_completed||0);
-      anim(document.getElementById('stat-failed'), stats.total_tasks_failed||0);
-      anim(document.getElementById('stat-active'), (stats.active_agents||0)+' / '+(stats.total_agents||0));
-      anim(document.getElementById('stat-capacity'), stats.average_capacity!=null?(stats.average_capacity*100).toFixed(0)+'%':'--');
-      anim(document.getElementById('stat-queued'), stats.total_tasks_queued||0);
+      // Update swarm status
+      const swarmStatus = (agents.agents || []).length > 0 ? 'Active' : 'Dormant';
+      document.getElementById('swarm-status').textContent = swarmStatus;
 
-      // Evolution stats: aggregate from all agents
-      let totalXP = 0, totalSkills = new Set();
-      for (const a of (agents.agents||[])) {
-        if (a.evolution) {
-          const m = a.evolution.match(/experiences=(\d+)/);
-          if (m) totalXP += parseInt(m[1]);
-          const sm = a.evolution.match(/skills=\[([^\]]*)\]/);
-          if (sm) sm[1].split(', ').forEach(s => { const n = s.split('(')[0]; if(n) totalSkills.add(n); });
+      // Update statistics
+      anim(document.getElementById('stat-completed'), stats.total_tasks_completed || 0);
+      anim(document.getElementById('stat-failed'), stats.total_tasks_failed || 0);
+      anim(document.getElementById('stat-queued'), stats.total_tasks_queued || 0);
+
+      // Calculate evolution and balance stats
+      let totalXP = 0;
+      let totalSkills = new Set();
+      let totalBalance = 0;
+      let agentCount = 0;
+
+      for (const agent of (agents.agents || [])) {
+        if (agent.evolution) {
+          const evo = parseEvolution(agent.evolution);
+          totalXP += evo.experiences;
+          Object.keys(evo.skills).forEach(skill => totalSkills.add(skill));
+        }
+        if (agent.balance != null) {
+          totalBalance += agent.balance;
+          agentCount++;
         }
       }
+
       anim(document.getElementById('stat-evo-xp'), totalXP);
       anim(document.getElementById('stat-evo-skills'), totalSkills.size);
+      anim(document.getElementById('stat-avg-balance'), 
+           agentCount > 0 ? (totalBalance / agentCount).toFixed(2) : '0.00');
 
-      renderAgents(agents.agents||[]);
-      renderTasks(tasks.tasks||[]);
+      // Update network panel
+      document.getElementById('net-transport').textContent = stats.network_transport || 'local';
+      document.getElementById('net-peers').textContent = peers.count || 0;
+      document.getElementById('net-uptime').textContent = fmt(stats.uptime_seconds);
 
-      document.getElementById('net-transport').textContent = stats.network_transport||'local';
-      document.getElementById('net-peers').textContent = peers.count||0;
-    } catch(e) {
-      if (++failCount >= 3) document.getElementById('disconnected').classList.add('show');
+      // Render components
+      renderAgents(agents.agents || []);
+      renderCollective(agents.agents || []);
+      renderTasks(tasks.tasks || []);
+
+      globalSwarmData = { agents, stats, tasks, peers };
+
+    } catch (error) {
+      console.error('Polling error:', error);
+      if (++failCount >= 3) {
+        document.getElementById('disconnected').classList.add('show');
+      }
     }
   }
 
+  // Initial poll and start polling
   poll();
-  setInterval(poll, 2000);
+  setInterval(poll, 3000);
 })();
 </script>
 </body>
