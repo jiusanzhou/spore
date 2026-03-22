@@ -1077,6 +1077,49 @@ func (a *Agent) handleMessage(msg *protocol.Message) error {
 			}
 		}
 
+	case protocol.MsgContentAnnounce:
+		// Content-addressed experience: peer pinned content, we get CID
+		selfID := a.identity.PublicKeyHex()[:16]
+		if msg.From == selfID {
+			return nil
+		}
+		var ref network.ContentRef
+		if err := json.Unmarshal(msg.Payload, &ref); err != nil {
+			return fmt.Errorf("unmarshaling content ref: %w", err)
+		}
+
+		// Register provider so we can fetch later
+		if p2pBus, ok := a.bus.(*network.P2PBus); ok && p2pBus.Content != nil {
+			// Resolve sender's peer ID from peerMap
+			p2pBus.RegisterProviderByAgent(ref.CID, msg.From)
+
+			// Fetch and absorb if it's an experience digest
+			if ref.Type == "experience_digest" && a.evolution != nil {
+				var digest ExperienceDigest
+				if err := p2pBus.Content.GetJSON(ref.CID, &digest); err != nil {
+					fmt.Printf("⚠️  [%s] Failed to fetch content %s: %v\n", a.cfg.Agent.Name, ref.CID[:12], err)
+				} else {
+					fmt.Printf("📥 [%s] Fetched experience from collective memory: %s\n", a.cfg.Agent.Name, ref.CID[:12])
+					absorbed := a.evolution.AbsorbExperience(&digest)
+					if absorbed && a.tokens != nil && a.tokens.CanThink() {
+						payment := a.tokens.config.ShareReward
+						if payment > 0 {
+							payload := TokenTransferPayload{
+								FromAgent: selfID,
+								ToAgent:   msg.From,
+								Amount:    payment,
+								Reason:    "knowledge_absorbed",
+							}
+							if transferMsg, err := protocol.NewMessage(selfID, "broadcast", MsgTokenTransfer, payload); err == nil {
+								a.bus.Send(transferMsg)
+								a.identity.Debit(payment)
+							}
+						}
+					}
+				}
+			}
+		}
+
 	case protocol.MsgConsciousness:
 		// Receive peer's self-model
 		if a.collective != nil {

@@ -37,9 +37,10 @@ const (
 	MsgMemorySync    MessageType = "memory_sync"
 	MsgVote          MessageType = "vote"
 	MsgHeartbeat     MessageType = "heartbeat"
-	MsgConsciousness MessageType = "consciousness" // self-model sharing
-	MsgSpawnInit     MessageType = "spawn_init"
-	MsgSpawnAck      MessageType = "spawn_ack"
+	MsgConsciousness  MessageType = "consciousness" // self-model sharing
+	MsgSpawnInit      MessageType = "spawn_init"
+	MsgSpawnAck       MessageType = "spawn_ack"
+	MsgContentAnnounce MessageType = "content_announce" // CID-based content available
 )
 
 // Message is the standard inter-agent message envelope.

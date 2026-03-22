@@ -91,6 +91,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/stats", s.handleStats)
 	s.mux.HandleFunc("/api/tasks", s.handleTasks)
 	s.mux.HandleFunc("/api/events", s.handleSSE)
+	s.mux.HandleFunc("/api/content", s.handleContent)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -221,11 +222,15 @@ func (s *Server) handlePeers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	peers := p2pBus.ConnectedPeers()
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	result := map[string]interface{}{
 		"peer_id": p2pBus.PeerID(),
 		"peers":   peers,
 		"count":   len(peers),
-	})
+	}
+	if p2pBus.Content != nil {
+		result["content_store"] = p2pBus.Content.Stats()
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) handlePeerConnect(w http.ResponseWriter, r *http.Request) {
@@ -498,6 +503,26 @@ func (s *Server) handleAgentReputation(w http.ResponseWriter, r *http.Request, n
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"records": rep.All(),
+	})
+}
+
+func (s *Server) handleContent(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	bus := s.sw.Bus()
+	p2pBus, ok := bus.(*network.P2PBus)
+	if !ok || p2pBus.Content == nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"items": []interface{}{},
+			"stats": map[string]interface{}{},
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"items": p2pBus.Content.ListRefs(),
+		"stats": p2pBus.Content.Stats(),
 	})
 }
 

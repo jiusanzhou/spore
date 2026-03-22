@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"go.zoe.im/spore/internal/memory"
+	"go.zoe.im/spore/internal/network"
 	"go.zoe.im/spore/internal/protocol"
 
 	"gopkg.in/yaml.v2"
@@ -370,12 +371,24 @@ func (a *Agent) ShareExperience() error {
 		return nil // not enough experience to share
 	}
 
-	msg, err := protocol.NewMessage(
-		a.identity.PublicKeyHex()[:16],
-		"broadcast",
-		protocol.MsgMemorySync,
-		digest,
-	)
+	selfID := a.identity.PublicKeyHex()[:16]
+
+	// Try content-addressed sharing first (pin to collective memory, broadcast CID).
+	if p2pBus, ok := a.bus.(*network.P2PBus); ok && p2pBus.Content != nil {
+		ref, err := p2pBus.Content.PutJSON(digest, "experience_digest", selfID,
+			fmt.Sprintf("%s: %d tasks, %.0f%% success", a.cfg.Agent.Name, digest.TotalTasks, digest.SuccessRate*100))
+		if err == nil {
+			msg, err := protocol.NewMessage(selfID, "broadcast", protocol.MsgContentAnnounce, ref)
+			if err == nil {
+				fmt.Printf("📦 [%s] Pinned experience to collective memory: %s\n", a.cfg.Agent.Name, ref.CID[:12])
+				return a.bus.Send(msg)
+			}
+		}
+		// Fall through to legacy if content store fails.
+	}
+
+	// Legacy: broadcast raw digest via GossipSub.
+	msg, err := protocol.NewMessage(selfID, "broadcast", protocol.MsgMemorySync, digest)
 	if err != nil {
 		return fmt.Errorf("creating experience share message: %w", err)
 	}

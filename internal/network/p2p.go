@@ -82,6 +82,9 @@ type P2PBus struct {
 	// Privacy filter
 	privacyFilter *ethics.PrivacyFilter
 	privacyMode   string // warn, sanitize, reject
+
+	// Content-addressed collective memory
+	Content *ContentStore
 }
 
 // ParsePeerID parses a string into a libp2p peer.ID.
@@ -237,6 +240,9 @@ func NewP2PBus(cfg P2PConfig) (*P2PBus, error) {
 	if _, err := bus.JoinTopic(capabilitiesTopic); err != nil {
 		fmt.Printf("warning: join capabilities topic failed: %v\n", err)
 	}
+
+	// Initialize content-addressed collective memory.
+	bus.Content = NewContentStore(bus)
 
 	return bus, nil
 }
@@ -599,6 +605,21 @@ func (b *P2PBus) ConnectedPeers() []string {
 		ids[i] = p.String()
 	}
 	return ids
+}
+
+// RegisterProviderByAgent registers an agent as a content provider by looking up its peer ID.
+func (b *P2PBus) RegisterProviderByAgent(cid, agentID string) {
+	if b.Content == nil {
+		return
+	}
+	b.mu.RLock()
+	peerID, ok := b.peerMap[agentID]
+	b.mu.RUnlock()
+	if ok {
+		b.Content.RegisterProvider(cid, peerID)
+	}
+	// Also register self (for same-process agents).
+	b.Content.RegisterProvider(cid, b.host.ID())
 }
 
 // Agents returns the list of registered agent IDs.
