@@ -49,6 +49,8 @@ a { color: var(--accent); text-decoration: none; }
 
 .theme-toggle { background: none; border: 1px solid var(--border); color: var(--text); width: 34px; height: 34px; border-radius: 8px; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; transition: border-color var(--transition); }
 .theme-toggle:hover { border-color: var(--accent); }
+.lang-toggle { background: none; border: 1px solid var(--border); color: var(--text); height: 34px; padding: 0 10px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; font-family: var(--font); display: flex; align-items: center; justify-content: center; transition: border-color var(--transition); }
+.lang-toggle:hover { border-color: var(--accent); }
 
 /* ── Tabs ──────────────────────────────────────────────── */
 .tab-bar { display: flex; gap: 0; padding: 0 28px; border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; z-index: 100; }
@@ -207,36 +209,37 @@ a { color: var(--accent); text-decoration: none; }
 <!-- Header -->
 <header class="header">
   <div class="header-left">
-    <span class="header-title">&#x1F9A0; Spore Swarm</span>
-    <span class="badge badge-online" id="hdr-online">Online</span>
+    <span class="header-title" data-i18n="title">🦠 Spore Swarm</span>
+    <span class="badge badge-online" id="hdr-online" data-i18n="online">Online</span>
     <span class="badge badge-peers" id="hdr-peers">0 peers</span>
   </div>
   <div class="header-right">
     <div class="header-stats">
-      <div class="stat"><span class="stat-val" id="hdr-agents">0</span><span class="stat-label">Agents</span></div>
-      <div class="stat"><span class="stat-val" id="hdr-tasks">0</span><span class="stat-label">Tasks</span></div>
-      <div class="stat"><span class="stat-val" id="hdr-uptime">0s</span><span class="stat-label">Uptime</span></div>
-      <div class="stat"><span class="stat-val" id="hdr-content">0</span><span class="stat-label">Content</span></div>
+      <div class="stat"><span class="stat-val" id="hdr-agents">0</span><span class="stat-label" data-i18n="agents">Agents</span></div>
+      <div class="stat"><span class="stat-val" id="hdr-tasks">0</span><span class="stat-label" data-i18n="tasks">Tasks</span></div>
+      <div class="stat"><span class="stat-val" id="hdr-uptime">0s</span><span class="stat-label" data-i18n="uptime">Uptime</span></div>
+      <div class="stat"><span class="stat-val" id="hdr-content">0</span><span class="stat-label" data-i18n="content">Content</span></div>
     </div>
+    <button class="lang-toggle" id="lang-btn" title="切换语言 / Switch language">中</button>
     <button class="theme-toggle" id="theme-btn" title="Toggle theme">&#x1F319;</button>
   </div>
 </header>
 
 <!-- Tab Bar -->
 <nav class="tab-bar">
-  <button class="tab-btn active" data-tab="agents">Agents</button>
-  <button class="tab-btn" data-tab="collective">Collective</button>
-  <button class="tab-btn" data-tab="memory">Memory</button>
-  <button class="tab-btn" data-tab="activity">Activity</button>
+  <button class="tab-btn active" data-tab="agents" data-i18n="tab_agents">Agents</button>
+  <button class="tab-btn" data-tab="collective" data-i18n="tab_collective">Collective</button>
+  <button class="tab-btn" data-tab="memory" data-i18n="tab_memory">Memory</button>
+  <button class="tab-btn" data-tab="activity" data-i18n="tab_activity">Activity</button>
 </nav>
 
 <!-- Task Submission Bar -->
 <div class="task-bar" id="task-bar">
   <div class="task-bar-inner">
     <select class="task-agent-select" id="task-agent">
-      <option value="">Swarm (auto)</option>
+      <option value="" data-i18n="swarm_auto">Swarm (auto)</option>
     </select>
-    <input type="text" class="task-input" id="task-input" placeholder="Describe a task for the swarm..." autocomplete="off" />
+    <input type="text" class="task-input" id="task-input" placeholder="Describe a task for the swarm..." data-i18n-placeholder="task_placeholder" autocomplete="off" />
     <button class="task-submit-btn" id="task-submit" title="Submit task">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M8 2l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
@@ -259,7 +262,7 @@ a { color: var(--accent); text-decoration: none; }
   <div class="memory-stats" id="mem-stats"></div>
   <div class="memory-table-wrap">
     <table class="memory-table">
-      <thead><tr><th>Agent</th><th>Summary</th><th>SHA-256</th><th>IPFS CID</th><th>Size</th><th>Time</th></tr></thead>
+      <thead><tr><th data-i18n="col_agent">Agent</th><th data-i18n="col_summary">Summary</th><th>SHA-256</th><th>IPFS CID</th><th data-i18n="col_size">Size</th><th data-i18n="col_time">Time</th></tr></thead>
       <tbody id="mem-tbody"></tbody>
     </table>
   </div>
@@ -285,6 +288,97 @@ a { color: var(--accent); text-decoration: none; }
    Spore Swarm Dashboard — Client Logic
    ═══════════════════════════════════════════════════════════ */
 
+// ── i18n ──────────────────────────────────────────────────
+const I18N = {
+  en: {
+    title: '🦠 Spore Swarm', online: 'Online', offline: 'Offline', peers: 'peers',
+    agents: 'Agents', tasks: 'Tasks', uptime: 'Uptime', content: 'Content',
+    tab_agents: 'Agents', tab_collective: 'Collective', tab_memory: 'Memory', tab_activity: 'Activity',
+    swarm_auto: 'Swarm (auto)', task_placeholder: 'Describe a task for the swarm...',
+    submitting: 'Submitting...', task_queued: '✓ Task queued →',
+    no_agents: 'No agents connected', no_activity: 'No activity yet',
+    no_memory: 'No collective memory yet',
+    awareness: 'Awareness', evolution: 'Evolution', context_memory: 'Context Memory',
+    personality: 'Personality', purpose: 'Purpose', narrative: 'Narrative',
+    mood: 'Mood', energy: 'Energy', morale: 'Morale',
+    strengths: 'Strengths', weaknesses: 'Weaknesses',
+    swarm_role: 'Swarm Role', decision_style: 'Decision Style',
+    experience: 'Experience', success_rate: 'Success Rate',
+    skill_confidence: 'Skill Confidence', preferred_runtime: 'Preferred Runtime',
+    profile: 'profile', preferences: 'preferences', entities: 'entities',
+    events: 'events', cases: 'cases', patterns: 'patterns',
+    loading: 'Loading...', no_entries: 'No entries',
+    collective_title: 'Collective Consciousness',
+    swarm_personality: 'Swarm Personality', swarm_purpose: 'Swarm Purpose',
+    swarm_narrative: 'Collective Narrative', emergent_roles: 'Emergent Roles',
+    explorers: 'Explorers', creators: 'Creators', connectors: 'Connectors',
+    avg_energy: 'Avg Energy', avg_morale: 'Avg Morale', diversity: 'Diversity',
+    memory_title: 'Collective Memory & IPFS',
+    total_items: 'Items', total_bytes: 'Bytes', persistent: 'Persistent',
+    cache_items: 'Cached', providers: 'Providers',
+    col_agent: 'Agent', col_summary: 'Summary', col_sha256: 'SHA-256',
+    col_ipfs: 'IPFS CID', col_size: 'Size', col_time: 'Time',
+    copied: 'Copied!', click_copy: 'Click to copy CID',
+    sse_connected: 'Connected', sse_disconnected: 'Disconnected', last_update: 'Last update',
+    idle: 'idle', running: 'running', queued: 'queued', completed: 'completed', failed: 'failed',
+    credits: 'credits',
+  },
+  zh: {
+    title: '🦠 Spore 群体', online: '在线', offline: '离线', peers: '节点',
+    agents: '智能体', tasks: '任务', uptime: '运行时间', content: '内容',
+    tab_agents: '智能体', tab_collective: '集体意识', tab_memory: '集体记忆', tab_activity: '活动',
+    swarm_auto: '群体（自动）', task_placeholder: '输入任务描述...',
+    submitting: '提交中...', task_queued: '✓ 已提交 →',
+    no_agents: '暂无智能体', no_activity: '暂无活动',
+    no_memory: '暂无集体记忆',
+    awareness: '自我意识', evolution: '进化', context_memory: '结构化记忆',
+    personality: '人格', purpose: '目标', narrative: '叙事',
+    mood: '心情', energy: '精力', morale: '士气',
+    strengths: '优势', weaknesses: '弱点',
+    swarm_role: '群体角色', decision_style: '决策风格',
+    experience: '经验', success_rate: '成功率',
+    skill_confidence: '技能置信度', preferred_runtime: '偏好运行时',
+    profile: '档案', preferences: '偏好', entities: '同伴',
+    events: '事件', cases: '案例', patterns: '模式',
+    loading: '加载中...', no_entries: '暂无记录',
+    collective_title: '集体意识',
+    swarm_personality: '群体人格', swarm_purpose: '群体目标',
+    swarm_narrative: '集体叙事', emergent_roles: '涌现角色',
+    explorers: '探索者', creators: '创造者', connectors: '连接者',
+    avg_energy: '平均精力', avg_morale: '平均士气', diversity: '多样性',
+    memory_title: '集体记忆 & IPFS',
+    total_items: '条目', total_bytes: '大小', persistent: '持久化',
+    cache_items: '缓存', providers: '提供者',
+    col_agent: '智能体', col_summary: '摘要', col_sha256: 'SHA-256',
+    col_ipfs: 'IPFS CID', col_size: '大小', col_time: '时间',
+    copied: '已复制！', click_copy: '点击复制 CID',
+    sse_connected: '已连接', sse_disconnected: '已断开', last_update: '最后更新',
+    idle: '空闲', running: '执行中', queued: '排队中', completed: '已完成', failed: '失败',
+    credits: '积分',
+  }
+};
+
+let currentLang = localStorage.getItem('spore-lang') || 'en';
+function t(key) { return (I18N[currentLang] || I18N.en)[key] || (I18N.en[key]) || key; }
+function setLang(lang) {
+  currentLang = lang;
+  localStorage.setItem('spore-lang', lang);
+  applyI18n();
+  if (state) render();
+}
+function applyI18n() {
+  // Update all elements with data-i18n attribute
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    el.placeholder = t(el.dataset.i18nPlaceholder);
+  });
+  // Update lang toggle button
+  const langBtn = document.getElementById('lang-btn');
+  if (langBtn) langBtn.textContent = currentLang === 'zh' ? 'EN' : '中';
+}
+
 // ── State ─────────────────────────────────────────────────
 let state = null;
 let contextCache = {};  // agentName -> {data, ts}
@@ -302,6 +396,12 @@ themeBtn.addEventListener('click', () => {
   localStorage.setItem('spore-theme', next);
   updateThemeIcon();
 });
+
+// Language toggle
+document.getElementById('lang-btn').addEventListener('click', () => {
+  setLang(currentLang === 'zh' ? 'en' : 'zh');
+});
+applyI18n();
 
 function updateThemeIcon() {
   themeBtn.textContent = html.dataset.theme === 'light' ? '\u2600\uFE0F' : '\uD83C\uDF19';
@@ -416,7 +516,7 @@ function renderAgents() {
   const grid = document.getElementById('agents-grid');
   const agents = state.agents || [];
 
-  if (!agents.length) { grid.innerHTML = '<p class="empty">No agents connected</p>'; return; }
+  if (!agents.length) { grid.innerHTML = '<p class="empty">' + t('no_agents') + '</p>'; return; }
 
   // Track existing cards
   const existing = new Map();
@@ -460,7 +560,7 @@ function patchAgentCard(card, a) {
     if (pers) pers.textContent = a.self?.personality || a.role || '';
     const sb = hdr.querySelector('.status-badge');
     if (sb) {
-      sb.textContent = a.status || 'idle';
+      sb.textContent = t(a.status || 'idle');
       sb.className = 'status-badge status-' + (a.status || 'idle');
     }
   }
@@ -479,7 +579,7 @@ function patchAgentCard(card, a) {
   const ecoLine = card.querySelector('.economy-line');
   if (ecoLine && a.economy) {
     const health = a.economy.health || 'good';
-    ecoLine.innerHTML = '<strong>' + (a.economy.balance || 0).toFixed(1) + '</strong> credits <span class="health-badge health-' + health + '">' + health + '</span>';
+    ecoLine.innerHTML = '<strong>' + (a.economy.balance || 0).toFixed(1) + '</strong> ' + t('credits') + ' <span class="health-badge health-' + health + '">' + health + '</span>';
   }
 
   // Update drawer if open
@@ -494,23 +594,23 @@ function agentCardHTML(a) {
   return `
     <div class="agent-card-header">
       <div><span class="agent-name">${esc(a.name)}</span><span class="agent-personality">${esc(a.self?.personality || a.role || '')}</span></div>
-      <span class="status-badge status-${status}">${status}</span>
+      <span class="status-badge status-${status}">${t(status)}</span>
     </div>
     <div class="agent-card-body">
       <div class="radar-wrap">${a.drives ? radarSVG(a.drives) : ''}</div>
       <div class="skills-economy">
         <div class="skill-tags">${(a.skills || []).map(s => '<span class="skill-tag">' + esc(s) + '</span>').join('')}</div>
         <div class="economy-line">
-          <strong>${(a.economy?.balance || 0).toFixed(1)}</strong> credits
+          <strong>${(a.economy?.balance || 0).toFixed(1)}</strong> ${t('credits')}
           <span class="health-badge health-${health}">${health}</span>
         </div>
       </div>
     </div>
     <div class="agent-drawer">
       <div class="drawer-tabs">
-        <button class="drawer-tab active" data-dtab="awareness">Awareness</button>
-        <button class="drawer-tab" data-dtab="evolution">Evolution</button>
-        <button class="drawer-tab" data-dtab="context">Context Memory</button>
+        <button class="drawer-tab active" data-dtab="awareness">${t('awareness')}</button>
+        <button class="drawer-tab" data-dtab="evolution">${t('evolution')}</button>
+        <button class="drawer-tab" data-dtab="context">${t('context_memory')}</button>
       </div>
       <div class="drawer-panel active" data-dpanel="awareness"></div>
       <div class="drawer-panel" data-dpanel="evolution"></div>
@@ -570,18 +670,18 @@ function awarenessHTML(a) {
   const mood = (s.mood || 0) * 100, energy = (s.energy || 0) * 100, morale = (s.morale || 0) * 100;
   return `
     <div class="awareness-grid">
-      <div class="awareness-item"><label>Purpose</label><div class="val">${esc(s.purpose || '-')}</div></div>
-      <div class="awareness-item"><label>Decision Style</label><div class="val">${esc(s.decision_style || '-')}</div></div>
-      <div class="awareness-full"><label>Narrative</label><div class="val">${esc(s.narrative || '-')}</div></div>
+      <div class="awareness-item"><label>${t('purpose')}</label><div class="val">${esc(s.purpose || '-')}</div></div>
+      <div class="awareness-item"><label>${t('decision_style')}</label><div class="val">${esc(s.decision_style || '-')}</div></div>
+      <div class="awareness-full"><label>${t('narrative')}</label><div class="val">${esc(s.narrative || '-')}</div></div>
     </div>
     <div style="margin-top:12px">
-      <div class="progress-row"><label>Mood</label><div class="progress-bar"><div class="progress-fill" style="width:${mood}%;background:var(--accent)"></div></div><span style="font-size:11px;color:var(--dim);width:32px;text-align:right">${Math.round(mood)}%</span></div>
-      <div class="progress-row"><label>Energy</label><div class="progress-bar"><div class="progress-fill" style="width:${energy}%;background:var(--amber)"></div></div><span style="font-size:11px;color:var(--dim);width:32px;text-align:right">${Math.round(energy)}%</span></div>
-      <div class="progress-row"><label>Morale</label><div class="progress-bar"><div class="progress-fill" style="width:${morale}%;background:var(--green)"></div></div><span style="font-size:11px;color:var(--dim);width:32px;text-align:right">${Math.round(morale)}%</span></div>
+      <div class="progress-row"><label>${t('mood')}</label><div class="progress-bar"><div class="progress-fill" style="width:${mood}%;background:var(--accent)"></div></div><span style="font-size:11px;color:var(--dim);width:32px;text-align:right">${Math.round(mood)}%</span></div>
+      <div class="progress-row"><label>${t('energy')}</label><div class="progress-bar"><div class="progress-fill" style="width:${energy}%;background:var(--amber)"></div></div><span style="font-size:11px;color:var(--dim);width:32px;text-align:right">${Math.round(energy)}%</span></div>
+      <div class="progress-row"><label>${t('morale')}</label><div class="progress-bar"><div class="progress-fill" style="width:${morale}%;background:var(--green)"></div></div><span style="font-size:11px;color:var(--dim);width:32px;text-align:right">${Math.round(morale)}%</span></div>
     </div>
     <div style="margin-top:12px;display:flex;gap:24px">
-      <div><label style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:0.05em">Strengths</label><div class="tag-list" style="margin-top:4px">${(s.strengths || []).map(t => '<span class="tag-sm" style="background:rgba(16,185,129,0.1);color:var(--green)">' + esc(t) + '</span>').join('')}</div></div>
-      <div><label style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:0.05em">Weaknesses</label><div class="tag-list" style="margin-top:4px">${(s.weaknesses || []).map(t => '<span class="tag-sm" style="background:rgba(239,68,68,0.1);color:var(--red)">' + esc(t) + '</span>').join('')}</div></div>
+      <div><label style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:0.05em">${t('strengths')}</label><div class="tag-list" style="margin-top:4px">${(s.strengths || []).map(x => '<span class="tag-sm" style="background:rgba(16,185,129,0.1);color:var(--green)">' + esc(x) + '</span>').join('')}</div></div>
+      <div><label style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:0.05em">${t('weaknesses')}</label><div class="tag-list" style="margin-top:4px">${(s.weaknesses || []).map(x => '<span class="tag-sm" style="background:rgba(239,68,68,0.1);color:var(--red)">' + esc(x) + '</span>').join('')}</div></div>
     </div>`;
 }
 
@@ -604,10 +704,10 @@ function evolutionHTML(a) {
 
   return `
     <div class="evo-stats">
-      <div class="evo-stat">Experience: <strong>${xp}</strong></div>
-      <div class="evo-stat">Success Rate: <strong>${rate}%</strong></div>
+      <div class="evo-stat">${t('experience')}: <strong>${xp}</strong></div>
+      <div class="evo-stat">${t('success_rate')}: <strong>${rate}%</strong></div>
     </div>
-    ${skillBars || '<p style="font-size:12px;color:var(--dim)">No skill confidence data yet</p>'}`;
+    ${skillBars || '<p style="font-size:12px;color:var(--dim)">' + t('no_entries') + '</p>'}`;
 }
 
 async function loadContext(name, panel) {
@@ -733,18 +833,18 @@ function renderCollective() {
   let html = `<div class="collective-header"><h2>${esc(c.swarm_personality || 'Swarm')}</h2><p>${esc(c.swarm_purpose || '')}</p></div>`;
 
   if (c.narrative) {
-    html += `<div class="collective-section"><h3>Narrative</h3><p style="font-size:13px;color:var(--dim);max-width:600px">${esc(c.narrative)}</p></div>`;
+    html += `<div class="collective-section"><h3>${t('swarm_narrative')}</h3><p style="font-size:13px;color:var(--dim);max-width:600px">${esc(c.narrative)}</p></div>`;
   }
 
-  html += '<div class="collective-section"><h3>Emergent Roles</h3>';
-  if (c.explorers?.length) html += roleGroupHTML('Explorers', c.explorers, 'role-tag-explorer');
-  if (c.creators?.length) html += roleGroupHTML('Creators', c.creators, 'role-tag-creator');
-  if (c.connectors?.length) html += roleGroupHTML('Connectors', c.connectors, 'role-tag-connector');
+  html += '<div class="collective-section"><h3>' + t('emergent_roles') + '</h3>';
+  if (c.explorers?.length) html += roleGroupHTML(t('explorers'), c.explorers, 'role-tag-explorer');
+  if (c.creators?.length) html += roleGroupHTML(t('creators'), c.creators, 'role-tag-creator');
+  if (c.connectors?.length) html += roleGroupHTML(t('connectors'), c.connectors, 'role-tag-connector');
   html += '</div>';
 
-  html += `<div class="collective-section"><h3>Collective Mood</h3><div class="mood-bars">
-    <div class="progress-row"><label>Energy</label><div class="progress-bar"><div class="progress-fill" style="width:${avgEnergy}%;background:var(--amber)"></div></div><span style="font-size:11px;color:var(--dim);width:32px;text-align:right">${avgEnergy}%</span></div>
-    <div class="progress-row"><label>Morale</label><div class="progress-bar"><div class="progress-fill" style="width:${avgMorale}%;background:var(--green)"></div></div><span style="font-size:11px;color:var(--dim);width:32px;text-align:right">${avgMorale}%</span></div>
+  html += `<div class="collective-section"><h3>${t('mood')}</h3><div class="mood-bars">
+    <div class="progress-row"><label>${t('avg_energy')}</label><div class="progress-bar"><div class="progress-fill" style="width:${avgEnergy}%;background:var(--amber)"></div></div><span style="font-size:11px;color:var(--dim);width:32px;text-align:right">${avgEnergy}%</span></div>
+    <div class="progress-row"><label>${t('avg_morale')}</label><div class="progress-bar"><div class="progress-fill" style="width:${avgMorale}%;background:var(--green)"></div></div><span style="font-size:11px;color:var(--dim);width:32px;text-align:right">${avgMorale}%</span></div>
   </div></div>`;
 
   el.innerHTML = html;
@@ -763,10 +863,10 @@ function renderMemory() {
   // Stats cards
   const statsEl = document.getElementById('mem-stats');
   statsEl.innerHTML = `
-    <div class="mem-stat-card"><div class="val">${stats.items || 0}</div><div class="lbl">Total Items</div></div>
-    <div class="mem-stat-card"><div class="val">${fmtBytes(stats.total_bytes)}</div><div class="lbl">Total Size</div></div>
-    <div class="mem-stat-card"><div class="val">${stats.persistent ? '<span style="color:var(--green)">Yes</span>' : 'No'}</div><div class="lbl">Persistent</div></div>
-    <div class="mem-stat-card"><div class="val">${stats.cache_items || 0}</div><div class="lbl">Cache Items</div></div>`;
+    <div class="mem-stat-card"><div class="val">${stats.items || 0}</div><div class="lbl">${t('total_items')}</div></div>
+    <div class="mem-stat-card"><div class="val">${fmtBytes(stats.total_bytes)}</div><div class="lbl">${t('total_bytes')}</div></div>
+    <div class="mem-stat-card"><div class="val">${stats.persistent ? '<span style="color:var(--green)">✓</span>' : '✗'}</div><div class="lbl">${t('persistent')}</div></div>
+    <div class="mem-stat-card"><div class="val">${stats.cache_items || 0}</div><div class="lbl">${t('cache_items')}</div></div>`;
 
   // Table — deduplicate by summary, keep latest
   const deduped = new Map();
@@ -815,7 +915,7 @@ function renderActivity() {
     return new Date(tb) - new Date(ta);
   });
 
-  if (!tasks.length) { feed.innerHTML = '<p class="empty">No activity yet</p>'; return; }
+  if (!tasks.length) { feed.innerHTML = '<p class="empty">' + t('no_activity') + '</p>'; return; }
 
   // Preserve expanded state
   const expandedIds = new Set();
@@ -843,7 +943,7 @@ function renderActivity() {
       <div class="activity-body">
         <div class="activity-desc">${esc(t.description)}${expandable ? '<span class="expand-hint">' + (isExpanded ? '▾' : '▸') + '</span>' : ''}</div>
         <div class="activity-meta">
-          <span class="task-status task-${status}">${status}</span>
+          <span class="task-status task-${status}">${t(status)}</span>
           ${runtime ? '<span>' + esc(runtime) + '</span>' : ''}
           <span>${relTime(ts)}</span>
         </div>
