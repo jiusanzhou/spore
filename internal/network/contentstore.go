@@ -17,6 +17,7 @@
 package network
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -25,9 +26,13 @@ import (
 	"sync"
 	"time"
 
+	"go.zoe.im/spore/internal/network/ipfsnode"
+
+	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	mh "github.com/multiformats/go-multihash"
 )
 
 const (
@@ -38,19 +43,22 @@ const (
 // ContentRef is a reference to content stored in the collective memory.
 // Broadcast this via GossipSub — peers fetch the actual data on demand.
 type ContentRef struct {
-	CID       string `json:"cid"`       // SHA-256 hex of content
-	AgentID   string `json:"agent_id"`  // who published
-	Type      string `json:"type"`      // "experience_digest", "experience_pack", etc.
-	Size      int    `json:"size"`      // byte size
+	CID       string `json:"cid"`                  // SHA-256 hex of content
+	IPFSCID   string `json:"ipfs_cid,omitempty"`   // IPFS CIDv1 (Bitswap-addressable)
+	AgentID   string `json:"agent_id"`             // who published
+	Type      string `json:"type"`                 // "experience_digest", "experience_pack", etc.
+	Size      int    `json:"size"`                 // byte size
 	Timestamp int64  `json:"timestamp"`
-	Summary   string `json:"summary,omitempty"` // human-readable one-liner
+	Summary   string `json:"summary,omitempty"`    // human-readable one-liner
 }
 
-// ContentStore is a content-addressed store backed by SQLite + libp2p.
-// Local content is persisted to disk; remote content is fetched via libp2p streams.
+// ContentStore is a content-addressed store backed by SQLite + IPFS + libp2p.
+// Local content is persisted to disk via SQLite and published to IPFS for
+// global addressability. Remote content is fetched via Bitswap or libp2p streams.
 type ContentStore struct {
-	bus *P2PBus
-	db  *ContentDB // persistent storage (nil = in-memory only)
+	bus  *P2PBus
+	db   *ContentDB         // persistent storage (nil = in-memory only)
+	ipfs *ipfsnode.Node     // embedded IPFS node (nil = disabled)
 
 	// Hot cache: recently accessed items kept in memory for fast access.
 	cache   map[string][]byte
@@ -90,6 +98,17 @@ func NewContentStore(bus *P2PBus, dataDir string) *ContentStore {
 	// Register libp2p stream handler for content fetch requests.
 	bus.host.SetStreamHandler(protocol.ID(contentProtocol), cs.handleFetchStream)
 
+	// Initialize embedded IPFS node (Bitswap).
+	ipfsNode, err := ipfsnode.New(ipfsnode.Config{
+		Host: bus.host,
+	})
+	if err != nil {
+		fmt.Printf("⚠️  Content store: IPFS node init failed: %v (Bitswap disabled)\n", err)
+	} else {
+		cs.ipfs = ipfsNode
+		fmt.Printf("📦 IPFS node enabled (peer: %s)\n", bus.host.ID().String()[:16])
+	}
+
 	return cs
 }
 
@@ -111,7 +130,17 @@ func (cs *ContentStore) Put(data []byte, contentType, agentID, summary string) (
 		Summary:   summary,
 	}
 
-	// Persist to DB.
+	// Publish to IPFS (Bitswap-addressable).
+	if cs.ipfs != nil {
+		ipfsCID, err := cs.ipfs.AddRaw(data)
+		if err != nil {
+			fmt.Printf("⚠️  IPFS publish failed for %s: %v\n", cid[:12], err)
+		} else {
+			ref.IPFSCID = ipfsCID.String()
+		}
+	}
+
+	// Persist to DB (with IPFS CID if available).
 	if cs.db != nil {
 		if err := cs.db.Put(cid, data, ref); err != nil {
 			fmt.Printf("⚠️  Content store: DB write failed for %s: %v\n", cid[:12], err)
@@ -156,7 +185,30 @@ func (cs *ContentStore) Get(cid string) ([]byte, error) {
 		}
 	}
 
-	// 3. Fetch from a peer.
+	// 3. IPFS Bitswap (convert SHA-256 hex to IPFS CID).
+	if cs.ipfs != nil {
+		if ipfsCID, err := sha256HexToIPFSCID(cid); err == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			data, err := cs.ipfs.Get(ctx, ipfsCID)
+			if err == nil {
+				// Verify.
+				hash := sha256.Sum256(data)
+				if hex.EncodeToString(hash[:]) == cid {
+					// Persist locally.
+					cs.cacheMu.Lock()
+					cs.cache[cid] = data
+					cs.cacheMu.Unlock()
+					if cs.db != nil {
+						cs.db.Put(cid, data, ContentRef{CID: cid, Size: len(data), Timestamp: time.Now().Unix()})
+					}
+					return data, nil
+				}
+			}
+		}
+	}
+
+	// 4. Fetch from a peer (legacy libp2p protocol).
 	return cs.fetchFromPeer(cid)
 }
 
@@ -243,10 +295,26 @@ func (cs *ContentStore) Stats() map[string]interface{} {
 
 // Close releases persistent resources.
 func (cs *ContentStore) Close() error {
+	if cs.ipfs != nil {
+		cs.ipfs.Close()
+	}
 	if cs.db != nil {
 		return cs.db.Close()
 	}
 	return nil
+}
+
+// sha256HexToIPFSCID converts a SHA-256 hex string to an IPFS CIDv1.
+func sha256HexToIPFSCID(hexStr string) (cid.Cid, error) {
+	raw, err := hex.DecodeString(hexStr)
+	if err != nil {
+		return cid.Undef, err
+	}
+	hash, err := mh.Encode(raw, mh.SHA2_256)
+	if err != nil {
+		return cid.Undef, err
+	}
+	return cid.NewCidV1(cid.Raw, hash), nil
 }
 
 // fetchFromPeer tries to fetch content from a known provider.

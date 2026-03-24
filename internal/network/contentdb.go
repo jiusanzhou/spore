@@ -57,21 +57,27 @@ func migrateContentDB(db *sql.DB) error {
 			type       TEXT NOT NULL DEFAULT '',
 			size       INTEGER NOT NULL DEFAULT 0,
 			summary    TEXT NOT NULL DEFAULT '',
+			ipfs_cid   TEXT NOT NULL DEFAULT '',
 			pinned_at  INTEGER NOT NULL,
 			access_cnt INTEGER DEFAULT 0
 		);
 		CREATE INDEX IF NOT EXISTS idx_content_agent ON content(agent_id);
 		CREATE INDEX IF NOT EXISTS idx_content_type ON content(type);
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+	// Add ipfs_cid column if upgrading from older schema.
+	db.Exec("ALTER TABLE content ADD COLUMN ipfs_cid TEXT NOT NULL DEFAULT ''")
+	return nil
 }
 
 // Put stores a content item.
 func (cdb *ContentDB) Put(cid string, data []byte, ref ContentRef) error {
 	_, err := cdb.db.Exec(`
-		INSERT OR REPLACE INTO content (cid, data, agent_id, type, size, summary, pinned_at, access_cnt)
-		VALUES (?, ?, ?, ?, ?, ?, ?, 0)
-	`, cid, data, ref.AgentID, ref.Type, ref.Size, ref.Summary, time.Now().Unix())
+		INSERT OR REPLACE INTO content (cid, data, agent_id, type, size, summary, ipfs_cid, pinned_at, access_cnt)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+	`, cid, data, ref.AgentID, ref.Type, ref.Size, ref.Summary, ref.IPFSCID, time.Now().Unix())
 	return err
 }
 
@@ -81,9 +87,9 @@ func (cdb *ContentDB) Get(cid string) ([]byte, *ContentRef, error) {
 	var ref ContentRef
 	var pinnedAt int64
 	err := cdb.db.QueryRow(`
-		SELECT data, agent_id, type, size, summary, pinned_at
+		SELECT data, agent_id, type, size, summary, ipfs_cid, pinned_at
 		FROM content WHERE cid = ?
-	`, cid).Scan(&data, &ref.AgentID, &ref.Type, &ref.Size, &ref.Summary, &pinnedAt)
+	`, cid).Scan(&data, &ref.AgentID, &ref.Type, &ref.Size, &ref.Summary, &ref.IPFSCID, &pinnedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil, nil
 	}
@@ -107,7 +113,7 @@ func (cdb *ContentDB) Has(cid string) bool {
 // ListRefs returns all stored content references.
 func (cdb *ContentDB) ListRefs() []ContentRef {
 	rows, err := cdb.db.Query(`
-		SELECT cid, agent_id, type, size, summary, pinned_at
+		SELECT cid, agent_id, type, size, summary, ipfs_cid, pinned_at
 		FROM content ORDER BY pinned_at DESC
 	`)
 	if err != nil {
@@ -117,7 +123,7 @@ func (cdb *ContentDB) ListRefs() []ContentRef {
 	var refs []ContentRef
 	for rows.Next() {
 		var r ContentRef
-		rows.Scan(&r.CID, &r.AgentID, &r.Type, &r.Size, &r.Summary, &r.Timestamp)
+		rows.Scan(&r.CID, &r.AgentID, &r.Type, &r.Size, &r.Summary, &r.IPFSCID, &r.Timestamp)
 		refs = append(refs, r)
 	}
 	return refs
