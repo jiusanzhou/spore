@@ -1,7 +1,7 @@
 {
   "": {
     "agent_id": "",
-    "score": 0.35,
+    "score": 0.5,
     "tasks_completed": 0,
     "tasks_failed": 0,
     "tasks_timeout": 1,
@@ -12,7 +12,7 @@
   },
   "10e7733c4db351dc": {
     "agent_id": "10e7733c4db351dc",
-    "score": 0.04999999999999999,
+    "score": 0.5,
     "tasks_completed": 0,
     "tasks_failed": 0,
     "tasks_timeout": 3,
@@ -23,7 +23,7 @@
   },
   "82ac3f4c61622117": {
     "agent_id": "82ac3f4c61622117",
-    "score": 0.6275,
+    "score": 0.5,
     "tasks_completed": 3,
     "tasks_failed": 0,
     "tasks_timeout": 0,
@@ -34,7 +34,7 @@
   },
   "da65396e61a34c93": {
     "agent_id": "da65396e61a34c93",
-    "score": 0,
+    "score": 0.5,
     "tasks_completed": 0,
     "tasks_failed": 0,
     "tasks_timeout": 10,

@@ -45,6 +45,11 @@ func NewSQLiteStore(path string) (*SQLiteStore, error) {
 		return nil, fmt.Errorf("migrating sqlite: %w", err)
 	}
 
+	if err := migrateContext(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrating context table: %w", err)
+	}
+
 	return &SQLiteStore{db: db}, nil
 }
 

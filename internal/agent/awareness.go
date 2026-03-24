@@ -302,6 +302,9 @@ func (aw *Awareness) parseIntrospection(response string) {
 
 	fmt.Printf("🪞 [%s] Introspection complete — %s, mood: %s, purpose: %s\n",
 		aw.agent.cfg.Agent.Name, aw.self.Personality, aw.self.Mood, truncate(aw.self.Purpose, 50))
+
+	// Store profile in structured context memory
+	aw.storeProfileContext()
 }
 
 // localIntrospect performs rule-based self-reflection without LLM.
@@ -513,4 +516,45 @@ func formatDuration(d time.Duration) string {
 		return fmt.Sprintf("%dh%dm", int(d.Hours()), int(d.Minutes())%60)
 	}
 	return fmt.Sprintf("%dd%dh", int(d.Hours())/24, int(d.Hours())%24)
+}
+
+// storeProfileContext persists the current self-model as a structured profile memory.
+func (aw *Awareness) storeProfileContext() {
+	a := aw.agent
+	if a.memory == nil {
+		return
+	}
+	ctxStore, ok := a.memory.(memory.ContextStore)
+	if !ok {
+		return
+	}
+
+	agentID := a.identity.PublicKeyHex()[:16]
+
+	l0 := fmt.Sprintf("%s — %s, mood: %s", a.cfg.Agent.Name, aw.self.Personality, aw.self.Mood)
+	l1 := fmt.Sprintf("## %s\n\n**Personality**: %s\n**Purpose**: %s\n**Mood**: %s | Energy: %.0f%% | Morale: %.0f%%\n**Strengths**: %s\n**Weaknesses**: %s\n**Swarm Role**: %s\n**Decision Style**: %s\n\n### Narrative\n%s",
+		a.cfg.Agent.Name,
+		aw.self.Personality,
+		aw.self.Purpose,
+		aw.self.Mood,
+		aw.self.Energy*100,
+		aw.self.Morale*100,
+		strings.Join(aw.self.Strengths, ", "),
+		strings.Join(aw.self.Weaknesses, ", "),
+		aw.self.SwarmRole,
+		aw.self.DecisionStyle,
+		aw.self.Narrative)
+
+	entry := &memory.ContextEntry{
+		URI:      fmt.Sprintf("spore://%s/memory/profile", agentID),
+		AgentID:  agentID,
+		Type:     memory.CtxMemory,
+		Category: memory.CatProfile,
+		L0:       l0,
+		L1:       l1,
+		L2:       l1, // profile L2 same as L1 (no extra detail)
+		Source:   "introspection",
+	}
+
+	ctxStore.PutContext(entry)
 }

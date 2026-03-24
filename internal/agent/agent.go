@@ -527,6 +527,16 @@ func (a *Agent) SubmitTaskWithRuntime(description, runtimeName, workDir string) 
 	return entry.ID
 }
 
+// ID returns the agent's short ID (public key hex[:16]).
+func (a *Agent) ID() string {
+	return a.identity.PublicKeyHex()[:16]
+}
+
+// Memory returns the agent's memory store.
+func (a *Agent) Memory() memory.Store {
+	return a.memory
+}
+
 // Info returns the agent's current info.
 func (a *Agent) Info() Info {
 	a.mu.RLock()
@@ -1159,6 +1169,23 @@ func (a *Agent) registerPeer(ad *protocol.CapabilityAd) {
 			p2pBus.RegisterPeer(ad.AgentID, pid)
 		}
 	}
+
+	// Store peer as entity in structured memory
+	if ctxStore, ok := a.memory.(memory.ContextStore); ok {
+		selfID := a.identity.PublicKeyHex()[:16]
+		l0 := fmt.Sprintf("Peer %s: %s", ad.AgentID[:8], strings.Join(ad.Capabilities, ", "))
+		entry := &memory.ContextEntry{
+			URI:      fmt.Sprintf("spore://%s/memory/entities/%s", selfID, ad.AgentID),
+			AgentID:  selfID,
+			Type:     memory.CtxMemory,
+			Category: memory.CatEntities,
+			L0:       l0,
+			L1:       fmt.Sprintf("## Peer: %s\n\n**Skills**: %s\n**Capacity**: %.2f\n**Reputation**: %.2f\n**Last Seen**: %s", ad.AgentID, strings.Join(ad.Capabilities, ", "), ad.Capacity, ad.Reputation, time.Now().Format(time.RFC3339)),
+			Tags:     ad.Capabilities,
+			Source:   "capability_ad",
+		}
+		ctxStore.PutContext(entry)
+	}
 }
 
 // rememberTask stores a completed task as a memory entry for experience building.
@@ -1166,10 +1193,13 @@ func (a *Agent) rememberTask(entry *taskEntry, output *runtime.TaskOutput, rtNam
 	if a.memory == nil {
 		return
 	}
+	agentID := a.identity.PublicKeyHex()[:16]
+
+	// Legacy flat memory (backward compat)
 	memEntry := &memory.Entry{
-		AgentID: a.identity.PublicKeyHex()[:16],
+		AgentID: agentID,
 		Key:     "task:" + entry.ID,
-		Value:   fmt.Sprintf("Task: %s\nResult: %s", entry.Description, truncate(output.Result, 500)),
+		Value:   fmt.Sprintf("Task: %s\nResult: %s", entry.Description, truncate(output.Result, 4000)),
 		Metadata: map[string]string{
 			"type":    "task_experience",
 			"task_id": entry.ID,
@@ -1178,8 +1208,44 @@ func (a *Agent) rememberTask(entry *taskEntry, output *runtime.TaskOutput, rtNam
 		},
 	}
 	if err := a.memory.Put(memEntry); err != nil {
-		// Non-fatal: log and continue
 		fmt.Printf("⚠️  [%s] Failed to store task memory: %v\n", a.cfg.Agent.Name, err)
+	}
+
+	// Structured context memory (new)
+	ctxStore, ok := a.memory.(memory.ContextStore)
+	if !ok {
+		return
+	}
+
+	// Store as a case (problem + solution)
+	l0 := truncate(entry.Description, 100)
+	skills := a.cfg.Agent.Skills
+	l1 := fmt.Sprintf("## Case: %s\n\n**Runtime**: %s\n**Skills**: %s\n\n### Problem\n%s\n\n### Solution\n%s",
+		truncate(entry.Description, 80),
+		rtName,
+		strings.Join(skills, ", "),
+		entry.Description,
+		truncate(output.Result, 2000))
+	l2 := fmt.Sprintf("Task: %s\n\nFull Result:\n%s", entry.Description, output.Result)
+
+	caseEntry := &memory.ContextEntry{
+		URI:      fmt.Sprintf("spore://%s/memory/cases/%s", agentID, entry.ID),
+		AgentID:  agentID,
+		Type:     memory.CtxMemory,
+		Category: memory.CatCases,
+		L0:       l0,
+		L1:       l1,
+		L2:       l2,
+		Tags:     skills,
+		Source:   "task:" + entry.ID,
+		Metadata: map[string]string{
+			"runtime": rtName,
+		},
+	}
+	if err := ctxStore.PutContext(caseEntry); err != nil {
+		fmt.Printf("⚠️  [%s] Failed to store case memory: %v\n", a.cfg.Agent.Name, err)
+	} else {
+		fmt.Printf("🧠 [%s] Stored case: %s\n", a.cfg.Agent.Name, l0)
 	}
 }
 

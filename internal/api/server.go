@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"go.zoe.im/spore/internal/memory"
 	"go.zoe.im/spore/internal/network"
 	"go.zoe.im/spore/internal/swarm"
 )
@@ -154,6 +155,8 @@ func (s *Server) handleAgentRoute(w http.ResponseWriter, r *http.Request) {
 		s.handleAgentEconomy(w, r, name)
 	case "reputation":
 		s.handleAgentReputation(w, r, name)
+	case "context":
+		s.handleAgentContext(w, r, name)
 	default:
 		http.Error(w, "not found", http.StatusNotFound)
 	}
@@ -503,6 +506,58 @@ func (s *Server) handleAgentReputation(w http.ResponseWriter, r *http.Request, n
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"records": rep.All(),
+	})
+}
+
+func (s *Server) handleAgentContext(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	a := s.sw.GetAgent(name)
+	if a == nil {
+		http.Error(w, "agent not found", http.StatusNotFound)
+		return
+	}
+	mem := a.Memory()
+	if mem == nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"entries": []interface{}{}, "stats": map[string]int{}})
+		return
+	}
+	ctxStore, ok := mem.(memory.ContextStore)
+	if !ok {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"entries": []interface{}{}, "stats": map[string]int{}, "note": "context store not available"})
+		return
+	}
+
+	agentID := a.ID()
+	category := r.URL.Query().Get("category")
+	ctxType := r.URL.Query().Get("type")
+	query := r.URL.Query().Get("q")
+
+	var entries []*memory.ContextEntry
+	var err error
+
+	if query != "" {
+		entries, err = ctxStore.SearchContext(query, memory.ContextType(ctxType), memory.MemoryCategory(category), 50)
+	} else if category != "" {
+		entries, err = ctxStore.ListByCategory(agentID, memory.MemoryCategory(category), 50)
+	} else if ctxType != "" {
+		entries, err = ctxStore.ListByType(agentID, memory.ContextType(ctxType), 50)
+	} else {
+		// Return all categories with stats
+		entries, err = ctxStore.ListByType(agentID, memory.CtxMemory, 100)
+	}
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	stats := ctxStore.ContextStats(agentID)
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"entries": entries,
+		"stats":   stats,
 	})
 }
 
