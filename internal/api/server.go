@@ -277,13 +277,48 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"tasks": s.sw.TaskLog(),
+		})
+	case http.MethodPost:
+		var req struct {
+			Agent       string `json:"agent"`       // target agent name (empty = broadcast to swarm)
+			Description string `json:"description"` // task description
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		if req.Description == "" {
+			http.Error(w, "description is required", http.StatusBadRequest)
+			return
+		}
+
+		if req.Agent == "" {
+			// Broadcast: pick first agent and let it coordinate via stigmergic market
+			agents := s.sw.List()
+			if len(agents) == 0 {
+				http.Error(w, "no agents available", http.StatusServiceUnavailable)
+				return
+			}
+			req.Agent = agents[0].Name
+		}
+
+		taskID, err := s.sw.SendTask(req.Agent, req.Description)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"task_id": taskID,
+			"agent":   req.Agent,
+			"status":  "queued",
+		})
+	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"tasks": s.sw.TaskLog(),
-	})
 }
 
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {

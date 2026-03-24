@@ -52,6 +52,18 @@ a { color: var(--accent); text-decoration: none; }
 
 /* ── Tabs ──────────────────────────────────────────────── */
 .tab-bar { display: flex; gap: 0; padding: 0 28px; border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; z-index: 100; }
+.task-bar { padding: 12px 28px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.task-bar-inner { display: flex; gap: 8px; align-items: center; max-width: 800px; }
+.task-agent-select { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 13px; font-family: var(--font); min-width: 120px; cursor: pointer; }
+.task-input { flex: 1; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; font-size: 13px; font-family: var(--font); outline: none; transition: border-color var(--transition); }
+.task-input:focus { border-color: var(--accent); }
+.task-input::placeholder { color: var(--dim); }
+.task-submit-btn { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 8px 14px; cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 13px; font-family: var(--font); transition: opacity var(--transition); }
+.task-submit-btn:hover { opacity: 0.85; }
+.task-submit-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.task-feedback { font-size: 12px; margin-top: 6px; min-height: 16px; }
+.task-feedback.success { color: var(--green); }
+.task-feedback.error { color: var(--red); }
 .tab-btn { padding: 12px 20px; font-size: 13px; font-weight: 500; color: var(--dim); background: none; border: none; cursor: pointer; border-bottom: 2px solid transparent; transition: color var(--transition), border-color var(--transition); font-family: var(--font); }
 .tab-btn:hover { color: var(--text); }
 .tab-btn.active { color: var(--text); border-bottom-color: var(--accent); }
@@ -213,6 +225,20 @@ a { color: var(--accent); text-decoration: none; }
   <button class="tab-btn" data-tab="memory">Memory</button>
   <button class="tab-btn" data-tab="activity">Activity</button>
 </nav>
+
+<!-- Task Submission Bar -->
+<div class="task-bar" id="task-bar">
+  <div class="task-bar-inner">
+    <select class="task-agent-select" id="task-agent">
+      <option value="">Swarm (auto)</option>
+    </select>
+    <input type="text" class="task-input" id="task-input" placeholder="Describe a task for the swarm..." autocomplete="off" />
+    <button class="task-submit-btn" id="task-submit" title="Submit task">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M8 2l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+  <div class="task-feedback" id="task-feedback"></div>
+</div>
 
 <!-- Tab: Agents -->
 <section class="tab-content active" id="tab-agents">
@@ -804,6 +830,75 @@ function renderActivity() {
     </div>`;
   }).join('');
 }
+
+// === Task Submission ===
+const taskInput = document.getElementById('task-input');
+const taskAgent = document.getElementById('task-agent');
+const taskSubmit = document.getElementById('task-submit');
+const taskFeedback = document.getElementById('task-feedback');
+
+// Populate agent select from SSE state
+function updateAgentSelect() {
+  const agents = state.agents || [];
+  const current = taskAgent.value;
+  const opts = '<option value="">Swarm (auto)</option>' +
+    agents.map(a => '<option value="' + esc(a.name) + '">' + esc(a.name) + '</option>').join('');
+  if (taskAgent.innerHTML !== opts) {
+    taskAgent.innerHTML = opts;
+    taskAgent.value = current;
+  }
+}
+
+async function submitTask() {
+  const desc = taskInput.value.trim();
+  if (!desc) return;
+
+  taskSubmit.disabled = true;
+  taskFeedback.textContent = 'Submitting...';
+  taskFeedback.className = 'task-feedback';
+
+  try {
+    const body = { description: desc };
+    if (taskAgent.value) body.agent = taskAgent.value;
+
+    const res = await fetch('/api/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(err);
+    }
+
+    const data = await res.json();
+    taskFeedback.textContent = '✓ Task queued → ' + data.agent + ' (' + data.task_id.substring(0, 8) + ')';
+    taskFeedback.className = 'task-feedback success';
+    taskInput.value = '';
+  } catch (e) {
+    taskFeedback.textContent = '✗ ' + e.message;
+    taskFeedback.className = 'task-feedback error';
+  } finally {
+    taskSubmit.disabled = false;
+    setTimeout(() => { taskFeedback.textContent = ''; }, 5000);
+  }
+}
+
+taskSubmit.addEventListener('click', submitTask);
+taskInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    submitTask();
+  }
+});
+
+// Hook updateAgentSelect into SSE render cycle
+const _origRender = render;
+render = function() {
+  _origRender();
+  updateAgentSelect();
+};
 </script>
 </body>
 </html>
