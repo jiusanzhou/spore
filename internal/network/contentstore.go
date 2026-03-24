@@ -46,34 +46,45 @@ type ContentRef struct {
 	Summary   string `json:"summary,omitempty"` // human-readable one-liner
 }
 
-// contentItem is stored locally.
-type contentItem struct {
-	Data      []byte
-	Ref       ContentRef
-	PinnedAt  time.Time
-	AccessCnt int
-}
-
-// ContentStore is an in-process content-addressed store
-// backed by libp2p for peer-to-peer fetching.
-// Each Spore node stores content it has published or fetched.
-// Content is addressed by SHA-256 hash (CID).
+// ContentStore is a content-addressed store backed by SQLite + libp2p.
+// Local content is persisted to disk; remote content is fetched via libp2p streams.
 type ContentStore struct {
-	bus   *P2PBus
-	items map[string]*contentItem // CID → item
-	mu    sync.RWMutex
+	bus *P2PBus
+	db  *ContentDB // persistent storage (nil = in-memory only)
+
+	// Hot cache: recently accessed items kept in memory for fast access.
+	cache   map[string][]byte
+	cacheMu sync.RWMutex
 
 	// Index: who has what. Populated via GossipSub announcements.
-	providers map[string]map[peer.ID]struct{} // CID → set of peer IDs that have it
+	providers map[string]map[peer.ID]struct{} // CID → set of peer IDs
 	provMu    sync.RWMutex
 }
 
 // NewContentStore creates a content store attached to a P2PBus.
-func NewContentStore(bus *P2PBus) *ContentStore {
+// If dataDir is non-empty, content is persisted to SQLite.
+func NewContentStore(bus *P2PBus, dataDir string) *ContentStore {
 	cs := &ContentStore{
 		bus:       bus,
-		items:     make(map[string]*contentItem),
+		cache:     make(map[string][]byte),
 		providers: make(map[string]map[peer.ID]struct{}),
+	}
+
+	// Try to open persistent DB.
+	if dataDir != "" {
+		db, err := NewContentDB(dataDir)
+		if err != nil {
+			fmt.Printf("⚠️  Content store: failed to open DB at %s: %v (using memory only)\n", dataDir, err)
+		} else {
+			cs.db = db
+			// Pre-warm provider index from DB.
+			for _, ref := range db.ListRefs() {
+				if cs.providers[ref.CID] == nil {
+					cs.providers[ref.CID] = make(map[peer.ID]struct{})
+				}
+				cs.providers[ref.CID][bus.host.ID()] = struct{}{}
+			}
+		}
 	}
 
 	// Register libp2p stream handler for content fetch requests.
@@ -100,13 +111,17 @@ func (cs *ContentStore) Put(data []byte, contentType, agentID, summary string) (
 		Summary:   summary,
 	}
 
-	cs.mu.Lock()
-	cs.items[cid] = &contentItem{
-		Data:     data,
-		Ref:      ref,
-		PinnedAt: time.Now(),
+	// Persist to DB.
+	if cs.db != nil {
+		if err := cs.db.Put(cid, data, ref); err != nil {
+			fmt.Printf("⚠️  Content store: DB write failed for %s: %v\n", cid[:12], err)
+		}
 	}
-	cs.mu.Unlock()
+
+	// Hot cache.
+	cs.cacheMu.Lock()
+	cs.cache[cid] = data
+	cs.cacheMu.Unlock()
 
 	// Register self as provider.
 	cs.provMu.Lock()
@@ -119,33 +134,47 @@ func (cs *ContentStore) Put(data []byte, contentType, agentID, summary string) (
 	return &ref, nil
 }
 
-// Get retrieves content by CID. Checks local store first, then fetches from peers.
+// Get retrieves content by CID. Checks: hot cache → DB → peer fetch.
 func (cs *ContentStore) Get(cid string) ([]byte, error) {
-	// Local hit?
-	cs.mu.RLock()
-	item, ok := cs.items[cid]
-	cs.mu.RUnlock()
+	// 1. Hot cache.
+	cs.cacheMu.RLock()
+	data, ok := cs.cache[cid]
+	cs.cacheMu.RUnlock()
 	if ok {
-		cs.mu.Lock()
-		item.AccessCnt++
-		cs.mu.Unlock()
-		return item.Data, nil
+		return data, nil
 	}
 
-	// Fetch from a peer that has it.
+	// 2. Persistent DB.
+	if cs.db != nil {
+		data, _, err := cs.db.Get(cid)
+		if err == nil && data != nil {
+			// Re-warm cache.
+			cs.cacheMu.Lock()
+			cs.cache[cid] = data
+			cs.cacheMu.Unlock()
+			return data, nil
+		}
+	}
+
+	// 3. Fetch from a peer.
 	return cs.fetchFromPeer(cid)
 }
 
 // Has checks if content is available locally.
 func (cs *ContentStore) Has(cid string) bool {
-	cs.mu.RLock()
-	_, ok := cs.items[cid]
-	cs.mu.RUnlock()
-	return ok
+	cs.cacheMu.RLock()
+	_, ok := cs.cache[cid]
+	cs.cacheMu.RUnlock()
+	if ok {
+		return true
+	}
+	if cs.db != nil {
+		return cs.db.Has(cid)
+	}
+	return false
 }
 
 // RegisterProvider records that a peer has specific content.
-// Called when receiving a ContentRef via GossipSub.
 func (cs *ContentStore) RegisterProvider(cid string, peerID peer.ID) {
 	cs.provMu.Lock()
 	defer cs.provMu.Unlock()
@@ -155,41 +184,73 @@ func (cs *ContentStore) RegisterProvider(cid string, peerID peer.ID) {
 	cs.providers[cid][peerID] = struct{}{}
 }
 
-// ListRefs returns all locally stored content references.
+// RegisterProviderByAgent also registers self when the agent is in the same process.
+func (cs *ContentStore) RegisterProviderByAgent(cid string) {
+	cs.RegisterProvider(cid, cs.bus.host.ID())
+}
+
+// ListRefs returns all content references.
+// Prefers DB (persistent, complete); falls back to cache keys.
 func (cs *ContentStore) ListRefs() []ContentRef {
-	cs.mu.RLock()
-	defer cs.mu.RUnlock()
-	refs := make([]ContentRef, 0, len(cs.items))
-	for _, item := range cs.items {
-		refs = append(refs, item.Ref)
+	if cs.db != nil {
+		return cs.db.ListRefs()
+	}
+	// Fallback: return minimal refs from cache.
+	cs.cacheMu.RLock()
+	defer cs.cacheMu.RUnlock()
+	refs := make([]ContentRef, 0, len(cs.cache))
+	for cid, data := range cs.cache {
+		refs = append(refs, ContentRef{CID: cid, Size: len(data)})
 	}
 	return refs
 }
 
 // Stats returns store statistics.
 func (cs *ContentStore) Stats() map[string]interface{} {
-	cs.mu.RLock()
-	itemCount := len(cs.items)
-	var totalSize int
-	for _, item := range cs.items {
-		totalSize += len(item.Data)
-	}
-	cs.mu.RUnlock()
-
 	cs.provMu.RLock()
 	providerCount := len(cs.providers)
 	cs.provMu.RUnlock()
 
-	return map[string]interface{}{
-		"items":     itemCount,
-		"total_bytes": totalSize,
-		"providers": providerCount,
+	if cs.db != nil {
+		items, totalBytes := cs.db.Stats()
+		cs.cacheMu.RLock()
+		cacheItems := len(cs.cache)
+		cs.cacheMu.RUnlock()
+		return map[string]interface{}{
+			"items":       items,
+			"total_bytes": totalBytes,
+			"cache_items": cacheItems,
+			"providers":   providerCount,
+			"persistent":  true,
+		}
 	}
+
+	cs.cacheMu.RLock()
+	itemCount := len(cs.cache)
+	var totalSize int
+	for _, data := range cs.cache {
+		totalSize += len(data)
+	}
+	cs.cacheMu.RUnlock()
+
+	return map[string]interface{}{
+		"items":       itemCount,
+		"total_bytes": totalSize,
+		"providers":   providerCount,
+		"persistent":  false,
+	}
+}
+
+// Close releases persistent resources.
+func (cs *ContentStore) Close() error {
+	if cs.db != nil {
+		return cs.db.Close()
+	}
+	return nil
 }
 
 // fetchFromPeer tries to fetch content from a known provider.
 func (cs *ContentStore) fetchFromPeer(cid string) ([]byte, error) {
-	// Find a provider.
 	cs.provMu.RLock()
 	providers, ok := cs.providers[cid]
 	cs.provMu.RUnlock()
@@ -204,7 +265,7 @@ func (cs *ContentStore) fetchFromPeer(cid string) ([]byte, error) {
 		}
 		data, err := cs.fetchFromSinglePeer(cid, peerID)
 		if err != nil {
-			continue // try next provider
+			continue
 		}
 
 		// Verify CID.
@@ -216,17 +277,14 @@ func (cs *ContentStore) fetchFromPeer(cid string) ([]byte, error) {
 			continue
 		}
 
-		// Cache locally.
-		cs.mu.Lock()
-		cs.items[cid] = &contentItem{
-			Data:     data,
-			PinnedAt: time.Now(),
-			Ref: ContentRef{
-				CID:  cid,
-				Size: len(data),
-			},
+		// Persist locally.
+		ref := ContentRef{CID: cid, Size: len(data), Timestamp: time.Now().Unix()}
+		if cs.db != nil {
+			cs.db.Put(cid, data, ref)
 		}
-		cs.mu.Unlock()
+		cs.cacheMu.Lock()
+		cs.cache[cid] = data
+		cs.cacheMu.Unlock()
 
 		return data, nil
 	}
@@ -242,14 +300,12 @@ func (cs *ContentStore) fetchFromSinglePeer(cid string, peerID peer.ID) ([]byte,
 	}
 	defer s.Close()
 
-	// Send CID as request.
 	req := []byte(cid + "\n")
 	if _, err := s.Write(req); err != nil {
 		return nil, err
 	}
 	s.CloseWrite()
 
-	// Read response.
 	data, err := io.ReadAll(io.LimitReader(s, int64(maxContentSize)))
 	if err != nil {
 		return nil, err
@@ -265,7 +321,6 @@ func (cs *ContentStore) fetchFromSinglePeer(cid string, peerID peer.ID) ([]byte,
 func (cs *ContentStore) handleFetchStream(s network.Stream) {
 	defer s.Close()
 
-	// Read CID request (format: "CID\n").
 	buf := make([]byte, 128)
 	n, err := s.Read(buf)
 	if err != nil && err != io.EOF {
@@ -273,29 +328,28 @@ func (cs *ContentStore) handleFetchStream(s network.Stream) {
 	}
 
 	cid := string(buf[:n])
-	// Trim newline.
 	if len(cid) > 0 && cid[len(cid)-1] == '\n' {
 		cid = cid[:len(cid)-1]
 	}
 
-	cs.mu.RLock()
-	item, ok := cs.items[cid]
-	cs.mu.RUnlock()
+	// Try cache first, then DB.
+	cs.cacheMu.RLock()
+	data, ok := cs.cache[cid]
+	cs.cacheMu.RUnlock()
 
-	if !ok {
-		s.Write([]byte{}) // empty = not found
+	if !ok && cs.db != nil {
+		data, _, _ = cs.db.Get(cid)
+	}
+
+	if data == nil {
+		s.Write([]byte{})
 		return
 	}
 
-	cs.mu.Lock()
-	item.AccessCnt++
-	cs.mu.Unlock()
-
-	s.Write(item.Data)
+	s.Write(data)
 }
 
-// PutJSON is a convenience wrapper that marshals v to JSON, stores it,
-// and returns the ContentRef.
+// PutJSON marshals v to JSON, stores it, and returns the ContentRef.
 func (cs *ContentStore) PutJSON(v interface{}, contentType, agentID, summary string) (*ContentRef, error) {
 	data, err := json.Marshal(v)
 	if err != nil {

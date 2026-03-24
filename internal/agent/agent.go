@@ -1275,6 +1275,88 @@ func (a *Agent) recordEvolution(entry *taskEntry, output *runtime.TaskOutput, rt
 	if a.awareness != nil {
 		a.awareness.ObserveTaskOutcome(rec)
 	}
+
+	// Store preferences after evolution cycle
+	a.storePreferencesContext()
+
+	// Store milestone event
+	verb := "completed"
+	if !success {
+		verb = "failed"
+	}
+	a.storeEventContext(fmt.Sprintf("task_%s", verb), entry.ID,
+		fmt.Sprintf("Task %s via %s: %s", verb, rtName, truncate(entry.Description, 60)))
+}
+
+// storePreferencesContext persists the agent's runtime/strategy preferences as structured memory.
+func (a *Agent) storePreferencesContext() {
+	if a.evolution == nil || a.memory == nil {
+		return
+	}
+	ctxStore, ok := a.memory.(memory.ContextStore)
+	if !ok {
+		return
+	}
+
+	agentID := a.identity.PublicKeyHex()[:16]
+	strat := a.evolution.Strategy()
+
+	// Build skill confidence summary
+	var skillLines []string
+	for name, sp := range a.evolution.SkillProfiles() {
+		skillLines = append(skillLines, fmt.Sprintf("- %s: %.0f%% success (%d/%d), trend: %s",
+			name, sp.SuccessRate*100, sp.Successes, sp.Attempts, sp.Trend))
+	}
+
+	l0 := fmt.Sprintf("Prefers %s runtime, %d skills tracked", strat.PreferredRuntime, len(skillLines))
+	l1 := fmt.Sprintf("## Runtime Preferences\n\n**Preferred**: %s\n**Scores**: %v\n\n## Skill Confidence\n\n%s",
+		strat.PreferredRuntime,
+		strat.RuntimeScores,
+		strings.Join(skillLines, "\n"))
+
+	entry := &memory.ContextEntry{
+		URI:      fmt.Sprintf("spore://%s/memory/preferences", agentID),
+		AgentID:  agentID,
+		Type:     memory.CtxMemory,
+		Category: memory.CatPreferences,
+		L0:       l0,
+		L1:       l1,
+		L2:       l1,
+		Source:   "evolution",
+	}
+	ctxStore.PutContext(entry)
+}
+
+// storeEventContext stores a key event/milestone in structured memory.
+func (a *Agent) storeEventContext(eventType, eventID, summary string) {
+	if a.memory == nil {
+		return
+	}
+	ctxStore, ok := a.memory.(memory.ContextStore)
+	if !ok {
+		return
+	}
+
+	agentID := a.identity.PublicKeyHex()[:16]
+	eid := eventID
+	if len(eid) > 8 {
+		eid = eid[:8]
+	}
+	entry := &memory.ContextEntry{
+		URI:      fmt.Sprintf("spore://%s/memory/events/%s-%s", agentID, eventType, eid),
+		AgentID:  agentID,
+		Type:     memory.CtxMemory,
+		Category: memory.CatEvents,
+		L0:       summary,
+		L1:       fmt.Sprintf("## Event: %s\n\n**Type**: %s\n**ID**: %s\n**Time**: %s\n\n%s",
+			summary, eventType, eventID, time.Now().Format(time.RFC3339), summary),
+		Source:   eventType,
+		Metadata: map[string]string{
+			"event_type": eventType,
+			"event_id":   eventID,
+		},
+	}
+	ctxStore.PutContext(entry)
 }
 
 // broadcastTaskResult sends task result to the bus for coordinator collection.

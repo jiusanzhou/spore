@@ -68,6 +68,11 @@ func (e *EvolutionEngine) acquireSkills(minEvidence int) []string {
 		fmt.Printf("🎯 [%s] Acquired new skills: %v\n", e.agent.cfg.Agent.Name, acquired)
 		// Persist skill acquisition event
 		e.persistAcquisition(acquired)
+		// Store as milestone event
+		for _, skill := range acquired {
+			e.agent.storeEventContext("skill_acquired", skill,
+				fmt.Sprintf("Acquired skill: %s (≥3 successful uses)", skill))
+		}
 	}
 
 	return acquired

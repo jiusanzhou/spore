@@ -78,6 +78,7 @@ func NewP2PSwarm(baseDir string, maxAgents int, privKey ed25519.PrivateKey, list
 		ListenAddrs:    listenAddrs,
 		BootstrapPeers: bootstrapPeers,
 		PrivateKey:     privKey,
+		DataDir:        baseDir,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create p2p bus: %w", err)

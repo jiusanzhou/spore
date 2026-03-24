@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -60,6 +61,7 @@ type P2PConfig struct {
 	ListenAddrs    []string
 	BootstrapPeers []string
 	PrivateKey     ed25519.PrivateKey
+	DataDir        string // persistent storage directory for content store
 }
 
 // P2PBus implements Bus using libp2p for cross-node agent communication.
@@ -242,7 +244,11 @@ func NewP2PBus(cfg P2PConfig) (*P2PBus, error) {
 	}
 
 	// Initialize content-addressed collective memory.
-	bus.Content = NewContentStore(bus)
+	contentDir := ""
+	if cfg.DataDir != "" {
+		contentDir = filepath.Join(cfg.DataDir, "content")
+	}
+	bus.Content = NewContentStore(bus, contentDir)
 
 	return bus, nil
 }
