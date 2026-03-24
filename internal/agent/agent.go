@@ -956,7 +956,35 @@ func (a *Agent) executeTaskDirect(ctx context.Context, entry *taskEntry) error {
 		WorkDir:     entry.WorkDir,
 	}
 
-	output, err := rt.Execute(ctx, input)
+	// Execute with retry for transient errors (529/5xx/overloaded)
+	var output *runtime.TaskOutput
+	maxRetries := 2
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		output, err = rt.Execute(ctx, input)
+		if err == nil && output != nil && output.Success {
+			break
+		}
+		// Check if retryable
+		errMsg := ""
+		if err != nil {
+			errMsg = err.Error()
+		} else if output != nil {
+			errMsg = output.Error
+		}
+		if attempt < maxRetries && isRetryableError(errMsg) {
+			delay := time.Duration(5*(attempt+1)) * time.Second
+			fmt.Printf("🔄 [%s] Retrying task in %v (attempt %d/%d): %s\n",
+				a.cfg.Agent.Name, delay, attempt+1, maxRetries, truncate(errMsg, 80))
+			select {
+			case <-time.After(delay):
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+			continue
+		}
+		break
+	}
+
 	if err != nil {
 		if a.onTaskUpdate != nil {
 			a.onTaskUpdate(entry.ID, "failed", rt.Info().Name, "", err.Error())
@@ -1486,6 +1514,29 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n] + "..."
+}
+
+// isRetryableError checks if an error message indicates a transient failure
+// that should be retried (API overload, rate limit, server errors).
+func isRetryableError(errMsg string) bool {
+	if errMsg == "" {
+		return false
+	}
+	lower := strings.ToLower(errMsg)
+	retryPatterns := []string{
+		"529", "overloaded", "overload",
+		"500", "502", "503", "504",
+		"rate limit", "rate_limit", "too many requests", "429",
+		"temporary", "temporarily",
+		"connection reset", "connection refused",
+		"timeout", "timed out",
+	}
+	for _, p := range retryPatterns {
+		if strings.Contains(lower, p) {
+			return true
+		}
+	}
+	return false
 }
 
 func containsIgnoreCase(s, substr string) bool {
