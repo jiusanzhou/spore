@@ -168,6 +168,10 @@ a { color: var(--accent); text-decoration: none; }
 /* ── Activity Tab ──────────────────────────────────────── */
 .activity-feed { max-width: 700px; }
 .activity-item { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); align-items: flex-start; }
+.activity-item.expandable { cursor: pointer; }
+.activity-item.expandable:hover { background: var(--surface); margin: 0 -8px; padding: 12px 8px; border-radius: 6px; }
+.activity-result { margin-top: 8px; padding: 10px 12px; background: var(--bg); border-radius: 6px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; color: var(--text); max-height: 300px; overflow-y: auto; }
+.expand-hint { margin-left: 6px; color: var(--dim); font-size: 11px; }
 .activity-agent { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: var(--border); flex-shrink: 0; white-space: nowrap; }
 .activity-body { flex: 1; min-width: 0; }
 .activity-desc { font-size: 13px; margin-bottom: 2px; }
@@ -813,22 +817,52 @@ function renderActivity() {
 
   if (!tasks.length) { feed.innerHTML = '<p class="empty">No activity yet</p>'; return; }
 
+  // Preserve expanded state
+  const expandedIds = new Set();
+  feed.querySelectorAll('.activity-item[data-expanded="true"]').forEach(el => {
+    if (el.dataset.taskId) expandedIds.add(el.dataset.taskId);
+  });
+
   feed.innerHTML = tasks.map(t => {
     const status = t.status || 'queued';
     const ts = t.completed_at || t.submitted_at || '';
     const runtime = t.runtime ? (typeof t.runtime === 'number' ? t.runtime.toFixed(1) + 's' : t.runtime) : '';
-    return `<div class="activity-item">
+    const hasResult = t.result && t.result.trim();
+    const hasError = t.error && t.error.trim();
+    const isExpanded = expandedIds.has(t.id);
+    const expandable = hasResult || hasError;
+
+    let resultHTML = '';
+    if (expandable) {
+      const content = hasResult ? t.result : t.error;
+      resultHTML = `<div class="activity-result" style="display:${isExpanded ? 'block' : 'none'}">${esc(content)}</div>`;
+    }
+
+    return `<div class="activity-item ${expandable ? 'expandable' : ''}" data-task-id="${t.id || ''}" data-expanded="${isExpanded}">
       <span class="activity-agent">${esc(t.agent)}</span>
       <div class="activity-body">
-        <div class="activity-desc">${esc(t.description)}</div>
+        <div class="activity-desc">${esc(t.description)}${expandable ? '<span class="expand-hint">' + (isExpanded ? '▾' : '▸') + '</span>' : ''}</div>
         <div class="activity-meta">
           <span class="task-status task-${status}">${status}</span>
-          ${runtime ? '<span>' + runtime + '</span>' : ''}
+          ${runtime ? '<span>' + esc(runtime) + '</span>' : ''}
           <span>${relTime(ts)}</span>
         </div>
+        ${resultHTML}
       </div>
     </div>`;
   }).join('');
+
+  // Bind click-to-expand on result items
+  feed.querySelectorAll('.activity-item.expandable').forEach(item => {
+    item.addEventListener('click', () => {
+      const isOpen = item.dataset.expanded === 'true';
+      item.dataset.expanded = isOpen ? 'false' : 'true';
+      const res = item.querySelector('.activity-result');
+      const hint = item.querySelector('.expand-hint');
+      if (res) res.style.display = isOpen ? 'none' : 'block';
+      if (hint) hint.textContent = isOpen ? '▸' : '▾';
+    });
+  });
 }
 
 // === Task Submission ===
