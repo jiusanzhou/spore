@@ -1,1765 +1,809 @@
 <!DOCTYPE html>
 <!--
   Copyright (c) 2026 wellwell.work, LLC by Zoe
-  Licensed under the Apache License 2.0
+  Licensed under the Apache License, Version 2.0
 -->
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Spore Swarm Dashboard</title>
 <style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
+/* ── Reset & Variables ─────────────────────────────────── */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
-  --bg: #0a0a0a;
-  --card: #1a1a2e;
-  --border: #2a2a3e;
-  --text: #e0e0e0;
-  --dim: #888;
-  --green: #00ff88;
-  --purple: #7c3aed;
-  --blue: #3b82f6;
-  --amber: #f59e0b;
-  --red: #ef4444;
-  --gray: #6b7280;
-  --cyan: #06b6d4;
-  --orange: #f97316;
-  --emerald: #10b981;
-}
-
-body {
-  font-family: system-ui, -apple-system, sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  min-height: 100vh;
-  overflow-x: hidden;
-}
-
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 24px;
-  border-bottom: 1px solid var(--border);
-  background: linear-gradient(135deg, #0f0f1a, #1a0f20);
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.header h1 {
-  font-size: 1.4rem;
-  font-weight: 700;
-  background: linear-gradient(135deg, var(--purple), var(--cyan));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.badge-green { background: rgba(0, 255, 136, 0.15); color: var(--green); }
-.badge-purple { background: rgba(124, 58, 237, 0.2); color: var(--purple); }
-
-.header-meta {
-  display: flex;
-  gap: 16px;
-  font-size: 0.8rem;
-  color: var(--dim);
-  flex-wrap: wrap;
-}
-
-.header-meta span { white-space: nowrap; }
-
-.stats-bar {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 12px;
-  padding: 16px 24px;
-  border-bottom: 1px solid var(--border);
-  background: rgba(26, 26, 46, 0.3);
-}
-
-.stat-card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 16px;
-  text-align: center;
-  transition: transform 0.2s, border-color 0.2s;
-}
-
-.stat-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--purple);
-}
-
-.stat-val {
-  font-size: 1.8rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  margin-bottom: 4px;
-}
-
-.stat-label {
-  font-size: 0.7rem;
-  color: var(--dim);
-  teorm: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.main {
-  display: grid;
-  grid-template-columns: 2fr 1fr 400px;
-  gap: 0;
-  min-height: calc(100vh - 180px);
-}
-
-@media (max-width: 1200px) {
-  .main {
-    grid-template-columns: 1fr 400px;
-  }
-  .collective-section { display: none; }
-}
-
-@media (max-width: 900px) {
-  .main {
-    grid-template-columns: 1fr;
-  }
-  .collective-section, .right-panel { 
-    border-left: none; 
-    border-top: 1px solid var(--border); 
-  }
-}
-
-.agents-section {
-  padding: 20px 24px;
-  overflow-y: auto;
-}
-
-.collective-section {
-  padding: 20px 24px;
-  border-left: 1px solid var(--border);
-  background: rgba(26, 26, 46, 0.2);
-  overflow-y: auto;
-}
-
-.section-title {
-  font-size: 0.9rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--purple);
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.section-title::before {
-  content: "";
-  width: 3px;
-  height: 16px;
-  background: var(--purple);
-  border-radius: 2px;
-}
-
-.agents-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 16px;
-}
-
-.agent-card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 20px;
-  transition: all 0.3s ease;
-  position: relative;
-  overflow: hidden;
-  cursor: pointer;
-}
-
-.agent-card.expanded {
-  cursor: default;
-}
-
-.agent-card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, var(--purple), var(--cyan));
-  opacity: 0;
-  transition: opacity 0.3s;
-}
-
-.agent-card:hover {
-  border-color: var(--purple);
-  transform: translateY(-4px);
-  box-shadow: 0 8px 32px rgba(124, 58, 237, 0.2);
-}
-
-.agent-card:hover::before {
-  opacity: 1;
-}
-
-.agent-card.coordinator {
-  border-left: 3px solid var(--purple);
-  background: linear-gradient(135deg, var(--card), rgba(124, 58, 237, 0.05));
-}
-
-.agent-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.agent-name {
-  font-size: 1.1rem;
-  font-weight: 700;
-}
-
-.agent-id {
-  font-size: 0.7rem;
-  color: var(--dim);
-  font-family: 'SF Mono', Monaco, Consolas, monospace;
-  background: rgba(255, 255, 255, 0.05);
-  padding: 2px 6px;
-  border-radius: 4px;
-  margin-left: 8px;
-}
-
-.agent-desc {
-  font-size: 0.8rem;
-  color: var(--dim);
-  margin-bottom: 12px;
-  line-height: 1.4;
-}
-
-.status-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.status-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.status-idle { background: var(--green); box-shadow: 0 0 8px var(--green); }
-.status-busy { background: var(--amber); animation: pulse 1.2s infinite; }
-.status-hibernate { background: var(--gray); }
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(1.3); }
-}
-
-.role-badge {
-  font-size: 0.65rem;
-  padding: 4px 8px;
-  border-radius: 8px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-}
-
-.role-coordinator { background: rgba(124, 58, 237, 0.2); color: var(--purple); }
-.role-worker { background: rgba(59, 130, 246, 0.2); color: var(--blue); }
-.role-specialist { background: rgba(0, 255, 136, 0.15); color: var(--green); }
-
-.personality-mood {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 16px;
-  font-size: 0.8rem;
-}
-
-.personality {
-  color: var(--cyan);
-  font-weight: 600;
-}
-
-.mood {
-  color: var(--amber);
-  font-weight: 500;
-}
-
-.drives-section {
-  margin-bottom: 16px;
-}
-
-.drives-title {
-  font-size: 0.75rem;
-  color: var(--purple);
-  margin-bottom: 8px;
-  font-weight: 600;
-}
-
-.drives-radar {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 12px;
-}
-
-.skills-section {
-  margin-bottom: 16px;
-}
-
-.skills-title {
-  font-size: 0.75rem;
-  color: var(--cyan);
-  margin-bottom: 8px;
-  font-weight: 600;
-}
-
-.skills-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.skill-tag {
-  font-size: 0.65rem;
-  padding: 4px 8px;
-  border-radius: 8px;
-  font-weight: 600;
-  border: 1px solid;
-  transition: all 0.2s;
-}
-
-.skill-high {
-  background: rgba(0, 255, 136, 0.12);
-  color: var(--green);
-  border-color: rgba(0, 255, 136, 0.3);
-}
-
-.skill-mid {
-  background: rgba(245, 158, 11, 0.12);
-  color: var(--amber);
-  border-color: rgba(245, 158, 11, 0.3);
-}
-
-.skill-low {
-  background: rgba(239, 68, 68, 0.12);
-  color: var(--red);
-  border-color: rgba(239, 68, 68, 0.3);
-}
-
-.agent-details {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px 12px;
-  font-size: 0.75rem;
-  margin-bottom: 16px;
-}
-
-.agent-detail {
-  display: flex;
-  justify-content: space-between;
-}
-
-.agent-detail .label {
-  color: var(--dim);
-}
-
-.agent-detail .value {
-  font-family: 'SF Mono', Monaco, Consolas, monospace;
-  font-size: 0.7rem;
-  text-align: right;
-  font-weight: 600;
-}
-
-.economy-section {
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 8px;
-  margin-bottom: 16px;
-}
-
-.economy-title {
-  font-size: 0.75rem;
-  color: var(--emerald);
-  margin-bottom: 8px;
-  font-weight: 600;
-}
-
-.economy-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.7rem;
-  margin-bottom: 4px;
-}
-
-.economy-health {
-  display: inline-block;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 0.65rem;
-  font-weight: 600;
-  text-transform: uppercase;
-}
-
-.health-stable { background: rgba(0, 255, 136, 0.15); color: var(--green); }
-.health-thriving { background: rgba(16, 185, 129, 0.15); color: var(--emerald); }
-.health-struggling { background: rgba(245, 158, 11, 0.15); color: var(--amber); }
-.health-critical { background: rgba(239, 68, 68, 0.15); color: var(--red); }
-
-.narrative-section {
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 8px;
-  margin-top: 16px;
-}
-
-.narrative-title {
-  font-size: 0.75rem;
-  color: var(--purple);
-  margin-bottom: 6px;
-  font-weight: 600;
-}
-
-.narrative-text {
-  font-size: 0.7rem;
-  color: var(--text);
-  line-height: 1.4;
-  font-style: italic;
-}
-
-.collective-panel {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 20px;
-  margin-bottom: 20px;
-}
-
-.collective-title {
-  font-size: 1.1rem;
-  font-weight: 700;
-  margin-bottom: 16px;
-  color: var(--purple);
-}
-
-.collective-info {
-  margin-bottom: 16px;
-}
-
-.collective-purpose {
-  font-size: 0.8rem;
-  color: var(--dim);
-  line-height: 1.4;
-  margin-bottom: 12px;
-}
-
-.morale-section {
-  margin-bottom: 16px;
-}
-
-.morale-label {
-  font-size: 0.75rem;
-  color: var(--amber);
-  margin-bottom: 8px;
-  font-weight: 600;
-}
-
-.morale-bar {
-  height: 8px;
-  background: rgba(245, 158, 11, 0.2);
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.morale-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--amber), var(--green));
-  border-radius: 4px;
-  transition: width 0.5s ease;
-}
-
-.roles-section {
-  margin-bottom: 16px;
-}
-
-.roles-title {
-  font-size: 0.75rem;
-  color: var(--cyan);
-  margin-bottom: 8px;
-  font-weight: 600;
-}
-
-.roles-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.role-tag {
-  font-size: 0.65rem;
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: rgba(59, 130, 246, 0.12);
-  color: var(--blue);
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  font-weight: 500;
-}
-
-.collective-narrative {
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 8px;
-  font-size: 0.7rem;
-  color: var(--text);
-  line-height: 1.4;
-  font-style: italic;
-}
-
-/* Agent Memory Panel Styles */
-.agent-memory-panel {
-  margin-top: 16px;
-  border-top: 1px solid var(--border);
-  padding-top: 16px;
-  display: none;
-  animation: slideDown 0.3s ease;
-}
-
-.agent-memory-panel.show {
-  display: block;
-}
-
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.memory-section {
-  margin-bottom: 16px;
-}
-
-.memory-section-title {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--cyan);
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.experience-entry {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px;
-  margin-bottom: 8px;
-  font-size: 0.75rem;
-}
-
-.experience-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 6px;
-}
-
-.experience-success {
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 0.65rem;
-  font-weight: 600;
-  text-transform: uppercase;
-}
-
-.experience-success-true { background: rgba(0, 255, 136, 0.15); color: var(--green); }
-.experience-success-false { background: rgba(239, 68, 68, 0.15); color: var(--red); }
-
-.experience-desc {
-  color: var(--dim);
-  margin-bottom: 6px;
-  line-height: 1.3;
-}
-
-.experience-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.65rem;
-  color: var(--gray);
-}
-
-.experience-skills {
-  display: flex;
-  gap: 4px;
-}
-
-.experience-skill-tag {
-  background: rgba(124, 58, 237, 0.15);
-  color: var(--purple);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 0.6rem;
-  font-weight: 500;
-}
-
-.awareness-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  font-size: 0.75rem;
-}
-
-.awareness-item {
-  display: flex;
-  justify-content: space-between;
-}
-
-.awareness-item .label {
-  color: var(--dim);
-}
-
-.awareness-item .value {
-  font-weight: 600;
-  color: var(--text);
-}
-
-.evolution-stats {
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 8px;
-  padding: 12px;
-}
-
-.evolution-row {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 6px;
-  font-size: 0.75rem;
-}
-
-.evolution-row .label {
-  color: var(--dim);
-}
-
-.evolution-row .value {
-  font-weight: 600;
-  color: var(--text);
-}
-
-.memory-loading {
-  text-align: center;
-  color: var(--dim);
-  font-size: 0.75rem;
-  padding: 20px;
-}
-
-/* Collective Memory Panel Styles */
-.collective-memory-panel {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 20px;
-  margin-bottom: 20px;
-}
-
-.collective-memory-title {
-  font-size: 1.1rem;
-  font-weight: 700;
-  margin-bottom: 16px;
-  color: var(--emerald);
-}
-
-.content-store-section {
-  margin-bottom: 16px;
-}
-
-.content-entry {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px;
-  margin-bottom: 8px;
-  font-size: 0.75rem;
-}
-
-.content-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 6px;
-}
-
-.content-cid {
-  font-family: 'SF Mono', Monaco, Consolas, monospace;
-  font-size: 0.65rem;
-  color: var(--cyan);
-  background: rgba(6, 182, 212, 0.1);
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
-.content-type-badge {
-  font-size: 0.65rem;
-  padding: 3px 8px;
-  border-radius: 6px;
-  font-weight: 600;
-  text-transform: uppercase;
-  background: rgba(245, 158, 11, 0.2);
-  color: var(--amber);
-}
-
-.content-summary {
-  color: var(--dim);
-  margin-bottom: 6px;
-  line-height: 1.3;
-}
-
-.content-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.65rem;
-  color: var(--gray);
-}
-
-.collective-memory-stats {
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 8px;
-  padding: 12px;
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 12px;
-  font-size: 0.75rem;
-}
-
-.memory-stat {
-  text-align: center;
-}
-
-.memory-stat .value {
-  font-size: 1.2rem;
-  font-weight: 700;
-  color: var(--emerald);
-  display: block;
-  margin-bottom: 2px;
-}
-
-.memory-stat .label {
-  color: var(--dim);
-  font-size: 0.65rem;
-  text-transform: uppercase;
-}
-
-.right-panel {
-  border-left: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.task-feed {
-  flex: 1;
-  padding: 20px;
-  overflow-y: auto;
-}
-
-.task-entry {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 12px 16px;
-  margin-bottom: 12px;
-  animation: slideIn 0.3s ease;
-  transition: all 0.2s;
-}
-
-.task-entry:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: var(--purple);
-}
-
-.task-entry.is-coordinator {
-  border-left: 3px solid var(--purple);
-}
-
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.task-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 6px;
-}
-
-.task-agent {
-  font-weight: 600;
-  font-size: 0.8rem;
-}
-
-.task-status {
-  font-size: 0.65rem;
-  padding: 3px 8px;
-  border-radius: 6px;
-  font-weight: 600;
-  text-transform: uppercase;
-}
-
-.task-status-queued { background: rgba(59, 130, 246, 0.2); color: var(--blue); }
-.task-status-running { background: rgba(245, 158, 11, 0.2); color: var(--amber); }
-.task-status-completed { background: rgba(0, 255, 136, 0.15); color: var(--green); }
-.task-status-failed { background: rgba(239, 68, 68, 0.2); color: var(--red); }
-
-.task-desc {
-  font-size: 0.75rem;
-  color: var(--dim);
-  line-height: 1.3;
-  margin-bottom: 6px;
-}
-
-.task-time {
-  font-size: 0.65rem;
-  color: #555;
-  font-family: 'SF Mono', Monaco, Consolas, monospace;
-}
-
-.network-panel {
-  padding: 20px;
-  border-top: 1px solid var(--border);
-  background: rgba(26, 26, 46, 0.3);
-}
-
-.network-stats {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  font-size: 0.8rem;
-}
-
-.net-row {
-  display: flex;
-  justify-content: space-between;
-}
-
-.net-row .label {
-  color: var(--dim);
-}
-
-.net-row .value {
-  font-weight: 600;
-}
-
-.heartbeat {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--green);
-  animation: hb 2s infinite;
-}
-
-@keyframes hb {
-  0%, 100% {
-    opacity: 1;
-    box-shadow: 0 0 4px var(--green);
-  }
-  50% {
-    opacity: 0.3;
-    box-shadow: none;
-  }
-}
-
-.empty-state {
-  color: var(--dim);
-  font-size: 0.8rem;
-  text-align: center;
-  padding: 40px 16px;
-  font-style: italic;
-}
-
-.disconnected {
-  display: none;
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(10, 10, 10, 0.95);
-  z-index: 1000;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.disconnected.show {
-  display: flex;
-}
-
-.disconnected h2 {
-  color: var(--red);
-  font-size: 1.4rem;
-  font-weight: 700;
-}
-
-.disconnected p {
-  color: var(--dim);
-  font-size: 0.9rem;
-}
-
-.loading-spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid var(--border);
-  border-top: 3px solid var(--purple);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  --bg: #0a0b0e; --surface: #12131a; --card: #1a1b26; --border: #2a2b3a;
+  --text: #e0e0e0; --dim: #6b7280; --accent: #7c3aed;
+  --green: #10b981; --red: #ef4444; --amber: #f59e0b; --blue: #3b82f6; --cyan: #06b6d4;
+  --radius: 10px; --radius-sm: 6px;
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', system-ui, sans-serif;
+  --mono: 'SF Mono', 'Menlo', 'Consolas', monospace;
+  --transition: 180ms ease;
+}
+
+html[data-theme="light"] {
+  --bg: #f8f9fa; --surface: #ffffff; --card: #ffffff; --border: #e5e7eb;
+  --text: #1f2937; --dim: #6b7280; --accent: #7c3aed;
+}
+
+/* ── Base ──────────────────────────────────────────────── */
+body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+a { color: var(--accent); text-decoration: none; }
+
+/* ── Header ────────────────────────────────────────────── */
+.header { display: flex; align-items: center; justify-content: space-between; padding: 16px 28px; border-bottom: 1px solid var(--border); background: var(--surface); gap: 16px; flex-wrap: wrap; }
+.header-left { display: flex; align-items: center; gap: 12px; }
+.header-title { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
+.badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 20px; }
+.badge-online { background: rgba(16,185,129,0.12); color: var(--green); }
+.badge-online::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+.badge-peers { background: rgba(124,58,237,0.12); color: var(--accent); }
+
+.header-right { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.header-stats { display: flex; gap: 20px; }
+.stat { display: flex; flex-direction: column; align-items: center; }
+.stat-val { font-size: 16px; font-weight: 600; letter-spacing: -0.02em; }
+.stat-label { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; }
+
+.theme-toggle { background: none; border: 1px solid var(--border); color: var(--text); width: 34px; height: 34px; border-radius: 8px; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; transition: border-color var(--transition); }
+.theme-toggle:hover { border-color: var(--accent); }
+
+/* ── Tabs ──────────────────────────────────────────────── */
+.tab-bar { display: flex; gap: 0; padding: 0 28px; border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; z-index: 100; }
+.tab-btn { padding: 12px 20px; font-size: 13px; font-weight: 500; color: var(--dim); background: none; border: none; cursor: pointer; border-bottom: 2px solid transparent; transition: color var(--transition), border-color var(--transition); font-family: var(--font); }
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active { color: var(--text); border-bottom-color: var(--accent); }
+.tab-content { display: none; padding: 24px 28px; }
+.tab-content.active { display: block; }
+
+/* ── Agent Cards ───────────────────────────────────────── */
+.agents-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+.agent-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: border-color var(--transition); cursor: pointer; }
+.agent-card:hover { border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.agent-card-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px 0; cursor: pointer; }
+.agent-name { font-size: 15px; font-weight: 600; }
+.agent-personality { font-size: 12px; color: var(--dim); margin-left: 8px; font-weight: 400; }
+.status-badge { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+.status-idle { background: rgba(16,185,129,0.12); color: var(--green); }
+.status-running { background: rgba(59,130,246,0.12); color: var(--blue); }
+.status-error { background: rgba(239,68,68,0.12); color: var(--red); }
+
+.agent-card-body { padding: 14px 18px; display: flex; gap: 16px; align-items: flex-start; }
+.radar-wrap { flex-shrink: 0; }
+.radar-wrap svg { display: block; }
+.skills-economy { flex: 1; min-width: 0; }
+.skill-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
+.skill-tag { font-size: 10px; padding: 2px 7px; border-radius: 4px; background: rgba(124,58,237,0.1); color: var(--accent); font-weight: 500; }
+.economy-line { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--dim); }
+.economy-line strong { color: var(--text); font-weight: 600; }
+.health-badge { font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: 600; }
+.health-excellent, .health-good { background: rgba(16,185,129,0.12); color: var(--green); }
+.health-warning { background: rgba(245,158,11,0.12); color: var(--amber); }
+.health-critical { background: rgba(239,68,68,0.12); color: var(--red); }
+
+/* ── Agent Drawer ──────────────────────────────────────── */
+.agent-drawer { display: none; border-top: 1px solid var(--border); padding: 16px 18px; background: var(--surface); }
+.agent-card[data-expanded="true"] .agent-drawer { display: block; }
+.drawer-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+.drawer-tab { padding: 8px 14px; font-size: 12px; font-weight: 500; color: var(--dim); background: none; border: none; cursor: pointer; border-bottom: 2px solid transparent; font-family: var(--font); }
+.drawer-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+.drawer-panel { display: none; }
+.drawer-panel.active { display: block; }
+
+/* Awareness */
+.awareness-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.awareness-item label { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 3px; }
+.awareness-item .val { font-size: 13px; }
+.awareness-full { grid-column: 1 / -1; }
+.progress-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.progress-row label { font-size: 11px; color: var(--dim); width: 50px; flex-shrink: 0; text-transform: none; letter-spacing: 0; }
+.progress-bar { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
+.tag-list { display: flex; flex-wrap: wrap; gap: 4px; }
+.tag-sm { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: var(--border); color: var(--dim); }
+
+/* Evolution */
+.evo-stats { display: flex; gap: 16px; margin-bottom: 12px; }
+.evo-stat { font-size: 12px; color: var(--dim); }
+.evo-stat strong { color: var(--text); }
+.confidence-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.confidence-row .skill-name { font-size: 11px; color: var(--dim); width: 80px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Context Memory */
+.ctx-filters { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+.ctx-filter-btn { font-size: 11px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: none; color: var(--dim); cursor: pointer; font-family: var(--font); transition: all var(--transition); }
+.ctx-filter-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(124,58,237,0.08); }
+.ctx-entry { padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); margin-bottom: 6px; cursor: pointer; transition: background var(--transition); }
+.ctx-entry:hover { background: rgba(124,58,237,0.04); }
+.ctx-entry-head { display: flex; align-items: center; gap: 8px; }
+.ctx-cat { font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 600; text-transform: uppercase; background: var(--border); color: var(--dim); }
+.ctx-l0 { font-size: 12px; flex: 1; }
+.ctx-l1 { font-size: 11px; color: var(--dim); margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); display: none; }
+.ctx-entry[data-open="true"] .ctx-l1 { display: block; }
+.ctx-loading { font-size: 12px; color: var(--dim); padding: 12px; text-align: center; }
+
+/* ── Collective Tab ────────────────────────────────────── */
+.collective-header { margin-bottom: 24px; }
+.collective-header h2 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+.collective-header p { font-size: 13px; color: var(--dim); max-width: 600px; }
+.collective-section { margin-bottom: 24px; }
+.collective-section h3 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--dim); margin-bottom: 10px; }
+.role-group { margin-bottom: 12px; }
+.role-group-label { font-size: 11px; color: var(--dim); margin-bottom: 4px; }
+.role-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.role-tag-explorer { background: rgba(6,182,212,0.1); color: var(--cyan); }
+.role-tag-creator { background: rgba(124,58,237,0.1); color: var(--accent); }
+.role-tag-connector { background: rgba(16,185,129,0.1); color: var(--green); }
+.mood-bars { max-width: 400px; }
+
+/* ── Memory Tab ────────────────────────────────────────── */
+.memory-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.mem-stat-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+.mem-stat-card .val { font-size: 20px; font-weight: 600; }
+.mem-stat-card .lbl { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; }
+.memory-table-wrap { overflow-x: auto; }
+.memory-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.memory-table th { text-align: left; padding: 10px 12px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); border-bottom: 1px solid var(--border); font-weight: 600; }
+.memory-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.memory-table tr { cursor: pointer; transition: background var(--transition); }
+.memory-table tbody tr:hover { background: rgba(124,58,237,0.04); }
+.cid-cell { font-family: var(--mono); font-size: 11px; color: var(--dim); }
+.cid-cell[title] { cursor: copy; }
+.sha-cell { font-family: var(--mono); font-size: 11px; color: var(--dim); }
+
+/* ── Activity Tab ──────────────────────────────────────── */
+.activity-feed { max-width: 700px; }
+.activity-item { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); align-items: flex-start; }
+.activity-agent { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: var(--border); flex-shrink: 0; white-space: nowrap; }
+.activity-body { flex: 1; min-width: 0; }
+.activity-desc { font-size: 13px; margin-bottom: 2px; }
+.activity-meta { font-size: 11px; color: var(--dim); display: flex; gap: 12px; flex-wrap: wrap; }
+.task-status { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; text-transform: uppercase; }
+.task-queued { background: rgba(107,114,128,0.15); color: var(--dim); }
+.task-running { background: rgba(59,130,246,0.12); color: var(--blue); }
+.task-completed { background: rgba(16,185,129,0.12); color: var(--green); }
+.task-failed { background: rgba(239,68,68,0.12); color: var(--red); }
+
+/* ── Footer ────────────────────────────────────────────── */
+.footer { padding: 12px 28px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--dim); }
+.sse-dot { width: 7px; height: 7px; border-radius: 50%; }
+.sse-connected { background: var(--green); }
+.sse-disconnected { background: var(--red); }
+
+/* ── Utility ───────────────────────────────────────────── */
+.empty { text-align: center; padding: 48px 20px; color: var(--dim); font-size: 13px; }
+.toast { position: fixed; bottom: 20px; right: 20px; background: var(--card); border: 1px solid var(--border); padding: 10px 16px; border-radius: var(--radius); font-size: 12px; z-index: 999; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+.toast.show { opacity: 1; }
+
+@media (max-width: 640px) {
+  .header { padding: 12px 16px; }
+  .tab-content { padding: 16px; }
+  .agents-grid { grid-template-columns: 1fr; }
+  .header-stats { gap: 12px; }
+  .awareness-grid { grid-template-columns: 1fr; }
 }
 </style>
 </head>
 <body>
-<div class="disconnected" id="disconnected">
-  <div class="loading-spinner"></div>
-  <h2>Connection Lost</h2>
-  <p>Attempting to reconnect...</p>
-</div>
 
+<!-- Header -->
 <header class="header">
   <div class="header-left">
-    <h1>🦠 Spore Swarm</h1>
-    <span class="badge badge-green" id="agent-count">0 agents</span>
-    <span class="badge badge-purple" id="swarm-status">Initializing</span>
+    <span class="header-title">&#x1F9A0; Spore Swarm</span>
+    <span class="badge badge-online" id="hdr-online">Online</span>
+    <span class="badge badge-peers" id="hdr-peers">0 peers</span>
   </div>
-  <div class="header-meta">
-    <span id="version">v0.1.0</span>
-    <span id="uptime">Uptime: --</span>
-    <span><span class="heartbeat"></span> Live</span>
+  <div class="header-right">
+    <div class="header-stats">
+      <div class="stat"><span class="stat-val" id="hdr-agents">0</span><span class="stat-label">Agents</span></div>
+      <div class="stat"><span class="stat-val" id="hdr-tasks">0</span><span class="stat-label">Tasks</span></div>
+      <div class="stat"><span class="stat-val" id="hdr-uptime">0s</span><span class="stat-label">Uptime</span></div>
+      <div class="stat"><span class="stat-val" id="hdr-content">0</span><span class="stat-label">Content</span></div>
+    </div>
+    <button class="theme-toggle" id="theme-btn" title="Toggle theme">&#x1F319;</button>
   </div>
 </header>
 
-<div class="stats-bar" id="stats-bar">
-  <div class="stat-card">
-    <div class="stat-val" id="stat-completed" style="color: var(--green)">0</div>
-    <div class="stat-label">✅ Completed</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-val" id="stat-failed" style="color: var(--red)">0</div>
-    <div class="stat-label">❌ Failed</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-val" id="stat-queued" style="color: var(--amber)">0</div>
-    <div class="stat-label">⏳ Queued</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-val" id="stat-evo-xp" style="color: var(--cyan)">0</div>
-    <div class="stat-label">🧬 Total XP</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-val" id="stat-evo-skills" style="color: var(--purple)">0</div>
-    <div class="stat-label">🎯 Total Skills</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-val" id="stat-avg-balance" style="color: var(--emerald)">0</div>
-    <div class="stat-label">💰 Avg Balance</div>
-  </div>
-</div>
+<!-- Tab Bar -->
+<nav class="tab-bar">
+  <button class="tab-btn active" data-tab="agents">Agents</button>
+  <button class="tab-btn" data-tab="collective">Collective</button>
+  <button class="tab-btn" data-tab="memory">Memory</button>
+  <button class="tab-btn" data-tab="activity">Activity</button>
+</nav>
 
-<div class="main">
-  <div class="agents-section">
-    <div class="section-title">🤖 Agent Swarm</div>
-    <div class="agents-grid" id="agents-grid">
-      <div class="empty-state">No agents discovered yet...</div>
-    </div>
+<!-- Tab: Agents -->
+<section class="tab-content active" id="tab-agents">
+  <div class="agents-grid" id="agents-grid"></div>
+</section>
+
+<!-- Tab: Collective -->
+<section class="tab-content" id="tab-collective">
+  <div id="collective-content"><p class="empty">Waiting for data&hellip;</p></div>
+</section>
+
+<!-- Tab: Memory -->
+<section class="tab-content" id="tab-memory">
+  <div class="memory-stats" id="mem-stats"></div>
+  <div class="memory-table-wrap">
+    <table class="memory-table">
+      <thead><tr><th>Agent</th><th>Summary</th><th>SHA-256</th><th>IPFS CID</th><th>Size</th><th>Time</th></tr></thead>
+      <tbody id="mem-tbody"></tbody>
+    </table>
   </div>
-  
-  <div class="collective-section">
-    <div class="section-title">🧠 Collective Consciousness</div>
-    <div id="collective-panel">
-      <div class="empty-state">Collective mind forming...</div>
-    </div>
-    
-    <!-- Collective Memory Panel -->
-    <div class="collective-memory-panel" id="collective-memory-panel">
-      <div class="collective-memory-title">💾 Collective Memory Store</div>
-      <div class="content-store-section">
-        <div class="memory-section-title">📚 Content Store</div>
-        <div id="content-store-list">
-          <div class="memory-loading">Loading collective memory...</div>
-        </div>
-      </div>
-      <div class="collective-memory-stats" id="collective-memory-stats">
-        <div class="memory-stat">
-          <span class="value" id="memory-items-count">0</span>
-          <span class="label">Items</span>
-        </div>
-        <div class="memory-stat">
-          <span class="value" id="memory-providers-count">0</span>
-          <span class="label">Providers</span>
-        </div>
-        <div class="memory-stat">
-          <span class="value" id="memory-total-bytes">0</span>
-          <span class="label">Total Size</span>
-        </div>
-      </div>
-    </div>
-  </div>
-  
-  <div class="right-panel">
-    <div class="task-feed">
-      <div class="section-title">📋 Task Activity Stream</div>
-      <div id="task-list">
-        <div class="empty-state">Awaiting task events...</div>
-      </div>
-    </div>
-    <div class="network-panel">
-      <div class="section-title">🌐 Network Status</div>
-      <div class="network-stats">
-        <div class="net-row">
-          <span class="label">Transport:</span>
-          <span class="value" id="net-transport">--</span>
-        </div>
-        <div class="net-row">
-          <span class="label">Peers:</span>
-          <span class="value" id="net-peers">0</span>
-        </div>
-        <div class="net-row">
-          <span class="label">Status:</span>
-          <span class="value"><span class="heartbeat"></span> Connected</span>
-        </div>
-        <div class="net-row">
-          <span class="label">Uptime:</span>
-          <span class="value" id="net-uptime">--</span>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
+</section>
+
+<!-- Tab: Activity -->
+<section class="tab-content" id="tab-activity">
+  <div class="activity-feed" id="activity-feed"></div>
+</section>
+
+<!-- Footer -->
+<footer class="footer">
+  <span class="sse-dot sse-disconnected" id="sse-dot"></span>
+  <span id="sse-status">Connecting&hellip;</span>
+  <span style="margin-left:auto" id="sse-time"></span>
+</footer>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
 
 <script>
-(function() {
-  let failCount = 0;
-  let globalSwarmData = null;
+/* ═══════════════════════════════════════════════════════════
+   Spore Swarm Dashboard — Client Logic
+   ═══════════════════════════════════════════════════════════ */
 
-  function fmt(sec) {
-    if (!sec || sec < 0) return '--';
-    const d = Math.floor(sec / 86400);
-    const h = Math.floor((sec % 86400) / 3600);
-    const m = Math.floor((sec % 3600) / 60);
-    const s = Math.floor(sec % 60);
-    if (d > 0) return `${d}d ${h}h`;
-    if (h > 0) return `${h}h ${m}m`;
-    return `${m}m ${s}s`;
-  }
+// ── State ─────────────────────────────────────────────────
+let state = null;
+let contextCache = {};  // agentName -> {data, ts}
 
-  function fmtTime(iso) {
-    if (!iso) return '';
-    return new Date(iso).toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    });
-  }
+// ── Theme ─────────────────────────────────────────────────
+const html = document.documentElement;
+const themeBtn = document.getElementById('theme-btn');
+const saved = localStorage.getItem('spore-theme');
+if (saved) html.dataset.theme = saved;
+updateThemeIcon();
 
-  function trunc(s, n) {
-    return s && s.length > n ? s.slice(0, n) + '…' : (s || '');
-  }
+themeBtn.addEventListener('click', () => {
+  const next = html.dataset.theme === 'light' ? 'dark' : 'light';
+  html.dataset.theme = next;
+  localStorage.setItem('spore-theme', next);
+  updateThemeIcon();
+});
 
-  function esc(s) {
-    const div = document.createElement('div');
-    div.textContent = s;
-    return div.innerHTML;
-  }
+function updateThemeIcon() {
+  themeBtn.textContent = html.dataset.theme === 'light' ? '\u2600\uFE0F' : '\uD83C\uDF19';
+}
 
-  function anim(el, v) {
-    if (el.textContent !== String(v)) {
-      el.textContent = v;
-      el.style.transition = 'none';
-      el.style.transform = 'scale(1.1)';
-      requestAnimationFrame(() => {
-        el.style.transition = 'transform 0.3s ease';
-        el.style.transform = 'scale(1)';
-      });
-    }
-  }
+// ── Tabs ──────────────────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
 
-  function createRadarChart(drives, size = 80) {
-    const driveNames = ['survive', 'explore', 'connect', 'transcend', 'create'];
-    const angles = driveNames.map((_, i) => (i * 2 * Math.PI) / 5 - Math.PI / 2);
-    const center = size / 2;
-    const maxRadius = center - 10;
+// ── Utilities ─────────────────────────────────────────────
+function relTime(ts) {
+  if (!ts) return '';
+  const diff = (Date.now() - new Date(ts).getTime()) / 1000;
+  if (diff < 0) return 'just now';
+  if (diff < 60) return Math.floor(diff) + 's ago';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  return Math.floor(diff / 86400) + 'd ago';
+}
 
-    let svg = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">`;
-    
-    // Background circles
-    for (let i = 1; i <= 5; i++) {
-      const r = (maxRadius * i) / 5;
-      svg += `<circle cx="${center}" cy="${center}" r="${r}" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>`;
-    }
+function fmtUptime(sec) {
+  if (!sec) return '0s';
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.floor(sec % 60);
+  if (h > 0) return h + 'h ' + m + 'm';
+  if (m > 0) return m + 'm ' + s + 's';
+  return s + 's';
+}
 
-    // Grid lines
-    angles.forEach(angle => {
-      const x = center + maxRadius * Math.cos(angle);
-      const y = center + maxRadius * Math.sin(angle);
-      svg += `<line x1="${center}" y1="${center}" x2="${x}" y2="${y}" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>`;
-    });
+function fmtBytes(b) {
+  if (!b) return '0 B';
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+  return (b / 1048576).toFixed(1) + ' MB';
+}
 
-    // Data polygon
-    const points = angles.map(angle => {
-      const driveName = driveNames[angles.indexOf(angle)];
-      const value = drives[driveName] || 0;
-      const r = maxRadius * value;
-      const x = center + r * Math.cos(angle);
-      const y = center + r * Math.sin(angle);
-      return `${x},${y}`;
-    }).join(' ');
+function esc(s) {
+  if (!s) return '';
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
 
-    svg += `<polygon points="${points}" fill="rgba(124, 58, 237, 0.3)" stroke="#7c3aed" stroke-width="2"/>`;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
 
-    // Data points
-    angles.forEach((angle, i) => {
-      const driveName = driveNames[i];
-      const value = drives[driveName] || 0;
-      const r = maxRadius * value;
-      const x = center + r * Math.cos(angle);
-      const y = center + r * Math.sin(angle);
-      svg += `<circle cx="${x}" cy="${y}" r="3" fill="#7c3aed"/>`;
-    });
+// ── SSE ───────────────────────────────────────────────────
+let evtSource = null;
+let retryDelay = 1000;
 
-    // Labels
-    angles.forEach((angle, i) => {
-      const driveName = driveNames[i];
-      const labelR = maxRadius + 8;
-      const x = center + labelR * Math.cos(angle);
-      const y = center + labelR * Math.sin(angle);
-      svg += `<text x="${x}" y="${y}" text-anchor="middle" alignment-baseline="central" font-size="9" fill="#888" font-weight="600">${driveName.slice(0, 3).toUpperCase()}</text>`;
-    });
+function connectSSE() {
+  if (evtSource) { try { evtSource.close(); } catch(e) {} }
+  evtSource = new EventSource('/api/events');
 
-    svg += '</svg>';
-    return svg;
-  }
+  evtSource.onopen = () => {
+    retryDelay = 1000;
+    document.getElementById('sse-dot').className = 'sse-dot sse-connected';
+    document.getElementById('sse-status').textContent = 'Connected';
+  };
 
-  function parseEvolution(evolutionStr) {
-    if (!evolutionStr) return { experiences: 0, successRate: 0, skills: {} };
-    
-    const experiences = parseInt(evolutionStr.match(/experiences=(\d+)/)?.[1] || '0');
-    const successRate = parseFloat(evolutionStr.match(/success_rate=(\d+)%/)?.[1] || '0');
-    
-    const skillsMatch = evolutionStr.match(/skills=\[([^\]]*)\]/);
-    const skills = {};
-    if (skillsMatch) {
-      skillsMatch[1].split(', ').forEach(skill => {
-        const match = skill.match(/([^(]+)\((\d+)%\)/);
-        if (match) {
-          skills[match[1]] = parseInt(match[2]);
-        }
-      });
-    }
-    
-    return { experiences, successRate, skills };
-  }
-
-  function getSkillClass(percentage) {
-    if (percentage > 80) return 'skill-high';
-    if (percentage >= 50) return 'skill-mid';
-    return 'skill-low';
-  }
-
-  function formatBytes(bytes) {
-    if (!bytes) return '0 B';
-    const units = ['B', 'KB', 'MB', 'GB'];
-    let size = bytes;
-    let unitIndex = 0;
-    
-    while (size >= 1024 && unitIndex < units.length - 1) {
-      size /= 1024;
-      unitIndex++;
-    }
-    
-    return `${size.toFixed(unitIndex > 0 ? 1 : 0)} ${units[unitIndex]}`;
-  }
-
-  function formatTimestamp(timestamp) {
-    if (!timestamp) return '';
-    const date = new Date(timestamp * 1000);
-    return date.toLocaleString([], {
-      month: 'short',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  }
-
-  async function fetchAgentMemory(agentName, section) {
+  evtSource.onmessage = (e) => {
     try {
-      let url;
-      switch (section) {
-        case 'experience':
-          url = `/api/agents/${encodeURIComponent(agentName)}/experience?limit=20`;
-          break;
-        case 'awareness':
-          url = `/api/agents/${encodeURIComponent(agentName)}/awareness`;
-          break;
-        case 'evolution':
-          url = `/api/agents/${encodeURIComponent(agentName)}/evolution`;
-          break;
-        default:
-          throw new Error('Unknown section');
-      }
-      
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      return response.json();
-    } catch (error) {
-      console.error(`Error fetching ${section} for ${agentName}:`, error);
-      return null;
+      state = JSON.parse(e.data);
+      render();
+      document.getElementById('sse-time').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    } catch(err) { console.error('SSE parse error', err); }
+  };
+
+  evtSource.onerror = () => {
+    document.getElementById('sse-dot').className = 'sse-dot sse-disconnected';
+    document.getElementById('sse-status').textContent = 'Reconnecting\u2026';
+    evtSource.close();
+    setTimeout(connectSSE, retryDelay);
+    retryDelay = Math.min(retryDelay * 2, 30000);
+  };
+}
+
+connectSSE();
+
+// ── Render ────────────────────────────────────────────────
+function render() {
+  if (!state) return;
+  renderHeader();
+  renderAgents();
+  renderCollective();
+  renderMemory();
+  renderActivity();
+}
+
+// ── Header ────────────────────────────────────────────────
+function renderHeader() {
+  const s = state.stats || {};
+  const n = state.network || {};
+  document.getElementById('hdr-peers').textContent = (n.peers || 0) + ' peers';
+  document.getElementById('hdr-agents').textContent = s.total_agents || 0;
+  document.getElementById('hdr-tasks').textContent = (s.total_tasks_completed || 0) + (s.total_tasks_failed || 0);
+  document.getElementById('hdr-uptime').textContent = fmtUptime(s.uptime_seconds);
+  document.getElementById('hdr-content').textContent = state.content?.stats?.items || 0;
+}
+
+// ── Agents ────────────────────────────────────────────────
+function renderAgents() {
+  const grid = document.getElementById('agents-grid');
+  const agents = state.agents || [];
+
+  if (!agents.length) { grid.innerHTML = '<p class="empty">No agents connected</p>'; return; }
+
+  // Track existing cards
+  const existing = new Map();
+  grid.querySelectorAll('.agent-card').forEach(c => existing.set(c.dataset.agent, c));
+
+  const seen = new Set();
+  agents.forEach((a, idx) => {
+    seen.add(a.name);
+    let card = existing.get(a.name);
+    if (card) {
+      patchAgentCard(card, a);
+    } else {
+      card = createAgentCard(a);
+      grid.appendChild(card);
+    }
+  });
+
+  // Remove gone agents
+  existing.forEach((card, name) => { if (!seen.has(name)) card.remove(); });
+}
+
+function createAgentCard(a) {
+  const card = document.createElement('div');
+  card.className = 'agent-card';
+  card.dataset.agent = a.name;
+  card.innerHTML = agentCardHTML(a);
+  bindCardEvents(card, a);
+  return card;
+}
+
+function patchAgentCard(card, a) {
+  // Preserve expanded/drawer state
+  const expanded = card.dataset.expanded === 'true';
+  const activeDrawerTab = card.querySelector('.drawer-tab.active')?.dataset.dtab || 'awareness';
+
+  // Update header
+  const hdr = card.querySelector('.agent-card-header');
+  if (hdr) {
+    hdr.querySelector('.agent-name').textContent = a.name;
+    const pers = hdr.querySelector('.agent-personality');
+    if (pers) pers.textContent = a.self?.personality || a.role || '';
+    const sb = hdr.querySelector('.status-badge');
+    if (sb) {
+      sb.textContent = a.status || 'idle';
+      sb.className = 'status-badge status-' + (a.status || 'idle');
     }
   }
 
-  async function renderAgentMemoryPanel(agentName, panelElement) {
-    panelElement.innerHTML = '<div class="memory-loading">Loading memory data...</div>';
-    
-    try {
-      const [experience, awareness, evolution] = await Promise.all([
-        fetchAgentMemory(agentName, 'experience'),
-        fetchAgentMemory(agentName, 'awareness'), 
-        fetchAgentMemory(agentName, 'evolution')
-      ]);
+  // Update radar
+  const radarWrap = card.querySelector('.radar-wrap');
+  if (radarWrap && a.drives) radarWrap.innerHTML = radarSVG(a.drives);
 
-      let html = '';
-      
-      // Experience Journal Section
-      html += '<div class="memory-section">';
-      html += '<div class="memory-section-title">📖 Experience Journal</div>';
-      
-      if (experience && experience.journal) {
-        experience.journal.forEach(entry => {
-          const skillTags = (entry.skills_used || []).map(skill => 
-            `<span class="experience-skill-tag">${esc(skill)}</span>`
-          ).join('');
-          
-          html += `
-            <div class="experience-entry">
-              <div class="experience-header">
-                <span class="experience-success experience-success-${entry.success}">${entry.success ? 'Success' : 'Failed'}</span>
-                <span style="font-size: 0.65rem; color: var(--gray);">${fmtTime(entry.timestamp)}</span>
-              </div>
-              <div class="experience-desc">${esc(trunc(entry.description, 80))}</div>
-              <div class="experience-footer">
-                <div class="experience-skills">${skillTags}</div>
-                <span>${entry.duration_secs ? entry.duration_secs.toFixed(1) + 's' : ''}</span>
-              </div>
-            </div>
-          `;
-        });
-        
-        if (experience.total > experience.showing) {
-          html += `<div style="text-align: center; color: var(--dim); font-size: 0.7rem; margin-top: 8px;">
-            Showing ${experience.showing} of ${experience.total} entries
-          </div>`;
-        }
-      } else {
-        html += '<div class="empty-state" style="padding: 16px;">No experience data available</div>';
-      }
-      html += '</div>';
-      
-      // Awareness Section
-      html += '<div class="memory-section">';
-      html += '<div class="memory-section-title">🧠 Self-Awareness</div>';
-      
-      if (awareness) {
-        html += '<div class="awareness-grid">';
-        const fields = ['personality', 'purpose', 'narrative', 'strengths', 'weaknesses', 'mood', 'morale'];
-        fields.forEach(field => {
-          if (awareness[field] !== undefined) {
-            let value = awareness[field];
-            if (typeof value === 'string') {
-              value = trunc(value, 30);
-            } else if (typeof value === 'number') {
-              value = field === 'morale' ? `${(value * 100).toFixed(0)}%` : value.toString();
-            }
-            html += `
-              <div class="awareness-item">
-                <span class="label">${field.charAt(0).toUpperCase() + field.slice(1)}:</span>
-                <span class="value">${esc(String(value))}</span>
-              </div>
-            `;
-          }
-        });
-        html += '</div>';
-      } else {
-        html += '<div class="empty-state" style="padding: 16px;">No awareness data available</div>';
-      }
-      html += '</div>';
-      
-      // Evolution Section
-      html += '<div class="memory-section">';
-      html += '<div class="memory-section-title">🧬 Evolution Details</div>';
-      
-      if (evolution) {
-        html += '<div class="evolution-stats">';
-        const fields = ['strategy', 'skills', 'stats'];
-        fields.forEach(field => {
-          if (evolution[field] !== undefined) {
-            let value = evolution[field];
-            if (typeof value === 'object') {
-              value = JSON.stringify(value, null, 2);
-            }
-            html += `
-              <div class="evolution-row">
-                <span class="label">${field.charAt(0).toUpperCase() + field.slice(1)}:</span>
-                <span class="value">${esc(String(value).slice(0, 100))}${String(value).length > 100 ? '...' : ''}</span>
-              </div>
-            `;
-          }
-        });
-        html += '</div>';
-      } else {
-        html += '<div class="empty-state" style="padding: 16px;">No evolution data available</div>';
-      }
-      html += '</div>';
-      
-      panelElement.innerHTML = html;
-      
-    } catch (error) {
-      panelElement.innerHTML = '<div class="empty-state" style="padding: 16px; color: var(--red);">Failed to load memory data</div>';
-    }
+  // Update skills
+  const skillWrap = card.querySelector('.skill-tags');
+  if (skillWrap) {
+    skillWrap.innerHTML = (a.skills || []).map(s => '<span class="skill-tag">' + esc(s) + '</span>').join('');
   }
 
-  function toggleAgentMemory(agentCard, agentName) {
-    const existingPanel = agentCard.querySelector('.agent-memory-panel');
-    
-    if (existingPanel) {
-      // Toggle existing panel
-      if (existingPanel.classList.contains('show')) {
-        existingPanel.classList.remove('show');
-        agentCard.classList.remove('expanded');
-        setTimeout(() => {
-          existingPanel.remove();
-        }, 300);
-      }
-      return;
-    }
-    
-    // Create new panel
-    const panel = document.createElement('div');
-    panel.className = 'agent-memory-panel';
-    agentCard.appendChild(panel);
-    
-    // Trigger animation
-    requestAnimationFrame(() => {
-      panel.classList.add('show');
-      agentCard.classList.add('expanded');
-    });
-    
-    // Load data
-    renderAgentMemoryPanel(agentName, panel);
+  // Update economy
+  const ecoLine = card.querySelector('.economy-line');
+  if (ecoLine && a.economy) {
+    const health = a.economy.health || 'good';
+    ecoLine.innerHTML = '<strong>' + (a.economy.balance || 0).toFixed(1) + '</strong> credits <span class="health-badge health-' + health + '">' + health + '</span>';
   }
 
-  async function fetchCollectiveMemory() {
-    try {
-      const response = await fetch('/api/content');
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      return response.json();
-    } catch (error) {
-      console.error('Error fetching collective memory:', error);
-      return null;
-    }
+  // Update drawer if open
+  if (expanded) {
+    updateDrawerContent(card, a, activeDrawerTab);
   }
+}
 
-  async function renderCollectiveMemory() {
-    const listElement = document.getElementById('content-store-list');
-    const statsElement = document.getElementById('collective-memory-stats');
-    
-    listElement.innerHTML = '<div class="memory-loading">Loading collective memory...</div>';
-    
-    try {
-      const data = await fetchCollectiveMemory();
-      
-      if (!data || !data.items) {
-        listElement.innerHTML = '<div class="empty-state" style="padding: 16px;">No collective memory data available</div>';
-        return;
-      }
-      
-      // Render content items
-      const html = data.items.map(item => {
-        const cidShort = item.cid ? item.cid.slice(0, 8) + '...' : 'N/A';
-        const agentIdShort = item.agent_id ? item.agent_id.slice(0, 8) : 'unknown';
-        
-        return `
-          <div class="content-entry">
-            <div class="content-header">
-              <span class="content-cid">${esc(cidShort)}</span>
-              <span class="content-type-badge">${esc(item.type || 'unknown')}</span>
-            </div>
-            <div class="content-summary">${esc(item.summary || 'No summary available')}</div>
-            <div class="content-footer">
-              <span>Agent: ${esc(agentIdShort)}</span>
-              <span>${formatBytes(item.size)} • ${formatTimestamp(item.timestamp)}</span>
-            </div>
-          </div>
-        `;
-      }).join('');
-      
-      listElement.innerHTML = html;
-      
-      // Update stats
-      const stats = data.stats || {};
-      document.getElementById('memory-items-count').textContent = stats.items || 0;
-      document.getElementById('memory-providers-count').textContent = stats.providers || 0;
-      document.getElementById('memory-total-bytes').textContent = formatBytes(stats.total_bytes || 0);
-      
-    } catch (error) {
-      listElement.innerHTML = '<div class="empty-state" style="padding: 16px; color: var(--red);">Failed to load collective memory</div>';
-    }
-  }
-
-  function renderAgents(agents) {
-    const grid = document.getElementById('agents-grid');
-    if (!agents || !agents.length) {
-      grid.innerHTML = '<div class="empty-state">No agents discovered yet...</div>';
-      return;
-    }
-
-    grid.innerHTML = agents.map(agent => {
-      const isCoord = agent.role === 'coordinator';
-      const evolution = parseEvolution(agent.evolution);
-      const drives = agent.drives || {};
-      
-      const skillTags = Object.entries(evolution.skills)
-        .map(([skill, percentage]) => {
-          return `<span class="skill-tag ${getSkillClass(percentage)}">${esc(skill)} ${percentage}%</span>`;
-        })
-        .join('');
-
-      const uptime = agent.started_at 
-        ? (Date.now() - new Date(agent.started_at).getTime()) / 1000 
-        : 0;
-
-      return `
-        <div class="agent-card ${isCoord ? 'coordinator' : ''}" onclick="toggleAgentMemory(this, '${esc(agent.name)}')">
-          <div class="agent-top">
-            <div>
-              <span class="agent-name">${isCoord ? '🧠 ' : ''}${esc(agent.name)}</span>
-              <span class="agent-id">${esc(agent.id)}</span>
-            </div>
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span class="role-badge role-${agent.role}">${esc(agent.role)}</span>
-              <span class="status-dot status-${agent.status || 'idle'}"></span>
-            </div>
-          </div>
-          
-          ${agent.description ? `<div class="agent-desc">${esc(trunc(agent.description, 100))}</div>` : ''}
-          
-          <div class="personality-mood">
-            <span class="personality">${esc(agent.self?.personality || 'Unknown')}</span>
-            <span class="mood">Mood: ${esc(agent.self?.mood || 'unknown')}</span>
-          </div>
-          
-          <div class="drives-section">
-            <div class="drives-title">Five Drives</div>
-            <div class="drives-radar">${createRadarChart(drives)}</div>
-          </div>
-          
-          <div class="skills-section">
-            <div class="skills-title">Skills & Performance</div>
-            <div class="skills-row">${skillTags || '<span class="skill-tag skill-low">No skills yet</span>'}</div>
-          </div>
-          
-          <div class="agent-details">
-            <div class="agent-detail">
-              <span class="label">Runtime:</span>
-              <span class="value">${esc(agent.runtime)}</span>
-            </div>
-            <div class="agent-detail">
-              <span class="label">Model:</span>
-              <span class="value">${esc(agent.model)}</span>
-            </div>
-            <div class="agent-detail">
-              <span class="label">Tasks:</span>
-              <span class="value">${agent.task_count || 0}</span>
-            </div>
-            <div class="agent-detail">
-              <span class="label">Energy:</span>
-              <span class="value">${((agent.self?.energy || 0) * 100).toFixed(0)}%</span>
-            </div>
-            <div class="agent-detail">
-              <span class="label">Morale:</span>
-              <span class="value">${((agent.self?.morale || 0) * 100).toFixed(0)}%</span>
-            </div>
-            <div class="agent-detail">
-              <span class="label">Uptime:</span>
-              <span class="value">${fmt(uptime)}</span>
-            </div>
-          </div>
-          
-          <div class="economy-section">
-            <div class="economy-title">💰 Economy</div>
-            <div class="economy-row">
-              <span>Balance:</span>
-              <span style="font-weight: 600;">${(agent.balance || 0).toFixed(4)}</span>
-            </div>
-            <div class="economy-row">
-              <span>Health:</span>
-              <span class="economy-health health-${agent.economy?.health || 'stable'}">${esc(agent.economy?.health || 'stable')}</span>
-            </div>
-            <div class="economy-row">
-              <span>Earned:</span>
-              <span>${(agent.economy?.stats?.total_earned || 0).toFixed(2)}</span>
-            </div>
-            <div class="economy-row">
-              <span>Spent:</span>
-              <span>${(agent.economy?.stats?.total_spent || 0).toFixed(2)}</span>
-            </div>
-          </div>
-          
-          ${agent.self?.narrative ? `
-            <div class="narrative-section">
-              <div class="narrative-title">🎭 Self Narrative</div>
-              <div class="narrative-text">"${esc(trunc(agent.self.narrative, 150))}"</div>
-            </div>
-          ` : ''}
+function agentCardHTML(a) {
+  const status = a.status || 'idle';
+  const health = a.economy?.health || 'good';
+  return `
+    <div class="agent-card-header">
+      <div><span class="agent-name">${esc(a.name)}</span><span class="agent-personality">${esc(a.self?.personality || a.role || '')}</span></div>
+      <span class="status-badge status-${status}">${status}</span>
+    </div>
+    <div class="agent-card-body">
+      <div class="radar-wrap">${a.drives ? radarSVG(a.drives) : ''}</div>
+      <div class="skills-economy">
+        <div class="skill-tags">${(a.skills || []).map(s => '<span class="skill-tag">' + esc(s) + '</span>').join('')}</div>
+        <div class="economy-line">
+          <strong>${(a.economy?.balance || 0).toFixed(1)}</strong> credits
+          <span class="health-badge health-${health}">${health}</span>
         </div>
-      `;
-    }).join('');
-  }
-
-  function renderCollective(agents) {
-    const panel = document.getElementById('collective-panel');
-    if (!agents || !agents.length) {
-      panel.innerHTML = '<div class="empty-state">Collective mind forming...</div>';
-      return;
-    }
-
-    // Use the first agent's collective data as representative
-    const collective = agents[0]?.collective;
-    if (!collective) {
-      panel.innerHTML = '<div class="empty-state">Collective consciousness not yet formed...</div>';
-      return;
-    }
-
-    const explorers = collective.explorers || [];
-    const creators = collective.creators || [];
-    const allRoles = [...explorers.map(name => ({ name, type: 'explorer' })), 
-                     ...creators.map(name => ({ name, type: 'creator' }))];
-
-    panel.innerHTML = `
-      <div class="collective-panel">
-        <div class="collective-title">${esc(collective.swarm_personality || 'Unnamed Collective')}</div>
-        <div class="collective-info">
-          <div class="collective-purpose">${esc(collective.swarm_purpose || 'No purpose defined yet')}</div>
-          
-          <div class="morale-section">
-            <div class="morale-label">Average Morale</div>
-            <div class="morale-bar">
-              <div class="morale-fill" style="width: ${(collective.average_morale || 0) * 100}%"></div>
-            </div>
-            <div style="font-size: 0.7rem; color: var(--dim); margin-top: 4px;">
-              ${((collective.average_morale || 0) * 100).toFixed(1)}% • ${collective.total_agents || 0} agents
-            </div>
-          </div>
-          
-          <div class="roles-section">
-            <div class="roles-title">Role Distribution</div>
-            <div class="roles-list">
-              ${allRoles.map(role => 
-                `<span class="role-tag">${esc(role.name)} (${role.type})</span>`
-              ).join('')}
-            </div>
-          </div>
-        </div>
-        
-        ${collective.narrative ? `
-          <div class="collective-narrative">
-            "${esc(collective.narrative)}"
-          </div>
-        ` : ''}
       </div>
-    `;
+    </div>
+    <div class="agent-drawer">
+      <div class="drawer-tabs">
+        <button class="drawer-tab active" data-dtab="awareness">Awareness</button>
+        <button class="drawer-tab" data-dtab="evolution">Evolution</button>
+        <button class="drawer-tab" data-dtab="context">Context Memory</button>
+      </div>
+      <div class="drawer-panel active" data-dpanel="awareness"></div>
+      <div class="drawer-panel" data-dpanel="evolution"></div>
+      <div class="drawer-panel" data-dpanel="context"></div>
+    </div>`;
+}
+
+function bindCardEvents(card, a) {
+  // Toggle drawer — click anywhere on card header or body (not drawer itself)
+  const toggleExpand = () => {
+    const isOpen = card.dataset.expanded === 'true';
+    if (isOpen) {
+      card.dataset.expanded = 'false';
+    } else {
+      card.dataset.expanded = 'true';
+      updateDrawerContent(card, findAgent(card.dataset.agent), 'awareness');
+    }
+  };
+  card.querySelector('.agent-card-header').addEventListener('click', toggleExpand);
+  const body = card.querySelector('.agent-card-body');
+  if (body) body.addEventListener('click', toggleExpand);
+  card.querySelectorAll('.drawer-tab').forEach(tab => {
+    tab.addEventListener('click', (e) => {
+      e.stopPropagation();
+      card.querySelectorAll('.drawer-tab').forEach(t => t.classList.remove('active'));
+      card.querySelectorAll('.drawer-panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      card.querySelector('[data-dpanel="' + tab.dataset.dtab + '"]').classList.add('active');
+      updateDrawerContent(card, findAgent(card.dataset.agent), tab.dataset.dtab);
+    });
+  });
+}
+
+function findAgent(name) {
+  return (state?.agents || []).find(a => a.name === name);
+}
+
+function updateDrawerContent(card, a, tab) {
+  if (!a) return;
+  const panel = card.querySelector('[data-dpanel="' + tab + '"]');
+  if (!panel) return;
+
+  if (tab === 'awareness') {
+    panel.innerHTML = awarenessHTML(a);
+  } else if (tab === 'evolution') {
+    panel.innerHTML = evolutionHTML(a);
+  } else if (tab === 'context') {
+    if (!panel.dataset.loaded) {
+      panel.innerHTML = '<p class="ctx-loading">Loading context memory\u2026</p>';
+      loadContext(a.name, panel);
+    }
+  }
+}
+
+function awarenessHTML(a) {
+  const s = a.self || {};
+  const mood = (s.mood || 0) * 100, energy = (s.energy || 0) * 100, morale = (s.morale || 0) * 100;
+  return `
+    <div class="awareness-grid">
+      <div class="awareness-item"><label>Purpose</label><div class="val">${esc(s.purpose || '-')}</div></div>
+      <div class="awareness-item"><label>Decision Style</label><div class="val">${esc(s.decision_style || '-')}</div></div>
+      <div class="awareness-full"><label>Narrative</label><div class="val">${esc(s.narrative || '-')}</div></div>
+    </div>
+    <div style="margin-top:12px">
+      <div class="progress-row"><label>Mood</label><div class="progress-bar"><div class="progress-fill" style="width:${mood}%;background:var(--accent)"></div></div><span style="font-size:11px;color:var(--dim);width:32px;text-align:right">${Math.round(mood)}%</span></div>
+      <div class="progress-row"><label>Energy</label><div class="progress-bar"><div class="progress-fill" style="width:${energy}%;background:var(--amber)"></div></div><span style="font-size:11px;color:var(--dim);width:32px;text-align:right">${Math.round(energy)}%</span></div>
+      <div class="progress-row"><label>Morale</label><div class="progress-bar"><div class="progress-fill" style="width:${morale}%;background:var(--green)"></div></div><span style="font-size:11px;color:var(--dim);width:32px;text-align:right">${Math.round(morale)}%</span></div>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:24px">
+      <div><label style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:0.05em">Strengths</label><div class="tag-list" style="margin-top:4px">${(s.strengths || []).map(t => '<span class="tag-sm" style="background:rgba(16,185,129,0.1);color:var(--green)">' + esc(t) + '</span>').join('')}</div></div>
+      <div><label style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:0.05em">Weaknesses</label><div class="tag-list" style="margin-top:4px">${(s.weaknesses || []).map(t => '<span class="tag-sm" style="background:rgba(239,68,68,0.1);color:var(--red)">' + esc(t) + '</span>').join('')}</div></div>
+    </div>`;
+}
+
+function evolutionHTML(a) {
+  let evo = {};
+  if (typeof a.evolution === 'string') { try { evo = JSON.parse(a.evolution); } catch(e) {} }
+  else if (typeof a.evolution === 'object' && a.evolution) { evo = a.evolution; }
+
+  const xp = evo.experience_count || a.task_count || 0;
+  const completed = state?.stats?.total_tasks_completed || 0;
+  const failed = state?.stats?.total_tasks_failed || 0;
+  const total = completed + failed;
+  const rate = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+  const skills = evo.skill_confidence || {};
+  const skillBars = Object.entries(skills).map(([k, v]) => {
+    const pct = (typeof v === 'number' ? v : 0) * 100;
+    return `<div class="confidence-row"><span class="skill-name">${esc(k)}</span><div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:var(--cyan)"></div></div><span style="font-size:10px;color:var(--dim);width:32px;text-align:right">${Math.round(pct)}%</span></div>`;
+  }).join('');
+
+  return `
+    <div class="evo-stats">
+      <div class="evo-stat">Experience: <strong>${xp}</strong></div>
+      <div class="evo-stat">Success Rate: <strong>${rate}%</strong></div>
+    </div>
+    ${skillBars || '<p style="font-size:12px;color:var(--dim)">No skill confidence data yet</p>'}`;
+}
+
+async function loadContext(name, panel) {
+  try {
+    const res = await fetch('/api/agents/' + encodeURIComponent(name) + '/context');
+    if (!res.ok) throw new Error(res.statusText);
+    const data = await res.json();
+    contextCache[name] = { data, ts: Date.now() };
+    panel.dataset.loaded = '1';
+    renderContextPanel(panel, data, null);
+  } catch(e) {
+    panel.innerHTML = '<p class="ctx-loading">Failed to load: ' + esc(e.message) + '</p>';
+  }
+}
+
+function renderContextPanel(panel, data, filterCat) {
+  const entries = data.entries || [];
+  const cats = ['profile', 'entities', 'cases', 'events', 'preferences', 'patterns'];
+  const stats = data.stats || {};
+
+  const filtered = filterCat ? entries.filter(e => e.category === filterCat) : entries;
+
+  // Preserve open entries
+  const openURIs = new Set();
+  panel.querySelectorAll('.ctx-entry[data-open="true"]').forEach(el => openURIs.add(el.dataset.uri));
+
+  let html = '<div class="ctx-filters">';
+  html += '<button class="ctx-filter-btn' + (!filterCat ? ' active' : '') + '" data-cat="">All</button>';
+  cats.forEach(c => {
+    const cnt = stats[c] || 0;
+    html += '<button class="ctx-filter-btn' + (filterCat === c ? ' active' : '') + '" data-cat="' + c + '">' + c + ' (' + cnt + ')</button>';
+  });
+  html += '</div><div class="ctx-entries">';
+
+  if (!filtered.length) {
+    html += '<p class="ctx-loading">No entries</p>';
+  } else {
+    filtered.forEach(e => {
+      const isOpen = openURIs.has(e.uri);
+      html += `<div class="ctx-entry" data-uri="${esc(e.uri)}" ${isOpen ? 'data-open="true"' : ''}>
+        <div class="ctx-entry-head"><span class="ctx-cat">${esc(e.category)}</span><span class="ctx-l0">${esc(e.l0)}</span></div>
+        ${e.l1 ? '<div class="ctx-l1">' + esc(e.l1) + '</div>' : ''}
+      </div>`;
+    });
+  }
+  html += '</div>';
+  panel.innerHTML = html;
+
+  // Bind filter clicks
+  panel.querySelectorAll('.ctx-filter-btn').forEach(btn => {
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const cat = btn.dataset.cat || null;
+      const agentName = panel.closest('.agent-card')?.dataset.agent;
+      const cached = contextCache[agentName];
+      if (cached) renderContextPanel(panel, cached.data, cat);
+    });
+  });
+
+  // Bind entry expand
+  panel.querySelectorAll('.ctx-entry').forEach(el => {
+    el.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      el.dataset.open = el.dataset.open === 'true' ? 'false' : 'true';
+    });
+  });
+}
+
+// ── Radar Chart SVG ───────────────────────────────────────
+function radarSVG(drives) {
+  const size = 120, cx = size / 2, cy = size / 2, r = 44;
+  const keys = ['survive', 'explore', 'connect', 'transcend', 'create'];
+  const labels = ['Sur', 'Exp', 'Con', 'Tra', 'Cre'];
+  const n = keys.length;
+
+  function polar(i, val) {
+    const angle = (Math.PI * 2 * i / n) - Math.PI / 2;
+    return [cx + r * val * Math.cos(angle), cy + r * val * Math.sin(angle)];
   }
 
-  function renderTasks(tasks) {
-    const list = document.getElementById('task-list');
-    if (!tasks || !tasks.length) {
-      list.innerHTML = '<div class="empty-state">Awaiting task events...</div>';
-      return;
-    }
+  // Background rings
+  let svg = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">`;
+  const ringColor = 'var(--border)';
+  [0.33, 0.66, 1].forEach(s => {
+    const pts = keys.map((_, i) => polar(i, s).join(',')).join(' ');
+    svg += `<polygon points="${pts}" fill="none" stroke="${ringColor}" stroke-width="0.5"/>`;
+  });
 
-    // Show newest first, limit to recent tasks
-    const sorted = [...tasks].reverse().slice(0, 20);
-    list.innerHTML = sorted.map(task => {
-      const isCoord = task.runtime === 'coordinator';
-      return `
-        <div class="task-entry ${isCoord ? 'is-coordinator' : ''}">
-          <div class="task-header">
-            <span class="task-agent">${isCoord ? '🧠 ' : ''}${esc(task.agent)}</span>
-            <span class="task-status task-status-${task.status || 'queued'}">${esc(task.status)}</span>
-          </div>
-          <div class="task-desc">${esc(trunc(task.description, 100))}</div>
-          <div class="task-time">
-            ${fmtTime(task.submitted_at)}${task.completed_at && !task.completed_at.startsWith('0001') 
-              ? ' → ' + fmtTime(task.completed_at) 
-              : ''}
-          </div>
+  // Axes
+  keys.forEach((_, i) => {
+    const [x, y] = polar(i, 1);
+    svg += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="${ringColor}" stroke-width="0.5"/>`;
+  });
+
+  // Data polygon
+  const vals = keys.map(k => Math.min(1, Math.max(0, drives[k] || 0)));
+  const dataPts = vals.map((v, i) => polar(i, v).join(',')).join(' ');
+  svg += `<polygon points="${dataPts}" fill="rgba(124,58,237,0.15)" stroke="var(--accent)" stroke-width="1.5"/>`;
+
+  // Data dots + labels
+  vals.forEach((v, i) => {
+    const [x, y] = polar(i, v);
+    svg += `<circle cx="${x}" cy="${y}" r="2.5" fill="var(--accent)"/>`;
+    const [lx, ly] = polar(i, 1.22);
+    svg += `<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="central" fill="var(--dim)" font-size="8" font-family="var(--font)">${labels[i]}</text>`;
+  });
+
+  svg += '</svg>';
+  return svg;
+}
+
+// ── Collective ────────────────────────────────────────────
+function renderCollective() {
+  const el = document.getElementById('collective-content');
+  const agents = state.agents || [];
+  if (!agents.length) { el.innerHTML = '<p class="empty">No collective data</p>'; return; }
+
+  // Use first agent's collective info (all should be same)
+  const c = agents[0]?.collective || {};
+  const avgEnergy = Math.round((c.average_energy || 0) * 100);
+  const avgMorale = Math.round((c.average_morale || 0) * 100);
+
+  let html = `<div class="collective-header"><h2>${esc(c.swarm_personality || 'Swarm')}</h2><p>${esc(c.swarm_purpose || '')}</p></div>`;
+
+  if (c.narrative) {
+    html += `<div class="collective-section"><h3>Narrative</h3><p style="font-size:13px;color:var(--dim);max-width:600px">${esc(c.narrative)}</p></div>`;
+  }
+
+  html += '<div class="collective-section"><h3>Emergent Roles</h3>';
+  if (c.explorers?.length) html += roleGroupHTML('Explorers', c.explorers, 'role-tag-explorer');
+  if (c.creators?.length) html += roleGroupHTML('Creators', c.creators, 'role-tag-creator');
+  if (c.connectors?.length) html += roleGroupHTML('Connectors', c.connectors, 'role-tag-connector');
+  html += '</div>';
+
+  html += `<div class="collective-section"><h3>Collective Mood</h3><div class="mood-bars">
+    <div class="progress-row"><label>Energy</label><div class="progress-bar"><div class="progress-fill" style="width:${avgEnergy}%;background:var(--amber)"></div></div><span style="font-size:11px;color:var(--dim);width:32px;text-align:right">${avgEnergy}%</span></div>
+    <div class="progress-row"><label>Morale</label><div class="progress-bar"><div class="progress-fill" style="width:${avgMorale}%;background:var(--green)"></div></div><span style="font-size:11px;color:var(--dim);width:32px;text-align:right">${avgMorale}%</span></div>
+  </div></div>`;
+
+  el.innerHTML = html;
+}
+
+function roleGroupHTML(label, names, cls) {
+  return `<div class="role-group"><div class="role-group-label">${label}</div><div class="role-tags">${names.map(n => '<span class="skill-tag ' + cls + '">' + esc(n) + '</span>').join('')}</div></div>`;
+}
+
+// ── Memory ────────────────────────────────────────────────
+function renderMemory() {
+  const content = state.content || {};
+  const stats = content.stats || {};
+  const items = content.items || [];
+
+  // Stats cards
+  const statsEl = document.getElementById('mem-stats');
+  statsEl.innerHTML = `
+    <div class="mem-stat-card"><div class="val">${stats.items || 0}</div><div class="lbl">Total Items</div></div>
+    <div class="mem-stat-card"><div class="val">${fmtBytes(stats.total_bytes)}</div><div class="lbl">Total Size</div></div>
+    <div class="mem-stat-card"><div class="val">${stats.persistent ? '<span style="color:var(--green)">Yes</span>' : 'No'}</div><div class="lbl">Persistent</div></div>
+    <div class="mem-stat-card"><div class="val">${stats.cache_items || 0}</div><div class="lbl">Cache Items</div></div>`;
+
+  // Table — deduplicate by summary, keep latest
+  const deduped = new Map();
+  items.forEach(item => {
+    const key = item.summary || item.cid;
+    const existing = deduped.get(key);
+    if (!existing || new Date(item.timestamp) > new Date(existing.timestamp)) {
+      deduped.set(key, item);
+    }
+  });
+
+  const sorted = Array.from(deduped.values()).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  const tbody = document.getElementById('mem-tbody');
+  tbody.innerHTML = sorted.map(item => {
+    const sha = (item.cid || '').substring(0, 12);
+    const ipfs = item.ipfs_cid || '';
+    const ipfsShort = ipfs.length > 20 ? ipfs.substring(0, 20) + '\u2026' : ipfs;
+    return `<tr data-fullcid="${esc(ipfs)}">
+      <td>${esc(item.agent_id)}</td>
+      <td>${esc(item.summary)}</td>
+      <td class="sha-cell">${esc(sha)}</td>
+      <td class="cid-cell" title="${esc(ipfs)}">${esc(ipfsShort)}</td>
+      <td>${fmtBytes(item.size)}</td>
+      <td>${relTime(item.timestamp)}</td>
+    </tr>`;
+  }).join('');
+
+  // Click to copy CID
+  tbody.querySelectorAll('tr').forEach(row => {
+    row.addEventListener('click', () => {
+      const cid = row.dataset.fullcid;
+      if (cid && navigator.clipboard) {
+        navigator.clipboard.writeText(cid).then(() => showToast('CID copied'));
+      }
+    });
+  });
+}
+
+// ── Activity ──────────────────────────────────────────────
+function renderActivity() {
+  const feed = document.getElementById('activity-feed');
+  const tasks = (state.tasks || []).slice().sort((a, b) => {
+    const ta = a.completed_at || a.submitted_at || '';
+    const tb = b.completed_at || b.submitted_at || '';
+    return new Date(tb) - new Date(ta);
+  });
+
+  if (!tasks.length) { feed.innerHTML = '<p class="empty">No activity yet</p>'; return; }
+
+  feed.innerHTML = tasks.map(t => {
+    const status = t.status || 'queued';
+    const ts = t.completed_at || t.submitted_at || '';
+    const runtime = t.runtime ? (typeof t.runtime === 'number' ? t.runtime.toFixed(1) + 's' : t.runtime) : '';
+    return `<div class="activity-item">
+      <span class="activity-agent">${esc(t.agent)}</span>
+      <div class="activity-body">
+        <div class="activity-desc">${esc(t.description)}</div>
+        <div class="activity-meta">
+          <span class="task-status task-${status}">${status}</span>
+          ${runtime ? '<span>' + runtime + '</span>' : ''}
+          <span>${relTime(ts)}</span>
         </div>
-      `;
-    }).join('');
-  }
-
-  async function get(url) {
-    const response = await fetch(url);
-    if (!response.ok) throw response.status;
-    return response.json();
-  }
-
-  function handleStateUpdate(data) {
-    try {
-      const agents = { agents: data.agents || [], count: (data.agents || []).length };
-      const stats = data.stats || {};
-      const tasks = data.tasks || [];
-      const net = data.network || {};
-
-      failCount = 0;
-      document.getElementById('disconnected').classList.remove('show');
-
-      // Update header info
-      document.getElementById('uptime').textContent = `Uptime: ${fmt(stats.uptime_seconds)}`;
-      document.getElementById('agent-count').textContent = 
-        `${agents.count} agent${agents.count !== 1 ? 's' : ''}`;
-
-      // Update swarm status
-      const swarmStatus = agents.count > 0 ? 'Active' : 'Dormant';
-      document.getElementById('swarm-status').textContent = swarmStatus;
-
-      // Update statistics
-      anim(document.getElementById('stat-completed'), stats.total_tasks_completed || 0);
-      anim(document.getElementById('stat-failed'), stats.total_tasks_failed || 0);
-      anim(document.getElementById('stat-queued'), stats.total_tasks_queued || 0);
-
-      // Calculate evolution and balance stats
-      let totalXP = 0;
-      let totalSkills = new Set();
-      let totalBalance = 0;
-      let agentCount = 0;
-
-      for (const agent of agents.agents) {
-        if (agent.evolution) {
-          const evo = parseEvolution(agent.evolution);
-          totalXP += evo.experiences;
-          Object.keys(evo.skills).forEach(skill => totalSkills.add(skill));
-        }
-        if (agent.balance != null) {
-          totalBalance += agent.balance;
-          agentCount++;
-        }
-      }
-
-      anim(document.getElementById('stat-evo-xp'), totalXP);
-      anim(document.getElementById('stat-evo-skills'), totalSkills.size);
-      anim(document.getElementById('stat-avg-balance'), 
-           agentCount > 0 ? (totalBalance / agentCount).toFixed(2) : '0.00');
-
-      // Update network panel
-      document.getElementById('net-transport').textContent = net.transport || stats.network_transport || 'local';
-      document.getElementById('net-peers').textContent = net.peers || 0;
-      document.getElementById('net-uptime').textContent = fmt(stats.uptime_seconds);
-
-      // Render components
-      renderAgents(agents.agents);
-      renderCollective(agents.agents);
-      renderTasks(tasks);
-
-      globalSwarmData = { agents, stats, tasks: { tasks }, peers: { count: net.peers || 0 } };
-
-    } catch (error) {
-      console.error('State update error:', error);
-    }
-  }
-
-  // --- SSE Connection ---
-  function connectSSE() {
-    const es = new EventSource('/api/events');
-
-    es.onmessage = function(e) {
-      try {
-        const data = JSON.parse(e.data);
-        handleStateUpdate(data);
-      } catch (err) {
-        console.error('SSE parse error:', err);
-      }
-    };
-
-    es.onerror = function() {
-      es.close();
-      if (++failCount >= 3) {
-        document.getElementById('disconnected').classList.add('show');
-      }
-      // Reconnect after 3s
-      setTimeout(connectSSE, 3000);
-    };
-
-    es.onopen = function() {
-      failCount = 0;
-      document.getElementById('disconnected').classList.remove('show');
-    };
-  }
-
-  // Also do one initial fetch for version info (SSE doesn't include it)
-  get('/api/health').then(h => {
-    document.getElementById('version').textContent = `v${h.version || '0.1.0'}`;
-  }).catch(() => {});
-
-  // Initialize collective memory
-  renderCollectiveMemory();
-  
-  // Make toggleAgentMemory globally available
-  window.toggleAgentMemory = toggleAgentMemory;
-
-  connectSSE();
-})();
+      </div>
+    </div>`;
+  }).join('');
+}
 </script>
 </body>
 </html>
