@@ -194,3 +194,17 @@
   - delegation
   - analysis
   timestamp: 2026-03-26T15:08:10.008884+08:00
+- taskid: 20e7d442
+  description: 'Write a technical comparison of three approaches to AI agent execution
+    loops: 1) ReAct (Reasoning + Acting), 2) Plan-then-Execute, 3) Tree of Thought.
+    For each, explain the core idea, strengths, weaknesses, and when to use it. Format
+    as a structured markdown document with headers and bullet points.'
+  runtime: builtin
+  success: true
+  duration: 76.036563083
+  error: ""
+  skills:
+  - planning
+  - delegation
+  - analysis
+  timestamp: 2026-03-26T15:15:28.901949+08:00

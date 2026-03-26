@@ -163,9 +163,10 @@ a { color: var(--accent); text-decoration: none; }
 .memory-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
 .memory-table tr { cursor: pointer; transition: background var(--transition); }
 .memory-table tbody tr:hover { background: rgba(124,58,237,0.04); }
-.cid-cell { font-family: var(--mono); font-size: 11px; color: var(--dim); }
-.cid-cell[title] { cursor: copy; }
-.sha-cell { font-family: var(--mono); font-size: 11px; color: var(--dim); }
+.cid-cell { font-family: var(--mono); font-size: 11px; color: var(--dim); cursor: copy; }
+.sha-cell { font-family: var(--mono); font-size: 11px; color: var(--dim); cursor: copy; }
+.content-link { color: var(--accent); text-decoration: none; }
+.content-link:hover { text-decoration: underline; }
 
 /* ── Activity Tab ──────────────────────────────────────── */
 .activity-feed { max-width: 700px; }
@@ -885,22 +886,26 @@ function renderMemory() {
     const sha = (item.cid || '').substring(0, 12);
     const ipfs = item.ipfs_cid || '';
     const ipfsShort = ipfs.length > 20 ? ipfs.substring(0, 20) + '\u2026' : ipfs;
-    return `<tr data-fullcid="${esc(ipfs)}">
+    const viewUrl = '/api/content/' + encodeURIComponent(item.cid || '') + '?format=html';
+    return `<tr data-cid="${esc(item.cid || '')}" data-fullcid="${esc(ipfs)}">
       <td>${esc(item.agent_id)}</td>
-      <td>${esc(item.summary)}</td>
-      <td class="sha-cell">${esc(sha)}</td>
+      <td><a href="${viewUrl}" target="_blank" class="content-link">${esc(item.summary || item.type || 'content')}</a></td>
+      <td class="sha-cell" title="${esc(item.cid || '')}">${esc(sha)}</td>
       <td class="cid-cell" title="${esc(ipfs)}">${esc(ipfsShort)}</td>
       <td>${fmtBytes(item.size)}</td>
       <td>${relTime(item.timestamp)}</td>
     </tr>`;
   }).join('');
 
-  // Click to copy CID
-  tbody.querySelectorAll('tr').forEach(row => {
-    row.addEventListener('click', () => {
-      const cid = row.dataset.fullcid;
-      if (cid && navigator.clipboard) {
-        navigator.clipboard.writeText(cid).then(() => showToast('CID copied'));
+  // Click SHA/CID cells to copy, click summary to open
+  tbody.querySelectorAll('.sha-cell, .cid-cell').forEach(cell => {
+    cell.style.cursor = 'pointer';
+    cell.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const row = cell.closest('tr');
+      const text = cell.classList.contains('cid-cell') ? row.dataset.fullcid : row.dataset.cid;
+      if (text && navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(() => showToast('CID copied'));
       }
     });
   });

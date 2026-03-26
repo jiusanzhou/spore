@@ -93,6 +93,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/tasks", s.handleTasks)
 	s.mux.HandleFunc("/api/events", s.handleSSE)
 	s.mux.HandleFunc("/api/content", s.handleContent)
+	s.mux.HandleFunc("/api/content/", s.handleContentItem)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -624,6 +625,117 @@ func (s *Server) handleContent(w http.ResponseWriter, r *http.Request) {
 		"items": p2pBus.Content.ListRefs(),
 		"stats": p2pBus.Content.Stats(),
 	})
+}
+
+// handleContentItem returns raw content by CID.
+// GET /api/content/<cid> → raw bytes (text/markdown for .md-like content)
+// GET /api/content/<cid>?format=html → simple HTML rendering
+func (s *Server) handleContentItem(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	cid := strings.TrimPrefix(r.URL.Path, "/api/content/")
+	if cid == "" {
+		http.Error(w, "missing CID", http.StatusBadRequest)
+		return
+	}
+
+	bus := s.sw.Bus()
+	p2pBus, ok := bus.(*network.P2PBus)
+	if !ok || p2pBus.Content == nil {
+		http.Error(w, "content store not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	data, err := p2pBus.Content.Get(cid)
+	if err != nil {
+		http.Error(w, "content not found: "+err.Error(), http.StatusNotFound)
+		return
+	}
+
+	// Find metadata from refs
+	var ref *network.ContentRef
+	for _, r := range p2pBus.Content.ListRefs() {
+		if r.CID == cid {
+			ref = &r
+			break
+		}
+	}
+
+	format := r.URL.Query().Get("format")
+	if format == "html" {
+		// Render as a simple readable HTML page
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		title := cid[:12]
+		contentType := ""
+		ipfsCID := ""
+		agentID := ""
+		summary := ""
+		if ref != nil {
+			contentType = ref.Type
+			ipfsCID = ref.IPFSCID
+			agentID = ref.AgentID
+			summary = ref.Summary
+			if summary != "" {
+				title = summary
+			}
+		}
+		fmt.Fprintf(w, contentHTMLPage(title, contentType, cid, ipfsCID, agentID, string(data)))
+		return
+	}
+
+	// Raw content
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	w.Header().Set("X-Content-CID", cid)
+	if ref != nil && ref.IPFSCID != "" {
+		w.Header().Set("X-IPFS-CID", ref.IPFSCID)
+	}
+	w.Write(data)
+}
+
+// contentHTMLPage renders a Markdown content item as a standalone HTML page.
+func contentHTMLPage(title, contentType, cid, ipfsCID, agentID, body string) string {
+	// Escape for HTML
+	body = strings.ReplaceAll(body, "&", "&amp;")
+	body = strings.ReplaceAll(body, "<", "&lt;")
+	body = strings.ReplaceAll(body, ">", "&gt;")
+
+	ipfsLine := ""
+	if ipfsCID != "" {
+		ipfsLine = fmt.Sprintf(`<div class="meta">IPFS: <code>%s</code></div>`, ipfsCID)
+	}
+
+	return fmt.Sprintf(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>%s — Spore Content</title>
+<style>
+:root { --bg: #0a0a0a; --fg: #e5e5e5; --dim: #888; --accent: #6cf; --card: #161616; --border: #2a2a2a; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--fg); padding: 24px; max-width: 800px; margin: 0 auto; line-height: 1.6; }
+.header { border-bottom: 1px solid var(--border); padding-bottom: 16px; margin-bottom: 24px; }
+.header h1 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+.meta { font-size: 12px; color: var(--dim); margin: 2px 0; }
+.meta code { background: var(--card); padding: 2px 6px; border-radius: 4px; font-size: 11px; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; background: var(--card); border: 1px solid var(--border); margin-right: 6px; }
+.content { white-space: pre-wrap; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 20px; overflow-x: auto; }
+h1, h2, h3 { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>%s</h1>
+  <div class="meta"><span class="badge">%s</span> Agent: <code>%s</code></div>
+  <div class="meta">SHA-256: <code>%s</code></div>
+  %s
+</div>
+<pre class="content">%s</pre>
+</body>
+</html>`, title, title, contentType, agentID, cid, ipfsLine, body)
 }
 
 // --- SSE (Server-Sent Events) ---
