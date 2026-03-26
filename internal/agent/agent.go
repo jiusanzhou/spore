@@ -80,6 +80,7 @@ type Info struct {
 	Collective  *CollectiveState `json:"collective,omitempty"` // swarm consciousness
 	Economy     *TokenState      `json:"economy,omitempty"`    // token economy state
 	SkillStats  *SkillStats      `json:"skill_stats,omitempty"` // skill evolution stats
+	Market      *MarketplaceStats `json:"marketplace,omitempty"` // marketplace stats
 }
 
 // ethicsAdapter wraps *ethics.Engine to satisfy engine.EthicsChecker.
@@ -112,6 +113,7 @@ type Agent struct {
 	skillStore   *SkillStore        // SQLite skill records + analyses
 	analyzer     *ExecutionAnalyzer // post-task LLM analysis
 	skillEvolver *SkillEvolver      // applies FIX/DERIVED/CAPTURED evolutions
+	marketplace  *Marketplace       // cross-owner service marketplace
 
 	// Intrinsic drive engine — autonomous behavior generation
 	drives *DriveEngine
@@ -379,6 +381,14 @@ func New(cfg *Config) (*Agent, error) {
 	a.tokens.Restore()
 	a.tokens.Seed() // birth capital (no-op if already has balance)
 
+	// Initialize marketplace (default to enabled if not explicitly configured)
+	mktCfg := a.cfg.Marketplace
+	if mktCfg.AdIntervalSecs == 0 && mktCfg.EscrowTimeoutMins == 0 {
+		mktCfg = DefaultMarketplaceConfig()
+		a.cfg.Marketplace = mktCfg // write back so Start() check sees Enabled=true
+	}
+	a.marketplace = NewMarketplace(a, mktCfg)
+
 	// Initialize intrinsic drive engine
 	a.drives = NewDriveEngine(a)
 	a.drives.Restore()
@@ -462,6 +472,12 @@ func (a *Agent) Run() error {
 
 	// Publish initial CapabilityAd
 	a.publishCapabilityAd()
+
+	// Start marketplace service advertising
+	if a.marketplace != nil && a.cfg.Marketplace.Enabled {
+		a.marketplace.Start()
+		fmt.Printf("🏪 [%s] Marketplace started (price=%.1f)\n", a.cfg.Agent.Name, a.cfg.Marketplace.PricePerTask)
+	}
 
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -556,6 +572,16 @@ func (a *Agent) SubmitTaskWithRuntime(description, runtimeName, workDir string) 
 	return entry.ID
 }
 
+// submitTaskWithID queues a task with a specific ID (used by marketplace to preserve offer task ID).
+func (a *Agent) submitTaskWithID(taskID, description string) {
+	entry := &taskEntry{
+		ID:          taskID,
+		Description: description,
+		CreatedAt:   time.Now(),
+	}
+	a.taskQueue <- entry
+}
+
 // ID returns the agent's short ID (public key hex[:16]).
 func (a *Agent) ID() string {
 	return a.identity.PublicKeyHex()[:16]
@@ -611,6 +637,10 @@ func (a *Agent) Info() Info {
 	if a.skillStore != nil {
 		info.SkillStats = a.skillStore.Stats(info.ID)
 	}
+	if a.marketplace != nil {
+		stats := a.marketplace.Stats()
+		info.Market = &stats
+	}
 	return info
 }
 
@@ -646,6 +676,9 @@ func (a *Agent) Reputation() *ReputationEngine { return a.reputation }
 
 // Skills returns the agent's skill store (may be nil).
 func (a *Agent) Skills() *SkillStore { return a.skillStore }
+
+// Market returns the marketplace engine.
+func (a *Agent) Market() *Marketplace { return a.marketplace }
 
 // Peers returns the current peer registry.
 func (a *Agent) Peers() map[string]*PeerInfo {
@@ -1046,6 +1079,10 @@ func (a *Agent) executeTaskDirect(ctx context.Context, entry *taskEntry) error {
 		}
 		// Broadcast result to bus (for coordinator collection)
 		a.broadcastTaskResult(entry.ID, output.Result, true, "")
+		// Deliver to marketplace if this is a paid task
+		if a.marketplace != nil {
+			a.marketplace.DeliverResult(entry.ID, output.Result, true)
+		}
 		// Store task experience in memory
 		a.rememberTask(entry, output, rt.Info().Name)
 		// Record to evolution engine for self-improvement
@@ -1250,6 +1287,55 @@ func (a *Agent) handleMessage(msg *protocol.Message) error {
 		selfID := a.identity.PublicKeyHex()[:16]
 		if tp.ToAgent == selfID && a.tokens != nil {
 			a.tokens.ReceivePayment(tp.FromAgent, tp.Amount, tp.Reason)
+		}
+
+	// ── Marketplace messages ──────────────────────────────
+	case MsgServiceAd:
+		if a.marketplace != nil {
+			var ad ServiceAd
+			if err := json.Unmarshal(msg.Payload, &ad); err == nil {
+				a.marketplace.HandleServiceAd(&ad)
+			}
+		}
+
+	case MsgTaskOffer:
+		if a.marketplace != nil {
+			var offer TaskOffer
+			if err := json.Unmarshal(msg.Payload, &offer); err == nil {
+				a.marketplace.HandleTaskOffer(&offer, msg.From)
+			}
+		}
+
+	case MsgTaskAccept:
+		// Logged for tracking; actual work happens on worker side
+		var accept TaskAcceptance
+		if err := json.Unmarshal(msg.Payload, &accept); err == nil {
+			fmt.Printf("🏪 [%s] Task %s accepted by %s\n",
+				a.cfg.Agent.Name, accept.TaskID, accept.AgentID[:min(8, len(accept.AgentID))])
+		}
+
+	case MsgTaskDeliver:
+		if a.marketplace != nil {
+			var delivery TaskDelivery
+			if err := json.Unmarshal(msg.Payload, &delivery); err == nil {
+				a.marketplace.HandleTaskDelivery(&delivery)
+			}
+		}
+
+	case MsgEscrowRelease, MsgEscrowDispute:
+		// Handled by escrow watchdog; logged here
+		var action EscrowAction
+		if err := json.Unmarshal(msg.Payload, &action); err == nil {
+			fmt.Printf("🏪 [%s] Escrow %s: %s\n",
+				a.cfg.Agent.Name, action.Action, action.TaskID)
+		}
+
+	case MsgReviewPost:
+		if a.marketplace != nil {
+			var review Review
+			if err := json.Unmarshal(msg.Payload, &review); err == nil {
+				a.marketplace.HandleReview(&review)
+			}
 		}
 	}
 	return nil
@@ -1576,6 +1662,9 @@ func (a *Agent) heartbeat() {
 
 func (a *Agent) shutdown() error {
 	a.status = StatusStopped
+	if a.marketplace != nil {
+		a.marketplace.Stop()
+	}
 	if a.bus != nil {
 		a.bus.Unsubscribe(a.identity.PublicKeyHex()[:16])
 	}

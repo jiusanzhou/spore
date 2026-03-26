@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"go.zoe.im/spore/internal/agent"
 	"go.zoe.im/spore/internal/memory"
 	"go.zoe.im/spore/internal/network"
 	"go.zoe.im/spore/internal/swarm"
@@ -94,6 +95,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/events", s.handleSSE)
 	s.mux.HandleFunc("/api/content", s.handleContent)
 	s.mux.HandleFunc("/api/content/", s.handleContentItem)
+	s.mux.HandleFunc("/api/marketplace", s.handleMarketplace)
+	s.mux.HandleFunc("/api/marketplace/request", s.handleMarketplaceRequest)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -158,6 +161,8 @@ func (s *Server) handleAgentRoute(w http.ResponseWriter, r *http.Request) {
 		s.handleAgentReputation(w, r, name)
 	case "context":
 		s.handleAgentContext(w, r, name)
+	case "marketplace":
+		s.handleAgentMarketplace(w, r, name)
 	default:
 		http.Error(w, "not found", http.StatusNotFound)
 	}
@@ -682,7 +687,7 @@ func (s *Server) handleContentItem(w http.ResponseWriter, r *http.Request) {
 				title = summary
 			}
 		}
-		fmt.Fprintf(w, contentHTMLPage(title, contentType, cid, ipfsCID, agentID, string(data)))
+		fmt.Fprint(w, contentHTMLPage(title, contentType, cid, ipfsCID, agentID, string(data)))
 		return
 	}
 
@@ -868,4 +873,117 @@ func (s *Server) buildStatePayload() []byte {
 
 	data, _ := json.Marshal(payload)
 	return data
+}
+
+// ── Marketplace API ───────────────────────────────────────
+
+func (s *Server) handleAgentMarketplace(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	ag := s.sw.GetAgent(name)
+	if ag == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
+		return
+	}
+	mp := ag.Market()
+	if mp == nil {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "marketplace not enabled"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"stats":    mp.Stats(),
+		"services": mp.Services(),
+		"escrows":  mp.Escrows(),
+	})
+}
+
+func (s *Server) handleMarketplace(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	// Aggregate marketplace data from all agents
+	agents := s.sw.Agents()
+	var allServices []agent.ServiceAd
+	var allEscrows []agent.Escrow
+	totalStats := agent.MarketplaceStats{
+		SkillProviders: make(map[string]int),
+	}
+
+	for _, ag := range agents {
+		mp := ag.Market()
+		if mp == nil {
+			continue
+		}
+		services := mp.Services()
+		allServices = append(allServices, services...)
+		allEscrows = append(allEscrows, mp.Escrows()...)
+		stats := mp.Stats()
+		totalStats.KnownServices += stats.KnownServices
+		totalStats.ActiveEscrows += stats.ActiveEscrows
+		totalStats.TotalEscrowVal += stats.TotalEscrowVal
+		totalStats.TotalReviews += stats.TotalReviews
+		for k, v := range stats.SkillProviders {
+			totalStats.SkillProviders[k] += v
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"stats":    totalStats,
+		"services": allServices,
+		"escrows":  allEscrows,
+	})
+}
+
+func (s *Server) handleMarketplaceRequest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Agent       string `json:"agent"`
+		Skill       string `json:"skill"`
+		Description string `json:"description"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Find the requesting agent
+	agentName := req.Agent
+	if agentName == "" {
+		agents := s.sw.List()
+		if len(agents) > 0 {
+			agentName = agents[0].Name
+		}
+	}
+	ag := s.sw.GetAgent(agentName)
+	if ag == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
+		return
+	}
+
+	mp := ag.Market()
+	if mp == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "marketplace not enabled"})
+		return
+	}
+
+	ctx := r.Context()
+	taskID, err := mp.RequestService(ctx, req.Skill, req.Description)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"task_id": taskID,
+		"status":  "offered",
+		"agent":   agentName,
+		"skill":   req.Skill,
+	})
 }

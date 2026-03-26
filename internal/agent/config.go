@@ -37,6 +37,7 @@ type Config struct {
 	Spawner SpawnerConfig  `toml:"spawner" yaml:"spawner" json:"spawner"`
 	Drive   *Drive         `toml:"drive" yaml:"drive" json:"drive,omitempty"`
 	Token   *TokenConfig   `toml:"token" yaml:"token" json:"token,omitempty"`
+	Marketplace MarketplaceConfig `toml:"marketplace" yaml:"marketplace" json:"marketplace"`
 }
 
 // AgentConfig defines the agent's basic identity and behavior.
@@ -151,6 +152,7 @@ func DefaultConfig(name, model string) *Config {
 			MinBalanceToSpawn:    10.0,
 			DefaultResourceShare: 0.2,
 		},
+		Marketplace: DefaultMarketplaceConfig(),
 	}
 }
 

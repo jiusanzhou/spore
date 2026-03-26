@@ -279,3 +279,22 @@ func (r *ReputationEngine) load() {
 	r.records = records
 	fmt.Printf("🏅 Loaded reputation data: %d peers\n", len(records))
 }
+
+// RecordReview incorporates a review rating into an agent's reputation.
+func (r *ReputationEngine) RecordReview(agentID string, rating float64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	rec := r.getOrCreate(agentID)
+	// Blend review into score (weighted average)
+	rec.Score = clampRep(rec.Score*0.8+rating*0.2, 0, 1)
+	rec.LastInteract = time.Now()
+	r.checkIsolation(rec)
+	r.persist()
+}
+
+// SelfScore returns this agent's own reputation estimate (average of peer scores about us).
+// Since we don't track self-reputation directly, return initial value.
+func (r *ReputationEngine) SelfScore() float64 {
+	return repInitial
+}

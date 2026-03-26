@@ -206,6 +206,17 @@ func (s *Swarm) GetAgent(name string) *agent.Agent {
 	return s.agents[name]
 }
 
+// Agents returns all agents.
+func (s *Swarm) Agents() []*agent.Agent {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	result := make([]*agent.Agent, 0, len(s.agents))
+	for _, a := range s.agents {
+		result = append(result, a)
+	}
+	return result
+}
+
 // Bus returns the shared message bus.
 func (s *Swarm) Bus() network.Bus {
 	return s.bus
