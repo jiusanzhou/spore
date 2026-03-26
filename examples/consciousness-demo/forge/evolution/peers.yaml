@@ -40,12 +40,12 @@ d37dd38d7bc346c7:
   lastseen: 1774088950
 da65396e61a34c93:
   agentid: da65396e61a34c93
-  taskscompleted: 12
+  taskscompleted: 13
   tasksfailed: 2
   avgduration: 0
-  successrate: 0.8571428571428571
-  fitness: 0.8571428571428571
-  lastseen: 1774509328
+  successrate: 0.8666666666666667
+  fitness: 0.8666666666666667
+  lastseen: 1774521623
 fe54c0df89956741:
   agentid: fe54c0df89956741
   taskscompleted: 2

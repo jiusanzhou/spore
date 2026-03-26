@@ -953,7 +953,7 @@ func (s *Server) handleMarketplaceRequest(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Find the requesting agent
+	// Find the requesting agent (payer)
 	agentName := req.Agent
 	if agentName == "" {
 		agents := s.sw.List()
@@ -961,29 +961,68 @@ func (s *Server) handleMarketplaceRequest(w http.ResponseWriter, r *http.Request
 			agentName = agents[0].Name
 		}
 	}
-	ag := s.sw.GetAgent(agentName)
-	if ag == nil {
+	payer := s.sw.GetAgent(agentName)
+	if payer == nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
 		return
 	}
 
-	mp := ag.Market()
-	if mp == nil {
+	payerMp := payer.Market()
+	if payerMp == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "marketplace not enabled"})
 		return
 	}
 
+	// Cross-reference all agents' services to find the best provider
+	// (same swarm agents share a host, so they don't see each other via P2P)
+	var bestAd *agent.ServiceAd
+	bestScore := -1.0
+	payerID := payer.ID()
+
+	for _, ag := range s.sw.Agents() {
+		mp := ag.Market()
+		if mp == nil {
+			continue
+		}
+		for _, svc := range mp.Services() {
+			if svc.AgentID == payerID {
+				continue // don't assign to self
+			}
+			for _, sk := range svc.Skills {
+				if sk == req.Skill {
+					score := svc.Reputation * svc.Capacity
+					if svc.PricePerTask > 0 {
+						score /= svc.PricePerTask
+					}
+					if score > bestScore {
+						bestScore = score
+						ad := svc
+						bestAd = &ad
+					}
+					break
+				}
+			}
+		}
+	}
+
+	if bestAd == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "no agents found for skill: " + req.Skill})
+		return
+	}
+
 	ctx := r.Context()
-	taskID, err := mp.RequestService(ctx, req.Skill, req.Description)
+	taskID, err := payerMp.OfferTask(ctx, bestAd.AgentID, req.Description, req.Skill, bestAd.PricePerTask)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"task_id": taskID,
-		"status":  "offered",
-		"agent":   agentName,
-		"skill":   req.Skill,
+		"task_id":  taskID,
+		"status":   "offered",
+		"payer":    agentName,
+		"provider": bestAd.Name,
+		"skill":    req.Skill,
+		"payment":  bestAd.PricePerTask,
 	})
 }

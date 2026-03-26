@@ -158,6 +158,31 @@ a { color: var(--accent); text-decoration: none; }
 .mem-stat-card .val { font-size: 20px; font-weight: 600; }
 .mem-stat-card .lbl { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; }
 .memory-table-wrap { overflow-x: auto; }
+/* Marketplace */
+.mkt-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.mkt-stat { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+.mkt-stat .val { font-size: 20px; font-weight: 600; }
+.mkt-stat .lbl { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; }
+.mkt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.mkt-section h3 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); margin-bottom: 10px; }
+.mkt-service-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 8px; }
+.mkt-service-card .name { font-weight: 600; font-size: 13px; }
+.mkt-service-card .meta { font-size: 11px; color: var(--dim); margin-top: 4px; }
+.mkt-service-card .skills { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.mkt-skill-tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; background: var(--border); color: var(--text); }
+.mkt-skill-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.mkt-skill-bar .name { font-size: 12px; min-width: 120px; }
+.mkt-skill-bar .bar { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.mkt-skill-bar .bar-fill { height: 100%; background: var(--accent); border-radius: 3px; }
+.mkt-skill-bar .count { font-size: 11px; color: var(--dim); min-width: 20px; text-align: right; }
+.mkt-escrow-row { display: grid; grid-template-columns: 100px 1fr 80px 80px 80px; gap: 8px; padding: 8px 12px; font-size: 12px; border-bottom: 1px solid var(--border); align-items: center; }
+.mkt-escrow-row.header { font-weight: 600; color: var(--dim); font-size: 10px; text-transform: uppercase; }
+.mkt-escrow-badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 500; }
+.mkt-escrow-badge.locked { background: #3b2f00; color: #fbbf24; }
+.mkt-escrow-badge.released { background: #0a2e1a; color: #34d399; }
+.mkt-escrow-badge.refunded { background: #1a1a2e; color: #818cf8; }
+.mkt-request-bar { display: flex; gap: 8px; align-items: center; }
+@media (max-width: 768px) { .mkt-grid { grid-template-columns: 1fr; } }
 .memory-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .memory-table th { text-align: left; padding: 10px 12px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); border-bottom: 1px solid var(--border); font-weight: 600; }
 .memory-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
@@ -229,6 +254,7 @@ a { color: var(--accent); text-decoration: none; }
 <!-- Tab Bar -->
 <nav class="tab-bar">
   <button class="tab-btn active" data-tab="agents" data-i18n="tab_agents">Agents</button>
+  <button class="tab-btn" data-tab="marketplace" data-i18n="tab_marketplace">Marketplace</button>
   <button class="tab-btn" data-tab="collective" data-i18n="tab_collective">Collective</button>
   <button class="tab-btn" data-tab="memory" data-i18n="tab_memory">Memory</button>
   <button class="tab-btn" data-tab="activity" data-i18n="tab_activity">Activity</button>
@@ -251,6 +277,33 @@ a { color: var(--accent); text-decoration: none; }
 <!-- Tab: Agents -->
 <section class="tab-content active" id="tab-agents">
   <div class="agents-grid" id="agents-grid"></div>
+</section>
+
+<!-- Tab: Marketplace -->
+<section class="tab-content" id="tab-marketplace">
+  <div class="mkt-stats" id="mkt-stats"></div>
+  <div class="mkt-grid">
+    <div class="mkt-section">
+      <h3 data-i18n="mkt_services">Service Providers</h3>
+      <div class="mkt-services" id="mkt-services"></div>
+    </div>
+    <div class="mkt-section">
+      <h3 data-i18n="mkt_skills">Skill Market</h3>
+      <div class="mkt-skills" id="mkt-skills"></div>
+    </div>
+  </div>
+  <div class="mkt-section" style="margin-top:16px">
+    <h3 data-i18n="mkt_escrows">Active Escrows</h3>
+    <div class="mkt-escrows" id="mkt-escrows"></div>
+  </div>
+  <div class="mkt-section" style="margin-top:16px">
+    <h3 data-i18n="mkt_request">Request Service</h3>
+    <div class="mkt-request-bar">
+      <select id="mkt-skill-select" class="task-agent-select"></select>
+      <input id="mkt-desc" class="task-input" placeholder="Describe what you need..." data-i18n-placeholder="mkt_placeholder">
+      <button id="mkt-submit" class="task-submit" data-i18n="mkt_submit">Request</button>
+    </div>
+  </div>
 </section>
 
 <!-- Tab: Collective -->
@@ -294,7 +347,13 @@ const I18N = {
   en: {
     title: '🦠 Spore Swarm', online: 'Online', offline: 'Offline', peers: 'peers',
     agents: 'Agents', tasks: 'Tasks', uptime: 'Uptime', content: 'Content',
-    tab_agents: 'Agents', tab_collective: 'Collective', tab_memory: 'Memory', tab_activity: 'Activity',
+    tab_agents: 'Agents', tab_marketplace: 'Marketplace', tab_collective: 'Collective', tab_memory: 'Memory', tab_activity: 'Activity',
+    mkt_providers: 'Providers', mkt_skill_count: 'Skills', mkt_active_escrows: 'Active Escrows',
+    mkt_locked_tokens: 'Locked Tokens', mkt_reviews: 'Reviews', mkt_avg_price: 'Avg Price',
+    mkt_services: 'Service Providers', mkt_skills: 'Skill Market', mkt_escrows: 'Active Escrows',
+    mkt_request: 'Request Service', mkt_submit: 'Request', mkt_placeholder: 'Describe what you need...',
+    mkt_no_services: 'No service providers yet', mkt_no_escrows: 'No active escrows',
+    mkt_requested: 'Service requested',
     swarm_auto: 'Swarm (auto)', task_placeholder: 'Describe a task for the swarm...',
     submitting: 'Submitting...', task_queued: '✓ Task queued →',
     no_agents: 'No agents connected', no_activity: 'No activity yet',
@@ -327,11 +386,17 @@ const I18N = {
   zh: {
     title: '🦠 Spore 群体', online: '在线', offline: '离线', peers: '节点',
     agents: '智能体', tasks: '任务', uptime: '运行时间', content: '内容',
-    tab_agents: '智能体', tab_collective: '集体意识', tab_memory: '集体记忆', tab_activity: '活动',
+    tab_agents: '智能体', tab_marketplace: '市场', tab_collective: '集体意识', tab_memory: '集体记忆', tab_activity: '活动',
     swarm_auto: '群体（自动）', task_placeholder: '输入任务描述...',
     submitting: '提交中...', task_queued: '✓ 已提交 →',
     no_agents: '暂无智能体', no_activity: '暂无活动',
     no_memory: '暂无集体记忆',
+    mkt_providers: '服务商', mkt_skill_count: '技能数', mkt_active_escrows: '活跃托管',
+    mkt_locked_tokens: '锁定代币', mkt_reviews: '评价数', mkt_avg_price: '均价',
+    mkt_services: '服务提供商', mkt_skills: '技能市场', mkt_escrows: '活跃托管',
+    mkt_request: '请求服务', mkt_submit: '请求', mkt_placeholder: '描述你需要的服务...',
+    mkt_no_services: '暂无服务商', mkt_no_escrows: '暂无活跃托管',
+    mkt_requested: '服务已请求',
     awareness: '自我意识', evolution: '进化', context_memory: '结构化记忆',
     personality: '人格', purpose: '目标', narrative: '叙事',
     mood: '心情', energy: '精力', morale: '士气',
@@ -496,6 +561,7 @@ function render() {
   if (!state) return;
   renderHeader();
   renderAgents();
+  renderMarketplace();
   renderCollective();
   renderMemory();
   renderActivity();
@@ -1037,7 +1103,117 @@ const _origRender = render;
 render = function() {
   _origRender();
   updateAgentSelect();
+  fetchMarketplace();
 };
+
+// ── Marketplace ───────────────────────────────────────────
+let mktData = null;
+
+async function fetchMarketplace() {
+  try {
+    const res = await fetch('/api/marketplace');
+    mktData = await res.json();
+    renderMarketplace();
+  } catch(e) {}
+}
+
+function renderMarketplace() {
+  if (!mktData) return;
+  const stats = mktData.stats || {};
+  const services = mktData.services || [];
+  const escrows = mktData.escrows || [];
+  const skillMap = stats.skill_providers || {};
+
+  // Stats cards
+  const statsEl = document.getElementById('mkt-stats');
+  if (statsEl) {
+    statsEl.innerHTML = `
+      <div class="mkt-stat"><div class="val">${stats.known_services || 0}</div><div class="lbl">${t('mkt_providers')}</div></div>
+      <div class="mkt-stat"><div class="val">${Object.keys(skillMap).length}</div><div class="lbl">${t('mkt_skill_count')}</div></div>
+      <div class="mkt-stat"><div class="val">${stats.active_escrows || 0}</div><div class="lbl">${t('mkt_active_escrows')}</div></div>
+      <div class="mkt-stat"><div class="val">${(stats.total_escrow_value || 0).toFixed(1)}</div><div class="lbl">${t('mkt_locked_tokens')}</div></div>
+      <div class="mkt-stat"><div class="val">${stats.total_reviews || 0}</div><div class="lbl">${t('mkt_reviews')}</div></div>
+      <div class="mkt-stat"><div class="val">${(stats.avg_price || 0).toFixed(1)}</div><div class="lbl">${t('mkt_avg_price')}</div></div>`;
+  }
+
+  // Service provider cards
+  const svcEl = document.getElementById('mkt-services');
+  if (svcEl) {
+    if (services.length === 0) {
+      svcEl.innerHTML = `<p class="empty">${t('mkt_no_services')}</p>`;
+    } else {
+      svcEl.innerHTML = services.map(s => `
+        <div class="mkt-service-card">
+          <div class="name">${esc(s.name)} <span style="color:var(--dim);font-size:11px">${esc(s.agent_id?.substring(0,8) || '')}</span></div>
+          <div class="meta">💰 ${s.price_per_task} tok/task · ⭐ ${(s.reputation||0).toFixed(2)} · 📊 ${((s.capacity||0)*100).toFixed(0)}% avail</div>
+          <div class="skills">${(s.skills||[]).slice(0,8).map(sk => `<span class="mkt-skill-tag">${esc(sk)}</span>`).join('')}${(s.skills||[]).length > 8 ? `<span class="mkt-skill-tag">+${s.skills.length-8}</span>` : ''}</div>
+        </div>`).join('');
+    }
+  }
+
+  // Skill market bars
+  const skillEl = document.getElementById('mkt-skills');
+  if (skillEl) {
+    const entries = Object.entries(skillMap).sort((a,b) => b[1]-a[1]);
+    const maxCount = Math.max(...entries.map(e => e[1]), 1);
+    skillEl.innerHTML = entries.map(([skill, count]) => `
+      <div class="mkt-skill-bar">
+        <span class="name">${esc(skill)}</span>
+        <div class="bar"><div class="bar-fill" style="width:${(count/maxCount*100).toFixed(0)}%"></div></div>
+        <span class="count">${count}</span>
+      </div>`).join('');
+  }
+
+  // Escrows
+  const escEl = document.getElementById('mkt-escrows');
+  if (escEl) {
+    if (escrows.length === 0) {
+      escEl.innerHTML = `<p class="empty" style="font-size:12px;color:var(--dim)">${t('mkt_no_escrows')}</p>`;
+    } else {
+      escEl.innerHTML = `<div class="mkt-escrow-row header"><span>Task</span><span>Payer → Payee</span><span>Amount</span><span>State</span><span>CID</span></div>` +
+        escrows.map(e => `<div class="mkt-escrow-row">
+          <span style="font-family:var(--mono);font-size:11px">${esc(e.task_id?.substring(0,12)||'')}</span>
+          <span>${esc((e.payer_id||'').substring(0,8))} → ${esc((e.payee_id||'').substring(0,8))}</span>
+          <span>💰 ${(e.amount||0).toFixed(1)}</span>
+          <span><span class="mkt-escrow-badge ${e.state||'locked'}">${e.state||'locked'}</span></span>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">${esc((e.result_cid||'').substring(0,12))}</span>
+        </div>`).join('');
+    }
+  }
+
+  // Skill select for request
+  const skillSelect = document.getElementById('mkt-skill-select');
+  if (skillSelect && skillSelect.options.length <= 1) {
+    const skills = Object.keys(skillMap).sort();
+    skillSelect.innerHTML = skills.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+  }
+}
+
+// Marketplace request handler
+document.getElementById('mkt-submit')?.addEventListener('click', async () => {
+  const skill = document.getElementById('mkt-skill-select').value;
+  const desc = document.getElementById('mkt-desc').value.trim();
+  if (!desc) return;
+  const btn = document.getElementById('mkt-submit');
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/marketplace/request', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({skill, description: desc})
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    document.getElementById('mkt-desc').value = '';
+    showToast(`🏪 ${t('mkt_requested')}: ${data.task_id}`);
+    fetchMarketplace();
+  } catch(e) {
+    showToast('✗ ' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 </script>
 </body>
 </html>

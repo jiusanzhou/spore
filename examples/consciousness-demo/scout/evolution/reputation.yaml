@@ -23,13 +23,13 @@
   },
   "3e5c61afd9a5cb22": {
     "agent_id": "3e5c61afd9a5cb22",
-    "score": 0.56,
+    "score": 0.6080000000000001,
     "tasks_completed": 0,
     "tasks_failed": 0,
     "tasks_timeout": 0,
     "total_rating": 0,
     "violations": 0,
-    "last_interact": "2026-03-26T18:27:25.155332+08:00",
+    "last_interact": "2026-03-26T18:52:57.701703+08:00",
     "isolated": false
   },
   "82ac3f4c61622117": {
