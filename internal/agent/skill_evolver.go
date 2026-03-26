@@ -355,3 +355,115 @@ func sanitizeSkillName(name string) string {
 	}
 	return name
 }
+
+// ─── Markdown serialization for IPFS sharing ───────────────────────────────
+
+// SkillToMarkdown serializes a SkillRecord to Markdown for IPFS storage.
+func SkillToMarkdown(rec *SkillRecord) string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("# Skill: %s\n\n", rec.Name))
+	sb.WriteString(fmt.Sprintf("- **ID**: `%s`\n", rec.SkillID))
+	sb.WriteString(fmt.Sprintf("- **Origin**: %s\n", rec.Origin))
+	sb.WriteString(fmt.Sprintf("- **Generation**: %d\n", rec.Generation))
+	if len(rec.ParentIDs) > 0 {
+		sb.WriteString(fmt.Sprintf("- **Parents**: %s\n", strings.Join(rec.ParentIDs, ", ")))
+	}
+	if rec.SourceTaskID != "" {
+		sb.WriteString(fmt.Sprintf("- **Source Task**: `%s`\n", rec.SourceTaskID))
+	}
+	if rec.ChangeSummary != "" {
+		sb.WriteString(fmt.Sprintf("- **Change**: %s\n", rec.ChangeSummary))
+	}
+	sb.WriteString(fmt.Sprintf("- **Created**: %s\n", rec.CreatedAt.Format(time.RFC3339)))
+	sb.WriteString(fmt.Sprintf("\n## Description\n\n%s\n", rec.Description))
+
+	// Quality metrics (if any data)
+	if rec.TotalApplied > 0 {
+		sb.WriteString(fmt.Sprintf("\n## Metrics\n\n"))
+		sb.WriteString(fmt.Sprintf("- Selections: %d\n", rec.TotalSelections))
+		sb.WriteString(fmt.Sprintf("- Applied: %d\n", rec.TotalApplied))
+		sb.WriteString(fmt.Sprintf("- Completions: %d\n", rec.TotalCompletions))
+		sb.WriteString(fmt.Sprintf("- Success Rate: %.0f%%\n", rec.SuccessRate()*100))
+	}
+
+	return sb.String()
+}
+
+// AnalysisToMarkdown serializes an ExecutionAnalysisResult to Markdown.
+func AnalysisToMarkdown(a *ExecutionAnalysisResult) string {
+	var sb strings.Builder
+	status := "✅ Success"
+	if !a.Success {
+		status = "❌ Failed"
+	}
+	sb.WriteString(fmt.Sprintf("# Task Analysis: `%s`\n\n", a.TaskID))
+	sb.WriteString(fmt.Sprintf("- **Status**: %s\n", status))
+	sb.WriteString(fmt.Sprintf("- **Agent**: `%s`\n", a.AgentID))
+	sb.WriteString(fmt.Sprintf("- **Quality**: %.1f\n", a.Quality))
+	sb.WriteString(fmt.Sprintf("- **Efficiency**: %.1f\n", a.Efficiency))
+	sb.WriteString(fmt.Sprintf("- **Reason**: %s\n", a.QualityReason))
+	sb.WriteString(fmt.Sprintf("- **Analyzed**: %s\n", a.Timestamp.Format(time.RFC3339)))
+
+	if len(a.SkillsUsed) > 0 {
+		sb.WriteString(fmt.Sprintf("\n## Skills Used\n\n%s\n", strings.Join(a.SkillsUsed, ", ")))
+	}
+	if len(a.SkillsNeeded) > 0 {
+		sb.WriteString(fmt.Sprintf("\n## Skills Needed\n\n%s\n", strings.Join(a.SkillsNeeded, ", ")))
+	}
+	if len(a.Suggestions) > 0 {
+		sb.WriteString("\n## Evolution Suggestions\n\n")
+		for i, s := range a.Suggestions {
+			sb.WriteString(fmt.Sprintf("%d. **%s** `%s` (priority: %.1f)\n   %s\n   → %s\n\n",
+				i+1, s.Type, s.SkillName, s.Priority, s.Reason, s.Description))
+		}
+	}
+	return sb.String()
+}
+
+// SkillFromMarkdown parses a SkillRecord from Markdown. Best-effort extraction.
+func SkillFromMarkdown(md string) (*SkillRecord, error) {
+	rec := &SkillRecord{IsActive: true}
+	lines := strings.Split(md, "\n")
+
+	for i, line := range lines {
+		line = strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(line, "# Skill: "):
+			rec.Name = strings.TrimPrefix(line, "# Skill: ")
+		case strings.HasPrefix(line, "- **ID**: `"):
+			rec.SkillID = strings.Trim(strings.TrimPrefix(line, "- **ID**: `"), "`")
+		case strings.HasPrefix(line, "- **Origin**: "):
+			rec.Origin = SkillOrigin(strings.TrimPrefix(line, "- **Origin**: "))
+		case strings.HasPrefix(line, "- **Generation**: "):
+			fmt.Sscanf(strings.TrimPrefix(line, "- **Generation**: "), "%d", &rec.Generation)
+		case strings.HasPrefix(line, "- **Parents**: "):
+			parents := strings.TrimPrefix(line, "- **Parents**: ")
+			rec.ParentIDs = strings.Split(parents, ", ")
+		case strings.HasPrefix(line, "- **Source Task**: `"):
+			rec.SourceTaskID = strings.Trim(strings.TrimPrefix(line, "- **Source Task**: `"), "`")
+		case strings.HasPrefix(line, "- **Change**: "):
+			rec.ChangeSummary = strings.TrimPrefix(line, "- **Change**: ")
+		case strings.HasPrefix(line, "- **Created**: "):
+			rec.CreatedAt, _ = time.Parse(time.RFC3339, strings.TrimPrefix(line, "- **Created**: "))
+		case line == "## Description":
+			// Collect description: everything until next ## or end
+			var desc []string
+			for j := i + 1; j < len(lines); j++ {
+				if strings.HasPrefix(strings.TrimSpace(lines[j]), "## ") {
+					break
+				}
+				desc = append(desc, lines[j])
+			}
+			rec.Description = strings.TrimSpace(strings.Join(desc, "\n"))
+		}
+	}
+
+	if rec.Name == "" || rec.SkillID == "" {
+		return nil, fmt.Errorf("missing name or ID in skill markdown")
+	}
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = time.Now().UTC()
+	}
+	rec.UpdatedAt = time.Now().UTC()
+	return rec, nil
+}

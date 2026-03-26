@@ -1191,6 +1191,48 @@ func (a *Agent) handleMessage(msg *protocol.Message) error {
 					}
 				}
 			}
+
+			// Fetch and import shared skills
+			if ref.Type == "skill" && a.skillStore != nil {
+				data, err := p2pBus.Content.Get(ref.CID)
+				if err == nil {
+					if rec, err := SkillFromMarkdown(string(data)); err == nil {
+						// Check if we already have this skill
+						existing, _ := a.skillStore.GetSkill(rec.SkillID)
+						if existing == nil {
+							rec.Origin = SkillOriginDerived // mark as learned from peer
+							if err := a.skillStore.PutSkill(rec); err == nil {
+								fmt.Printf("📥 [%s] Learned skill from %s: %s (gen=%d)\n",
+									a.cfg.Agent.Name, msg.From[:8], rec.Name, rec.Generation)
+								// Pay the teacher
+								if a.tokens != nil && a.tokens.CanThink() {
+									payment := a.tokens.config.ShareReward
+									if payment > 0 {
+										payload := TokenTransferPayload{
+											FromAgent: selfID,
+											ToAgent:   msg.From,
+											Amount:    payment,
+											Reason:    "skill_learned",
+										}
+										if transferMsg, err := protocol.NewMessage(selfID, "broadcast", MsgTokenTransfer, payload); err == nil {
+											a.bus.Send(transferMsg)
+											a.identity.Debit(payment)
+										}
+									}
+								}
+							}
+						}
+					}
+				} else {
+					fmt.Printf("⚠️  [%s] Failed to fetch skill %s: %v\n", a.cfg.Agent.Name, ref.CID[:12], err)
+				}
+			}
+
+			// Store analysis in content memory (no import needed, just awareness)
+			if ref.Type == "skill_analysis" {
+				fmt.Printf("📊 [%s] Peer %s shared analysis: %s\n",
+					a.cfg.Agent.Name, msg.From[:8], ref.Summary)
+			}
 		}
 
 	case protocol.MsgConsciousness:
@@ -1561,7 +1603,7 @@ func truncate(s string, n int) string {
 
 // runSkillAnalysis performs post-task LLM analysis and triggers skill evolution.
 func (a *Agent) runSkillAnalysis(entry *taskEntry, output *runtime.TaskOutput, rtName string, duration float64) {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
 	analysis, err := a.analyzer.Analyze(ctx, entry, output, rtName, duration)
@@ -1574,6 +1616,10 @@ func (a *Agent) runSkillAnalysis(entry *taskEntry, output *runtime.TaskOutput, r
 		a.cfg.Agent.Name, analysis.Quality, analysis.Efficiency,
 		analysis.SkillsUsed, len(analysis.Suggestions))
 
+	// Publish analysis to IPFS as Markdown
+	a.publishToIPFS([]byte(AnalysisToMarkdown(analysis)), "skill_analysis",
+		fmt.Sprintf("Analysis: task=%s q=%.1f", entry.ID[:8], analysis.Quality))
+
 	// Execute evolution suggestions (threshold 0.5 = moderate+urgent)
 	if a.skillEvolver != nil && len(analysis.Suggestions) > 0 {
 		evolved, err := a.skillEvolver.Evolve(ctx, analysis, 0.5)
@@ -1583,7 +1629,61 @@ func (a *Agent) runSkillAnalysis(entry *taskEntry, output *runtime.TaskOutput, r
 		for _, rec := range evolved {
 			fmt.Printf("🧬 [%s] New skill: %s (origin=%s, gen=%d)\n",
 				a.cfg.Agent.Name, rec.Name, rec.Origin, rec.Generation)
+
+			// Publish evolved skill to IPFS as Markdown + broadcast CID
+			a.publishSkillToIPFS(rec)
 		}
+	}
+}
+
+// publishToIPFS stores content in the collective memory store (IPFS + SQLite).
+func (a *Agent) publishToIPFS(data []byte, contentType, summary string) {
+	p2pBus, ok := a.bus.(*network.P2PBus)
+	if !ok || p2pBus.Content == nil {
+		return
+	}
+	agentID := a.identity.PublicKeyHex()[:16]
+	ref, err := p2pBus.Content.Put(data, contentType, agentID, summary)
+	if err != nil {
+		fmt.Printf("⚠️  [%s] IPFS publish failed: %v\n", a.cfg.Agent.Name, err)
+		return
+	}
+	ipfsPart := ""
+	if ref.IPFSCID != "" {
+		ipfsPart = fmt.Sprintf(" ipfs=%s", ref.IPFSCID[:16])
+	}
+	fmt.Printf("📦 [%s] Published %s to collective memory: %s%s\n",
+		a.cfg.Agent.Name, contentType, ref.CID[:12], ipfsPart)
+}
+
+// publishSkillToIPFS serializes a skill to Markdown, stores in IPFS, and broadcasts CID.
+func (a *Agent) publishSkillToIPFS(rec *SkillRecord) {
+	p2pBus, ok := a.bus.(*network.P2PBus)
+	if !ok || p2pBus.Content == nil {
+		return
+	}
+
+	md := SkillToMarkdown(rec)
+	agentID := a.identity.PublicKeyHex()[:16]
+	summary := fmt.Sprintf("Skill: %s (origin=%s, gen=%d)", rec.Name, rec.Origin, rec.Generation)
+
+	ref, err := p2pBus.Content.Put([]byte(md), "skill", agentID, summary)
+	if err != nil {
+		fmt.Printf("⚠️  [%s] Failed to publish skill %s: %v\n", a.cfg.Agent.Name, rec.Name, err)
+		return
+	}
+
+	ipfsPart := ""
+	if ref.IPFSCID != "" {
+		ipfsPart = fmt.Sprintf(" ipfs=%s", ref.IPFSCID[:16])
+	}
+	fmt.Printf("📦 [%s] Skill published: %s → %s%s\n",
+		a.cfg.Agent.Name, rec.Name, ref.CID[:12], ipfsPart)
+
+	// Broadcast CID to swarm
+	msg, err := protocol.NewMessage(agentID, "broadcast", protocol.MsgContentAnnounce, ref)
+	if err == nil {
+		a.bus.Send(msg)
 	}
 }
 

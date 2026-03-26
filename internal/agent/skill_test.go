@@ -18,6 +18,7 @@ package agent
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -343,5 +344,97 @@ func TestSkillStoreDir(t *testing.T) {
 	// Check skills.db was created
 	if _, err := os.Stat(subdir + "/skills.db"); os.IsNotExist(err) {
 		t.Error("skills.db not created")
+	}
+}
+
+func TestSkillToMarkdown_RoundTrip(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	original := &SkillRecord{
+		SkillID:       "web-search__abc123",
+		Name:          "web-search",
+		Description:   "Search the web using DuckDuckGo HTML scraping.\nNo API key required.",
+		IsActive:      true,
+		Origin:        SkillOriginCaptured,
+		Generation:    2,
+		ParentIDs:     []string{"web-search__parent1"},
+		SourceTaskID:  "task-xyz",
+		ChangeSummary: "Added timeout handling",
+		CreatedAt:     now,
+		TotalApplied:  10,
+		TotalCompletions: 8,
+		TotalSelections: 15,
+	}
+
+	md := SkillToMarkdown(original)
+	if !strings.Contains(md, "# Skill: web-search") {
+		t.Error("Markdown should contain skill name header")
+	}
+	if !strings.Contains(md, "captured") {
+		t.Error("Markdown should contain origin")
+	}
+	if !strings.Contains(md, "## Metrics") {
+		t.Error("Markdown should contain metrics section")
+	}
+
+	// Round-trip: parse back
+	parsed, err := SkillFromMarkdown(md)
+	if err != nil {
+		t.Fatalf("SkillFromMarkdown: %v", err)
+	}
+	if parsed.Name != original.Name {
+		t.Errorf("Name = %q, want %q", parsed.Name, original.Name)
+	}
+	if parsed.SkillID != original.SkillID {
+		t.Errorf("SkillID = %q, want %q", parsed.SkillID, original.SkillID)
+	}
+	if parsed.Origin != original.Origin {
+		t.Errorf("Origin = %q, want %q", parsed.Origin, original.Origin)
+	}
+	if parsed.Generation != original.Generation {
+		t.Errorf("Generation = %d, want %d", parsed.Generation, original.Generation)
+	}
+	if parsed.SourceTaskID != original.SourceTaskID {
+		t.Errorf("SourceTaskID = %q, want %q", parsed.SourceTaskID, original.SourceTaskID)
+	}
+	if !strings.Contains(parsed.Description, "DuckDuckGo") {
+		t.Errorf("Description doesn't contain expected text: %q", parsed.Description)
+	}
+}
+
+func TestAnalysisToMarkdown(t *testing.T) {
+	a := &ExecutionAnalysisResult{
+		TaskID:        "task-001",
+		AgentID:       "agent-abc",
+		Timestamp:     time.Now().UTC(),
+		Success:       true,
+		Quality:       0.85,
+		Efficiency:    0.7,
+		QualityReason: "good result",
+		SkillsUsed:    []string{"web-search", "coding"},
+		SkillsNeeded:  []string{"data-analysis"},
+		Suggestions: []EvolutionSuggestion{
+			{Type: EvolutionCaptured, SkillName: "data-analysis", Reason: "new pattern", Priority: 0.8, Description: "analyze data"},
+		},
+	}
+
+	md := AnalysisToMarkdown(a)
+	if !strings.Contains(md, "# Task Analysis:") {
+		t.Error("should have header")
+	}
+	if !strings.Contains(md, "✅ Success") {
+		t.Error("should show success")
+	}
+	if !strings.Contains(md, "web-search") {
+		t.Error("should list skills used")
+	}
+	if !strings.Contains(md, "captured") {
+		t.Error("should show suggestion type")
+	}
+}
+
+func TestSkillFromMarkdown_Invalid(t *testing.T) {
+	_, err := SkillFromMarkdown("just some random text")
+	if err == nil {
+		t.Error("expected error for invalid markdown")
 	}
 }
