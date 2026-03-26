@@ -45,13 +45,13 @@
   },
   "da65396e61a34c93": {
     "agent_id": "da65396e61a34c93",
-    "score": 0.5,
+    "score": 0.56,
     "tasks_completed": 0,
     "tasks_failed": 0,
     "tasks_timeout": 10,
     "total_rating": 0,
     "violations": 0,
-    "last_interact": "2026-03-22T18:43:11.021421+08:00",
+    "last_interact": "2026-03-26T18:40:23.221673+08:00",
     "isolated": true
   }
 }

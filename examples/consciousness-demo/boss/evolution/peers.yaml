@@ -16,12 +16,12 @@
   lastseen: 1774088631
 3e5c61afd9a5cb22:
   agentid: 3e5c61afd9a5cb22
-  taskscompleted: 4
+  taskscompleted: 5
   tasksfailed: 1
   avgduration: 0
-  successrate: 0.8
-  fitness: 0.65
-  lastseen: 1774508615
+  successrate: 0.8333333333333334
+  fitness: 0.7
+  lastseen: 1774520845
 59ff99ee65153d42:
   agentid: 59ff99ee65153d42
   taskscompleted: 6

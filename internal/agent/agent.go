@@ -476,7 +476,11 @@ func (a *Agent) Run() error {
 	// Start marketplace service advertising
 	if a.marketplace != nil && a.cfg.Marketplace.Enabled {
 		a.marketplace.Start()
-		fmt.Printf("🏪 [%s] Marketplace started (price=%.1f)\n", a.cfg.Agent.Name, a.cfg.Marketplace.PricePerTask)
+		// Register ServiceAd stream handler for DHT discovery
+		if p2pBus, ok := a.bus.(*network.P2PBus); ok {
+			a.marketplace.RegisterStreamHandler(p2pBus.Host())
+		}
+		fmt.Printf("🏪 [%s] Marketplace started (price=%.1f, DHT+topics)\n", a.cfg.Agent.Name, a.cfg.Marketplace.PricePerTask)
 	}
 
 	ticker := time.NewTicker(30 * time.Second)

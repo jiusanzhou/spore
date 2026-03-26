@@ -36,7 +36,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
+	cid "github.com/ipfs/go-cid"
 	ma "github.com/multiformats/go-multiaddr"
+	"github.com/multiformats/go-multihash"
 
 	"go.zoe.im/spore/internal/ethics"
 	proto "go.zoe.im/spore/internal/protocol"
@@ -577,6 +579,60 @@ func (b *P2PBus) Unsubscribe(agentID string) error {
 	delete(b.handlers, agentID)
 	delete(b.peerMap, agentID)
 	return nil
+}
+
+// ── DHT Service Discovery (Phase 2) ──────────────────────
+
+// ProvideService registers this peer as a provider for a skill in the DHT.
+// Other peers can find us via FindServiceProviders.
+func (b *P2PBus) ProvideService(ctx context.Context, skill string) error {
+	c, err := skillToCID(skill)
+	if err != nil {
+		return err
+	}
+	return b.dht.Provide(ctx, c, true)
+}
+
+// FindServiceProviders queries the DHT for peers that provide a given skill.
+// Returns up to maxResults peer addresses.
+func (b *P2PBus) FindServiceProviders(ctx context.Context, skill string, maxResults int) ([]peer.AddrInfo, error) {
+	c, err := skillToCID(skill)
+	if err != nil {
+		return nil, err
+	}
+
+	// FindProviders blocks until context expires; use a timeout context
+	findCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	provCh := b.dht.FindProvidersAsync(findCtx, c, maxResults)
+	var providers []peer.AddrInfo
+	for p := range provCh {
+		if p.ID == b.host.ID() {
+			continue // skip self
+		}
+		providers = append(providers, p)
+		if len(providers) >= maxResults {
+			break
+		}
+	}
+	return providers, nil
+}
+
+// Host returns the underlying libp2p host (for direct stream connections).
+func (b *P2PBus) Host() host.Host {
+	return b.host
+}
+
+// skillToCID converts a skill name to a CID for DHT provider records.
+func skillToCID(skill string) (cid.Cid, error) {
+	// Hash the skill key to create a multihash
+	key := []byte("spore:service:" + skill)
+	mh, err := multihash.Sum(key, multihash.SHA2_256, -1)
+	if err != nil {
+		return cid.Undef, fmt.Errorf("multihash skill: %w", err)
+	}
+	return cid.NewCidV1(cid.Raw, mh), nil
 }
 
 func (b *P2PBus) Close() error {

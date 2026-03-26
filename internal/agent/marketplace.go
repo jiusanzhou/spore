@@ -20,6 +20,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/libp2p/go-libp2p/core/host"
+	libp2pnet "github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
+	libp2pproto "github.com/libp2p/go-libp2p/core/protocol"
+
 	"go.zoe.im/spore/internal/network"
 	"go.zoe.im/spore/internal/protocol"
 )
@@ -201,6 +206,7 @@ func NewMarketplace(agent *Agent, cfg MarketplaceConfig) *Marketplace {
 func (m *Marketplace) Start() {
 	go m.advertiseLoop()
 	go m.escrowWatchdog()
+	go m.subscribeSkillTopics()
 }
 
 // Stop halts the marketplace.
@@ -210,11 +216,11 @@ func (m *Marketplace) Stop() {
 
 // ── Service Advertising ───────────────────────────────────
 
-// advertiseLoop periodically broadcasts this agent's service ad.
+// advertiseLoop periodically registers services in DHT + broadcasts locally.
 func (m *Marketplace) advertiseLoop() {
-	// Initial ad after short delay
+	// Initial registration after short delay
 	time.Sleep(3 * time.Second)
-	m.broadcastServiceAd()
+	m.registerServices()
 
 	ticker := time.NewTicker(m.adInterval)
 	defer ticker.Stop()
@@ -222,19 +228,106 @@ func (m *Marketplace) advertiseLoop() {
 	for {
 		select {
 		case <-ticker.C:
-			m.broadcastServiceAd()
+			m.registerServices()
 		case <-m.stopCh:
 			return
 		}
 	}
 }
 
-// broadcastServiceAd publishes this agent's capabilities and pricing to the network.
-func (m *Marketplace) broadcastServiceAd() {
+// registerServices does two things:
+// 1. DHT Provide — register each skill in the Kademlia DHT (O(log N) per skill)
+// 2. Local ad — register self in local services map
+// No more full GossipSub broadcast of ServiceAd (Phase 2 scalability).
+func (m *Marketplace) registerServices() {
 	a := m.agent
 	selfID := a.identity.PublicKeyHex()[:16]
 
 	// Collect skills from config + evolved skills
+	skills := m.collectSkills()
+
+	// Reputation
+	rep := 0.5
+	if a.reputation != nil {
+		rep = a.reputation.SelfScore()
+	}
+
+	// Capacity based on queue
+	capacity := 1.0
+	a.mu.RLock()
+	queueLen := len(a.taskQueue)
+	a.mu.RUnlock()
+	if queueLen > 0 {
+		capacity = math.Max(0, 1.0-float64(queueLen)*0.25)
+	}
+
+	ad := ServiceAd{
+		AgentID:      selfID,
+		OwnerID:      a.identity.PublicKeyHex(),
+		Name:         a.cfg.Agent.Name,
+		Skills:       skills,
+		PricePerTask: a.cfg.Marketplace.PricePerTask,
+		Capacity:     capacity,
+		Reputation:   rep,
+		Uptime:       int64(time.Since(a.startedAt).Seconds()),
+		Timestamp:    time.Now().Unix(),
+	}
+
+	// Register locally
+	m.mu.Lock()
+	m.services[selfID] = &ad
+	m.mu.Unlock()
+
+	// DHT Provide — register each skill (Phase 2: scalable O(log N) per skill)
+	if p2pBus, ok := a.bus.(*network.P2PBus); ok {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		registered := 0
+		for _, skill := range skills {
+			if err := p2pBus.ProvideService(ctx, skill); err == nil {
+				registered++
+			}
+		}
+		if registered > 0 {
+			fmt.Printf("📡 [%s] DHT registered %d/%d skills\n", a.cfg.Agent.Name, registered, len(skills))
+		}
+	}
+
+	// Also broadcast ServiceAd on skill-specific topics (not global broadcast)
+	for _, skill := range skills {
+		topicName := "spore/service/" + skill
+		if p2pBus, ok := a.bus.(*network.P2PBus); ok {
+			p2pBus.JoinTopic(topicName)
+			msg, err := protocol.NewMessage(selfID, "broadcast", MsgServiceAd, ad)
+			if err == nil {
+				p2pBus.PublishToTopic(topicName, msg)
+			}
+		}
+	}
+}
+
+// subscribeSkillTopics subscribes to GossipSub topics for this agent's skills.
+func (m *Marketplace) subscribeSkillTopics() {
+	time.Sleep(2 * time.Second) // wait for bus to be ready
+	a := m.agent
+	skills := m.collectSkills()
+
+	p2pBus, ok := a.bus.(*network.P2PBus)
+	if !ok {
+		return
+	}
+
+	for _, skill := range skills {
+		topicName := "spore/service/" + skill
+		if _, err := p2pBus.JoinTopic(topicName); err == nil {
+			fmt.Printf("📻 [%s] Subscribed to skill topic: %s\n", a.cfg.Agent.Name, skill)
+		}
+	}
+}
+
+// collectSkills gathers all skills (config + evolved).
+func (m *Marketplace) collectSkills() []string {
+	a := m.agent
 	skills := make([]string, len(a.cfg.Agent.Skills))
 	copy(skills, a.cfg.Agent.Skills)
 	if a.skillStore != nil {
@@ -254,47 +347,10 @@ func (m *Marketplace) broadcastServiceAd() {
 			}
 		}
 	}
-
-	// Reputation
-	rep := 0.5
-	if a.reputation != nil {
-		rep = a.reputation.SelfScore()
-	}
-
-	// Capacity based on queue
-	capacity := 1.0
-	a.mu.RLock()
-	queueLen := len(a.taskQueue)
-	a.mu.RUnlock()
-	if queueLen > 0 {
-		capacity = math.Max(0, 1.0-float64(queueLen)*0.25)
-	}
-
-	ad := ServiceAd{
-		AgentID:      selfID,
-		OwnerID:      a.identity.PublicKeyHex(), // full key as owner ID
-		Name:         a.cfg.Agent.Name,
-		Skills:       skills,
-		PricePerTask: a.cfg.Marketplace.PricePerTask,
-		Capacity:     capacity,
-		Reputation:   rep,
-		Uptime:       int64(time.Since(a.startedAt).Seconds()),
-		Timestamp:    time.Now().Unix(),
-	}
-
-	msg, err := protocol.NewMessage(selfID, "broadcast", MsgServiceAd, ad)
-	if err != nil {
-		return
-	}
-	a.bus.Send(msg)
-
-	// Also register locally (for same-swarm visibility)
-	m.mu.Lock()
-	m.services[selfID] = &ad
-	m.mu.Unlock()
+	return skills
 }
 
-// HandleServiceAd processes incoming service advertisements.
+// HandleServiceAd processes incoming service advertisements (from skill topics).
 func (m *Marketplace) HandleServiceAd(ad *ServiceAd) {
 	selfID := m.agent.identity.PublicKeyHex()[:16]
 	if ad.AgentID == selfID {
@@ -306,71 +362,189 @@ func (m *Marketplace) HandleServiceAd(ad *ServiceAd) {
 	m.mu.Unlock()
 }
 
-// FindService queries the local service registry for agents matching a skill.
+// FindService queries for agents matching a skill.
+// Phase 2: first checks local cache, then falls back to DHT discovery.
 func (m *Marketplace) FindService(q ServiceQuery) []ServiceMatch {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	// First: check local service cache (populated by skill topic subscriptions)
+	matches := m.findLocal(q)
+
+	// If insufficient results, query DHT for more providers
+	if len(matches) < 3 {
+		dhtMatches := m.findViaDHT(q)
+		matches = append(matches, dhtMatches...)
+	}
+
+	// Deduplicate by agent ID
+	seen := make(map[string]bool)
+	var deduped []ServiceMatch
+	for _, match := range matches {
+		if !seen[match.Ad.AgentID] {
+			seen[match.Ad.AgentID] = true
+			deduped = append(deduped, match)
+		}
+	}
+
+	// Sort by score descending
+	for i := 0; i < len(deduped); i++ {
+		for j := i + 1; j < len(deduped); j++ {
+			if deduped[j].Score > deduped[i].Score {
+				deduped[i], deduped[j] = deduped[j], deduped[i]
+			}
+		}
+	}
 
 	maxResults := q.MaxResults
 	if maxResults <= 0 {
 		maxResults = 10
 	}
+	if len(deduped) > maxResults {
+		deduped = deduped[:maxResults]
+	}
+	return deduped
+}
 
-	var matches []ServiceMatch
+// findLocal searches the in-memory service cache.
+func (m *Marketplace) findLocal(q ServiceQuery) []ServiceMatch {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	now := time.Now().Unix()
+	var matches []ServiceMatch
 
 	for _, ad := range m.services {
-		// Stale ads (> 5 min old)
 		if now-ad.Timestamp > 300 {
 			continue
 		}
-
-		// Skill match
-		hasSkill := false
-		for _, s := range ad.Skills {
-			if s == q.Skill {
-				hasSkill = true
-				break
-			}
-		}
-		if !hasSkill {
+		if !hasSkill(ad.Skills, q.Skill) {
 			continue
 		}
-
-		// Price filter
 		if q.MaxPrice > 0 && ad.PricePerTask > q.MaxPrice {
 			continue
 		}
-
-		// Reputation filter
 		if q.MinRep > 0 && ad.Reputation < q.MinRep {
 			continue
 		}
 
-		// Composite score: reputation × capacity × (1 / price)
-		priceScore := 1.0
+		score := ad.Reputation * ad.Capacity
 		if ad.PricePerTask > 0 {
-			priceScore = 1.0 / ad.PricePerTask
+			score /= ad.PricePerTask
 		}
-		score := ad.Reputation * ad.Capacity * priceScore
-
 		matches = append(matches, ServiceMatch{Ad: *ad, Score: score})
 	}
+	return matches
+}
 
-	// Sort by score descending
-	for i := 0; i < len(matches); i++ {
-		for j := i + 1; j < len(matches); j++ {
-			if matches[j].Score > matches[i].Score {
-				matches[i], matches[j] = matches[j], matches[i]
-			}
-		}
+// findViaDHT queries the Kademlia DHT for providers of a skill.
+func (m *Marketplace) findViaDHT(q ServiceQuery) []ServiceMatch {
+	if m.agent == nil || m.agent.bus == nil {
+		return nil
+	}
+	a := m.agent
+	p2pBus, ok := a.bus.(*network.P2PBus)
+	if !ok {
+		return nil
 	}
 
-	if len(matches) > maxResults {
-		matches = matches[:maxResults]
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	providers, err := p2pBus.FindServiceProviders(ctx, q.Skill, 20)
+	if err != nil || len(providers) == 0 {
+		return nil
+	}
+
+	fmt.Printf("🔍 [%s] DHT found %d providers for skill=%s\n",
+		a.cfg.Agent.Name, len(providers), q.Skill)
+
+	// For each provider, try to fetch their ServiceAd via direct stream
+	var matches []ServiceMatch
+	selfID := a.identity.PublicKeyHex()[:16]
+
+	for _, pi := range providers {
+		// Connect to the peer
+		if err := p2pBus.Host().Connect(ctx, pi); err != nil {
+			continue
+		}
+
+		// Request their ServiceAd via a lightweight protocol
+		adData, err := m.fetchServiceAd(ctx, p2pBus.Host(), pi.ID)
+		if err != nil {
+			// Fallback: create a minimal ad from DHT info
+			ad := ServiceAd{
+				AgentID:      pi.ID.String()[:16],
+				Name:         pi.ID.String()[:8],
+				Skills:       []string{q.Skill},
+				PricePerTask: 1.0,
+				Capacity:     0.5,
+				Reputation:   0.5,
+				Timestamp:    time.Now().Unix(),
+			}
+			matches = append(matches, ServiceMatch{Ad: ad, Score: 0.25})
+			continue
+		}
+
+		if adData.AgentID == selfID {
+			continue
+		}
+
+		if q.MaxPrice > 0 && adData.PricePerTask > q.MaxPrice {
+			continue
+		}
+		if q.MinRep > 0 && adData.Reputation < q.MinRep {
+			continue
+		}
+
+		score := adData.Reputation * adData.Capacity
+		if adData.PricePerTask > 0 {
+			score /= adData.PricePerTask
+		}
+		matches = append(matches, ServiceMatch{Ad: *adData, Score: score})
+
+		// Cache for future local lookups
+		m.mu.Lock()
+		m.services[adData.AgentID] = adData
+		m.mu.Unlock()
 	}
 
 	return matches
+}
+
+// ServiceAdProtocol is the libp2p protocol for fetching service ads.
+const ServiceAdProtocol libp2pproto.ID = "/spore/service-ad/1.0.0"
+
+// fetchServiceAd requests a peer's ServiceAd via a direct libp2p stream.
+func (m *Marketplace) fetchServiceAd(ctx context.Context, h host.Host, peerID peer.ID) (*ServiceAd, error) {
+	s, err := h.NewStream(ctx, peerID, ServiceAdProtocol)
+	if err != nil {
+		return nil, err
+	}
+	defer s.Close()
+
+	// Send "get" request
+	s.Write([]byte("get\n"))
+	s.CloseWrite()
+
+	// Read response
+	data := make([]byte, 4096)
+	n, err := s.Read(data)
+	if err != nil && n == 0 {
+		return nil, fmt.Errorf("read ad: %w", err)
+	}
+
+	var ad ServiceAd
+	if err := json.Unmarshal(data[:n], &ad); err != nil {
+		return nil, fmt.Errorf("unmarshal ad: %w", err)
+	}
+	return &ad, nil
+}
+
+func hasSkill(skills []string, target string) bool {
+	for _, s := range skills {
+		if s == target {
+			return true
+		}
+	}
+	return false
 }
 
 // ── Cross-Owner Task Flow ─────────────────────────────────
@@ -737,6 +911,36 @@ type MarketplaceStats struct {
 }
 
 // Stats returns current marketplace statistics.
+// RegisterStreamHandler sets up the libp2p stream handler for ServiceAd requests.
+// Remote peers can fetch our ServiceAd via direct stream (used by DHT discovery).
+func (m *Marketplace) RegisterStreamHandler(h host.Host) {
+	h.SetStreamHandler(ServiceAdProtocol, func(s libp2pnet.Stream) {
+		defer s.Close()
+
+		// Read request (we don't really parse it, any request = get ad)
+		buf := make([]byte, 64)
+		s.Read(buf)
+
+		// Build current ad
+		m.mu.RLock()
+		selfID := m.agent.identity.PublicKeyHex()[:16]
+		ad, ok := m.services[selfID]
+		m.mu.RUnlock()
+
+		if !ok {
+			s.Write([]byte(`{}`))
+			return
+		}
+
+		data, err := json.Marshal(ad)
+		if err != nil {
+			s.Write([]byte(`{}`))
+			return
+		}
+		s.Write(data)
+	})
+}
+
 func (m *Marketplace) Stats() MarketplaceStats {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
