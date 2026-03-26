@@ -16,7 +16,10 @@
 
 package engine
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseAction_Complete(t *testing.T) {
 	text := `THOUGHT: The task is done.
@@ -130,5 +133,48 @@ ACTION: delegate worker-1 analyze the codebase`
 	}
 	if pa.ToolInput != "worker-1 analyze the codebase" {
 		t.Errorf("expected input 'worker-1 analyze the codebase', got %q", pa.ToolInput)
+	}
+}
+
+func TestParseAction_CompleteMultiLine(t *testing.T) {
+	text := `THOUGHT: done with the analysis
+COMPLETE: # Improvement Plan
+
+## 1. Structured Prompts
+- Use templates instead of concatenation
+- Impact: High
+
+## 2. Context Window
+- Sliding window for history
+- Impact: Medium`
+
+	pa, done := parseAction(text)
+	if !done {
+		t.Fatal("expected done=true for COMPLETE")
+	}
+	// Should capture all lines after COMPLETE:
+	if len(pa.Result) < 100 {
+		t.Errorf("expected multi-line result, got %d chars: %q", len(pa.Result), pa.Result)
+	}
+	if !strings.Contains(pa.Result, "## 1. Structured Prompts") {
+		t.Error("result should contain section headers")
+	}
+	if !strings.Contains(pa.Result, "## 2. Context Window") {
+		t.Error("result should contain second section")
+	}
+}
+
+func TestParseAction_CompleteOnlyOnFirstLine(t *testing.T) {
+	text := `COMPLETE:
+All the content is on subsequent lines.
+Line 2.
+Line 3.`
+
+	pa, done := parseAction(text)
+	if !done {
+		t.Fatal("expected done=true")
+	}
+	if !strings.Contains(pa.Result, "Line 2") {
+		t.Errorf("should capture lines after COMPLETE:, got %q", pa.Result)
 	}
 }

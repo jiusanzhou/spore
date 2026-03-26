@@ -1,11 +1,11 @@
 3e5c61afd9a5cb22:
   agentid: 3e5c61afd9a5cb22
   taskscompleted: 4
-  tasksfailed: 0
+  tasksfailed: 1
   avgduration: 0
-  successrate: 1
-  fitness: 0.66425625
-  lastseen: 1774504980
+  successrate: 0.8
+  fitness: 0.65
+  lastseen: 1774508615
 59ff99ee65153d42:
   agentid: 59ff99ee65153d42
   taskscompleted: 6
@@ -40,12 +40,12 @@ d37dd38d7bc346c7:
   lastseen: 1774088950
 da65396e61a34c93:
   agentid: da65396e61a34c93
-  taskscompleted: 9
+  taskscompleted: 10
   tasksfailed: 2
   avgduration: 0
-  successrate: 0.8181818181818182
-  fitness: 0.8181818181818182
-  lastseen: 1774353428
+  successrate: 0.8333333333333334
+  fitness: 0.7585194830246914
+  lastseen: 1774508562
 fe54c0df89956741:
   agentid: fe54c0df89956741
   taskscompleted: 2

@@ -5,15 +5,15 @@ analysis:
   avgduration: 0
   successrate: 0.4
   trend: stable
-  lastused: 1774338440
+  lastused: 1774507882
 coding:
   name: coding
   attempts: 0
   successes: 0
-  avgduration: 86.8360639813
-  successrate: 0.68
+  avgduration: 82.94906035519048
+  successrate: 0.6857142857142857
   trend: stable
-  lastused: 1774338440
+  lastused: 1774507882
 delegation:
   name: delegation
   attempts: 0
@@ -21,15 +21,15 @@ delegation:
   avgduration: 0
   successrate: 0.4
   trend: stable
-  lastused: 1774338440
+  lastused: 1774507882
 documentation:
   name: documentation
   attempts: 0
   successes: 0
-  avgduration: 86.8360639813
-  successrate: 0.68
+  avgduration: 82.94906035519048
+  successrate: 0.6857142857142857
   trend: stable
-  lastused: 1774338440
+  lastused: 1774507882
 planning:
   name: planning
   attempts: 0
@@ -37,7 +37,7 @@ planning:
   avgduration: 0
   successrate: 0.4
   trend: stable
-  lastused: 1774338440
+  lastused: 1774507882
 research:
   name: research
   attempts: 0
@@ -45,12 +45,12 @@ research:
   avgduration: 0
   successrate: 0.35000000000000003
   trend: stable
-  lastused: 1774338440
+  lastused: 1774507882
 writing:
   name: writing
   attempts: 0
   successes: 0
-  avgduration: 86.8360639813
-  successrate: 0.68
+  avgduration: 82.94906035519048
+  successrate: 0.6857142857142857
   trend: stable
-  lastused: 1774338440
+  lastused: 1774507882

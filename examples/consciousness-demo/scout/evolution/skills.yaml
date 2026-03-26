@@ -8,12 +8,12 @@ analysis:
   lastused: 0
 coding:
   name: coding
-  attempts: 32
+  attempts: 33
   successes: 26
-  avgduration: 61.77134526687503
-  successrate: 0.8125
-  trend: improving
-  lastused: 1774504980
+  avgduration: 62.63010542545457
+  successrate: 0.7878787878787878
+  trend: stable
+  lastused: 1774508615
 delegation:
   name: delegation
   attempts: 0
@@ -40,12 +40,12 @@ planning:
   lastused: 0
 research:
   name: research
-  attempts: 32
+  attempts: 33
   successes: 26
-  avgduration: 61.77134526687503
-  successrate: 0.8125
-  trend: improving
-  lastused: 1774504980
+  avgduration: 62.63010542545457
+  successrate: 0.7878787878787878
+  trend: stable
+  lastused: 1774508615
 writing:
   name: writing
   attempts: 0

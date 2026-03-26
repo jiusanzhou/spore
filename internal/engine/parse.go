@@ -31,16 +31,25 @@ func parseAction(text string) (parsedAction, bool) {
 	pa := parsedAction{Raw: text}
 
 	lines := strings.Split(text, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
 
-		if strings.HasPrefix(line, "COMPLETE:") {
-			pa.Result = strings.TrimSpace(strings.TrimPrefix(line, "COMPLETE:"))
+		if strings.HasPrefix(trimmed, "COMPLETE:") {
+			// Capture everything after COMPLETE: — same line + all remaining lines
+			firstLine := strings.TrimSpace(strings.TrimPrefix(trimmed, "COMPLETE:"))
+			remaining := strings.Join(lines[i+1:], "\n")
+			if firstLine != "" && remaining != "" {
+				pa.Result = firstLine + "\n" + strings.TrimSpace(remaining)
+			} else if firstLine != "" {
+				pa.Result = firstLine
+			} else {
+				pa.Result = strings.TrimSpace(remaining)
+			}
 			return pa, true
 		}
 
-		if strings.HasPrefix(line, "ACTION:") {
-			action := strings.TrimSpace(strings.TrimPrefix(line, "ACTION:"))
+		if strings.HasPrefix(trimmed, "ACTION:") {
+			action := strings.TrimSpace(strings.TrimPrefix(trimmed, "ACTION:"))
 			parts := strings.SplitN(action, " ", 2)
 			pa.ToolName = parts[0]
 			if len(parts) > 1 {

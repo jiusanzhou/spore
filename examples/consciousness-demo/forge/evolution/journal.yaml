@@ -253,3 +253,45 @@
   - coding
   - documentation
   timestamp: 2026-03-24T15:44:41.922246+08:00
+- taskid: f3ea6d02
+  description: Write a haiku about distributed systems
+  runtime: builtin
+  success: true
+  duration: 5.208987833
+  error: ""
+  skills:
+  - writing
+  - coding
+  - documentation
+  timestamp: 2026-03-26T14:51:09.100917+08:00
+- taskid: a0acee19
+  description: |-
+    You are improving a Go AI agent engine. The current engine.go has a think() method that builds LLM prompts by simple string concatenation. Here is the current approach:
+
+    func (e *Engine) think(ctx context.Context, task *Task, observation string) (string, error) {
+      var msgs []llm.Message
+      msgs = append(msgs, llm.Message{Role: "system", Content: systemPrompt})
+      // ... appends task description, history, observation
+      return e.llm.Chat(ctx, msgs)
+    }
+
+    The systemPrompt tells the LLM to use ACTION: tool_name(input) format or RESULT: final_answer format.
+
+    Problems: 1) Prompt grows unbounded with history 2) No sliding window or summarization 3) Tool descriptions are hardcoded in the system prompt string 4) No few-shot examples for output format
+
+    Write improved Go code for:
+    1. A PromptBuilder struct that manages context window (max 8000 chars)
+    2. Sliding window for step history (keep last 5 steps, summarize older ones)
+    3. Dynamic tool description injection from registered tools
+    4. Structured output format with JSON instead of regex-parsed text
+
+    Output complete, compilable Go code.
+  runtime: builtin
+  success: true
+  duration: 112.222513958
+  error: ""
+  skills:
+  - writing
+  - coding
+  - documentation
+  timestamp: 2026-03-26T15:03:58.072942+08:00

@@ -360,3 +360,24 @@
   - research
   - coding
   timestamp: 2026-03-26T14:03:00.349616+08:00
+- taskid: daeb65dd
+  description: |-
+    Research how modern AI agent frameworks handle the agent execution loop. Specifically investigate:
+    1. How does LangChain/LangGraph handle the ReAct loop and tool calling?
+    2. How does AutoGPT structure its think-act-observe cycle?
+    3. What is the state-of-the-art for structured output parsing from LLMs (tool_use vs function_calling vs XML tags)?
+
+    Search the web for the latest approaches (2025-2026). Focus on:
+    - Best practices for context window management in multi-step agent loops
+    - How to handle tool call failures gracefully (retry, fallback, skip)
+    - Streaming vs batch tool execution
+
+    Write a summary with concrete recommendations we can apply to our Go-based agent engine.
+  runtime: builtin
+  success: false
+  duration: 90.1104305
+  error: task exceeded 20 steps
+  skills:
+  - research
+  - coding
+  timestamp: 2026-03-26T15:03:35.969764+08:00

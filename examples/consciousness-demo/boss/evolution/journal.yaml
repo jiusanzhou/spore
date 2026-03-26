@@ -160,3 +160,24 @@
   - delegation
   - analysis
   timestamp: 2026-03-24T19:57:08.207645+08:00
+- taskid: 91a960b8
+  description: |-
+    You are analyzing a Go-based AI agent framework called Spore. The core engine is in internal/engine/engine.go (268 lines). It runs an Observe→Think→Act→Reflect loop with max 20 steps. Current limitations:
+    1. The think() prompt is simple concatenation - no structured prompt template
+    2. Tools (shell, web_search, web_fetch) have no timeout management per-tool
+    3. No step-level token tracking (only task-level)
+    4. The observation phase just dumps full task history as text
+    5. No parallel tool execution support
+    6. No conversation memory between tasks (each task starts fresh)
+    7. parse.go uses simple regex - fragile for complex LLM outputs
+
+    Analyze these issues and write a detailed improvement plan as a markdown document. Prioritize by impact. For each improvement, describe: what to change, why it matters, and estimated complexity (S/M/L). Focus on the 3 most impactful improvements.
+  runtime: builtin
+  success: true
+  duration: 36.228440167
+  error: ""
+  skills:
+  - planning
+  - delegation
+  - analysis
+  timestamp: 2026-03-26T15:02:42.067215+08:00
