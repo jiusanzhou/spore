@@ -367,20 +367,30 @@ func (s *Server) handleAgentSkills(w http.ResponseWriter, r *http.Request, name 
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found: " + name})
 		return
 	}
-	evo := a.Evolution()
-	if evo == nil {
-		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"declared": a.Config().Agent.Skills,
-			"profiles": map[string]interface{}{},
-		})
-		return
+
+	result := map[string]interface{}{
+		"declared": a.Config().Agent.Skills,
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"declared":   a.Config().Agent.Skills,
-		"profiles":   evo.SkillProfiles(),
-		"confidence": evo.Strategy().SkillConfidence,
-	})
+	evo := a.Evolution()
+	if evo != nil {
+		result["profiles"] = evo.SkillProfiles()
+		result["confidence"] = evo.Strategy().SkillConfidence
+	}
+
+	// Skill store data (OpenSpace-inspired evolution)
+	if ss := a.Skills(); ss != nil {
+		agentID := a.Info().ID
+		result["stats"] = ss.Stats(agentID)
+		if active, err := ss.ActiveSkills(); err == nil {
+			result["active_skills"] = active
+		}
+		if analyses, err := ss.RecentAnalyses(agentID, 10); err == nil {
+			result["recent_analyses"] = analyses
+		}
+	}
+
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) handleAgentExperience(w http.ResponseWriter, r *http.Request, name string) {

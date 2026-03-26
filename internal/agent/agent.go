@@ -79,6 +79,7 @@ type Info struct {
 	Self        *SelfModel       `json:"self,omitempty"`      // self-awareness model
 	Collective  *CollectiveState `json:"collective,omitempty"` // swarm consciousness
 	Economy     *TokenState      `json:"economy,omitempty"`    // token economy state
+	SkillStats  *SkillStats      `json:"skill_stats,omitempty"` // skill evolution stats
 }
 
 // ethicsAdapter wraps *ethics.Engine to satisfy engine.EthicsChecker.
@@ -106,6 +107,11 @@ type Agent struct {
 	peerEvo     *PeerEvolution
 	reputation  *ReputationEngine // per-peer trust scores
 	evoFS       *EvolutionFS      // file-based evolution persistence (OpenAgent layout)
+
+	// Skill evolution system (inspired by OpenSpace)
+	skillStore   *SkillStore        // SQLite skill records + analyses
+	analyzer     *ExecutionAnalyzer // post-task LLM analysis
+	skillEvolver *SkillEvolver      // applies FIX/DERIVED/CAPTURED evolutions
 
 	// Intrinsic drive engine — autonomous behavior generation
 	drives *DriveEngine
@@ -138,6 +144,9 @@ type Agent struct {
 
 	// Stigmergic task market — pending bid channels keyed by task ID
 	pendingBids map[string]chan *protocol.TaskBid
+
+	// Working directory for file-based persistence
+	workDir string
 
 	// Coordinator state for tracking delegated subtasks (legacy, used by broadcastTask flow)
 	coordStates map[string]*coordinatorState
@@ -175,6 +184,7 @@ func (a *Agent) SetWorkDir(dir string) {
 	if dir == "" {
 		return
 	}
+	a.workDir = dir
 
 	// Persist identity — load existing key or save current key
 	keyPath := filepath.Join(dir, "identity.key")
@@ -224,6 +234,22 @@ func (a *Agent) SetWorkDir(dir string) {
 	}
 	if a.reputation != nil {
 		a.reputation.SetWorkDir(dir)
+	}
+
+	// Initialize skill evolution system (OpenSpace-inspired)
+	if a.llm != nil && a.skillStore == nil {
+		agentID := a.identity.PublicKeyHex()[:16]
+		skillDir := filepath.Join(dir, "skills")
+		ss, err := NewSkillStore(skillDir)
+		if err != nil {
+			fmt.Printf("⚠️  [%s] Skill store init failed: %v\n", a.cfg.Agent.Name, err)
+		} else {
+			a.skillStore = ss
+			a.analyzer = NewExecutionAnalyzer(a.llm, ss, agentID)
+			a.skillEvolver = NewSkillEvolver(a.llm, ss, agentID)
+			a.importDeclaredSkills()
+			fmt.Printf("🧬 [%s] Skill evolution engine initialized\n", a.cfg.Agent.Name)
+		}
 	}
 }
 
@@ -334,6 +360,9 @@ func New(cfg *Config) (*Agent, error) {
 	// Initialize evolution engine and restore previous state
 	a.evolution = NewEvolutionEngine(a)
 	a.evolution.RestoreState()
+
+	// Initialize skill evolution system (OpenSpace-inspired)
+	// Deferred to SetWorkDir — needs workDir for SQLite storage
 
 		// Initialize peer evolution tracker
 	a.peerEvo = NewPeerEvolution(a)
@@ -579,6 +608,9 @@ func (a *Agent) Info() Info {
 		ts := a.tokens.State()
 		info.Economy = &ts
 	}
+	if a.skillStore != nil {
+		info.SkillStats = a.skillStore.Stats(info.ID)
+	}
 	return info
 }
 
@@ -611,6 +643,9 @@ func (a *Agent) PeerEvo() *PeerEvolution { return a.peerEvo }
 
 // Reputation returns the agent's reputation engine (may be nil).
 func (a *Agent) Reputation() *ReputationEngine { return a.reputation }
+
+// Skills returns the agent's skill store (may be nil).
+func (a *Agent) Skills() *SkillStore { return a.skillStore }
 
 // Peers returns the current peer registry.
 func (a *Agent) Peers() map[string]*PeerInfo {
@@ -1314,6 +1349,11 @@ func (a *Agent) recordEvolution(entry *taskEntry, output *runtime.TaskOutput, rt
 	}
 	a.storeEventContext(fmt.Sprintf("task_%s", verb), entry.ID,
 		fmt.Sprintf("Task %s via %s: %s", verb, rtName, truncate(entry.Description, 60)))
+
+	// Skill evolution: post-task analysis + evolution (async)
+	if a.analyzer != nil && output != nil {
+		go a.runSkillAnalysis(entry, output, rtName, duration)
+	}
 }
 
 // storePreferencesContext persists the agent's runtime/strategy preferences as structured memory.
@@ -1503,6 +1543,9 @@ func (a *Agent) shutdown() error {
 	if a.ethics != nil {
 		a.ethics.Close()
 	}
+	if a.skillStore != nil {
+		a.skillStore.Close()
+	}
 	if a.memory != nil {
 		return a.memory.Close()
 	}
@@ -1514,6 +1557,73 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n] + "..."
+}
+
+// runSkillAnalysis performs post-task LLM analysis and triggers skill evolution.
+func (a *Agent) runSkillAnalysis(entry *taskEntry, output *runtime.TaskOutput, rtName string, duration float64) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	analysis, err := a.analyzer.Analyze(ctx, entry, output, rtName, duration)
+	if err != nil {
+		fmt.Printf("🔍 [%s] Skill analysis failed: %v\n", a.cfg.Agent.Name, err)
+		return
+	}
+
+	fmt.Printf("🔍 [%s] Task analysis: quality=%.1f efficiency=%.1f skills=%v suggestions=%d\n",
+		a.cfg.Agent.Name, analysis.Quality, analysis.Efficiency,
+		analysis.SkillsUsed, len(analysis.Suggestions))
+
+	// Execute evolution suggestions (threshold 0.5 = moderate+urgent)
+	if a.skillEvolver != nil && len(analysis.Suggestions) > 0 {
+		evolved, err := a.skillEvolver.Evolve(ctx, analysis, 0.5)
+		if err != nil {
+			fmt.Printf("🧬 [%s] Skill evolution error: %v\n", a.cfg.Agent.Name, err)
+		}
+		for _, rec := range evolved {
+			fmt.Printf("🧬 [%s] New skill: %s (origin=%s, gen=%d)\n",
+				a.cfg.Agent.Name, rec.Name, rec.Origin, rec.Generation)
+		}
+	}
+}
+
+// importDeclaredSkills imports skills from agent config into the skill store.
+func (a *Agent) importDeclaredSkills() {
+	if a.skillStore == nil {
+		return
+	}
+	for _, skillName := range a.cfg.Agent.Skills {
+		id := generateSkillID(skillName, "imported", "init")
+		existing, _ := a.skillStore.GetSkill(id)
+		if existing != nil {
+			continue // already imported
+		}
+		// Check if any active skill with this name exists
+		skills, _ := a.skillStore.ActiveSkills()
+		found := false
+		for _, s := range skills {
+			if strings.EqualFold(s.Name, skillName) {
+				found = true
+				break
+			}
+		}
+		if found {
+			continue
+		}
+
+		rec := &SkillRecord{
+			SkillID:     id,
+			Name:        skillName,
+			Description: fmt.Sprintf("Declared skill: %s", skillName),
+			IsActive:    true,
+			Origin:      SkillOriginImported,
+			CreatedAt:   time.Now().UTC(),
+			UpdatedAt:   time.Now().UTC(),
+		}
+		if err := a.skillStore.PutSkill(rec); err != nil {
+			fmt.Printf("⚠️  [%s] Failed to import skill %s: %v\n", a.cfg.Agent.Name, skillName, err)
+		}
+	}
 }
 
 // isRetryableError checks if an error message indicates a transient failure

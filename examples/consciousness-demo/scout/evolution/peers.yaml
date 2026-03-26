@@ -40,12 +40,12 @@ acc286f54949a8d4:
   lastseen: 1774095434
 da65396e61a34c93:
   agentid: da65396e61a34c93
-  taskscompleted: 7
-  tasksfailed: 1
+  taskscompleted: 9
+  tasksfailed: 2
   avgduration: 0
-  successrate: 0.875
-  fitness: 0.8
-  lastseen: 1774350830
+  successrate: 0.8181818181818182
+  fitness: 0.8181818181818182
+  lastseen: 1774353428
 fea0ae2cdc9da35d:
   agentid: fea0ae2cdc9da35d
   taskscompleted: 1
