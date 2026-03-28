@@ -167,6 +167,10 @@ func (s *Server) handleAgentRoute(w http.ResponseWriter, r *http.Request) {
 		s.handleAgentMarketplace(w, r, name)
 	case "manifest":
 		s.handleAgentManifest(w, r, name)
+	case "journal":
+		s.handleAgentJournal(w, r, name)
+	case "synthesis":
+		s.handleAgentSynthesis(w, r, name)
 	default:
 		http.Error(w, "not found", http.StatusNotFound)
 	}
@@ -1046,5 +1050,60 @@ func (s *Server) handleMarketplaceRequest(w http.ResponseWriter, r *http.Request
 		"provider": bestAd.Name,
 		"skill":    req.Skill,
 		"payment":  bestAd.PricePerTask,
+	})
+}
+
+func (s *Server) handleAgentJournal(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	a := s.sw.GetAgent(name)
+	if a == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found: " + name})
+		return
+	}
+	journal := a.Journal()
+	if journal == nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"agent":   name,
+			"entries": []interface{}{},
+		})
+		return
+	}
+
+	limit := 50
+	entries := journal.Entries(limit)
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"agent":    name,
+		"entries":  entries,
+		"count":    len(entries),
+		"markdown": journal.RenderMarkdown(),
+	})
+}
+
+func (s *Server) handleAgentSynthesis(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	a := s.sw.GetAgent(name)
+	if a == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found: " + name})
+		return
+	}
+	synth := a.Synthesizer()
+	if synth == nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"agent":  name,
+			"status": "no synthesis engine",
+		})
+		return
+	}
+
+	status := synth.Status()
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"agent":  name,
+		"status": status,
 	})
 }

@@ -36,9 +36,10 @@ type Config struct {
 	Economy EconomyConfig  `toml:"economy" yaml:"economy" json:"economy"`
 	Privacy PrivacyConfig  `toml:"privacy" yaml:"privacy" json:"privacy"`
 	Spawner SpawnerConfig  `toml:"spawner" yaml:"spawner" json:"spawner"`
-	Drive   *Drive         `toml:"drive" yaml:"drive" json:"drive,omitempty"`
-	Token   *TokenConfig   `toml:"token" yaml:"token" json:"token,omitempty"`
+	Drive     *Drive            `toml:"drive" yaml:"drive" json:"drive,omitempty"`
+	Token     *TokenConfig      `toml:"token" yaml:"token" json:"token,omitempty"`
 	Marketplace MarketplaceConfig `toml:"marketplace" yaml:"marketplace" json:"marketplace"`
+	Synthesis SynthesisConfig   `toml:"synthesis" yaml:"synthesis" json:"synthesis"`
 }
 
 // AgentConfig defines the agent's basic identity and behavior.
@@ -111,6 +112,11 @@ type PrivacyConfig struct {
 	Mode    string `toml:"mode" yaml:"mode" json:"mode" opts:"help=privacy mode: warn/sanitize/reject"`
 }
 
+// SynthesisConfig configures the memory synthesis cycle.
+type SynthesisConfig struct {
+	IntervalHours int `toml:"interval_hours" yaml:"interval_hours" json:"interval_hours" opts:"help=memory synthesis interval in hours (default 6)"`
+}
+
 // DefaultConfig returns a Config with sensible defaults.
 func DefaultConfig(name, model string) *Config {
 	return &Config{
@@ -154,6 +160,9 @@ func DefaultConfig(name, model string) *Config {
 			DefaultResourceShare: 0.2,
 		},
 		Marketplace: DefaultMarketplaceConfig(),
+		Synthesis: SynthesisConfig{
+			IntervalHours: 6,
+		},
 	}
 }
 

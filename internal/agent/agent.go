@@ -147,6 +147,12 @@ type Agent struct {
 	// Stigmergic task market — pending bid channels keyed by task ID
 	pendingBids map[string]chan *protocol.TaskBid
 
+	// Memory synthesis engine
+	synthesizer *memory.MemorySynthesizer
+
+	// Evolution journal
+	evoJournal *EvolutionJournal
+
 	// Working directory for file-based persistence
 	workDir string
 
@@ -252,6 +258,25 @@ func (a *Agent) SetWorkDir(dir string) {
 			a.importDeclaredSkills()
 			fmt.Printf("🧬 [%s] Skill evolution engine initialized\n", a.cfg.Agent.Name)
 		}
+	}
+
+	// Initialize memory synthesis engine
+	agentID := a.identity.PublicKeyHex()[:16]
+	synthCfg := memory.SynthesisConfig{
+		IntervalHours: a.cfg.Synthesis.IntervalHours,
+		WorkDir:       dir,
+	}
+	if synthCfg.IntervalHours <= 0 {
+		synthCfg.IntervalHours = 6
+	}
+	a.synthesizer = memory.NewMemorySynthesizer(a.memory, a.llm, agentID, synthCfg)
+
+	// Initialize evolution journal
+	a.evoJournal = NewEvolutionJournal(dir)
+
+	// Load seed skills if no skills exist yet
+	if a.skillStore != nil {
+		a.loadSeedSkills()
 	}
 }
 
@@ -560,6 +585,12 @@ func (a *Agent) Run() error {
 				if a.reputation != nil {
 					a.reputation.Decay()
 				}
+				// Memory synthesis — compress old memories into active learnings
+				if a.synthesizer != nil {
+					if err := a.synthesizer.Synthesize(ctx); err != nil {
+						fmt.Printf("⚠️  [%s] Memory synthesis failed: %v\n", a.cfg.Agent.Name, err)
+					}
+				}
 			}
 		}
 	}
@@ -690,6 +721,18 @@ func (a *Agent) Skills() *SkillStore { return a.skillStore }
 
 // Market returns the marketplace engine.
 func (a *Agent) Market() *Marketplace { return a.marketplace }
+
+// WorkDir returns the agent's working directory.
+func (a *Agent) WorkDir() string { return a.workDir }
+
+// LLM returns the agent's LLM provider (may be nil).
+func (a *Agent) LLM() llm.Provider { return a.llm }
+
+// Synthesizer returns the memory synthesis engine (may be nil).
+func (a *Agent) Synthesizer() *memory.MemorySynthesizer { return a.synthesizer }
+
+// Journal returns the evolution journal (may be nil).
+func (a *Agent) Journal() *EvolutionJournal { return a.evoJournal }
 
 // Peers returns the current peer registry.
 func (a *Agent) Peers() map[string]*PeerInfo {
