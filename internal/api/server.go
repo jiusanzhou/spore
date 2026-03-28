@@ -26,6 +26,8 @@ import (
 	"sync"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	"go.zoe.im/spore/internal/agent"
 	"go.zoe.im/spore/internal/memory"
 	"go.zoe.im/spore/internal/network"
@@ -163,6 +165,8 @@ func (s *Server) handleAgentRoute(w http.ResponseWriter, r *http.Request) {
 		s.handleAgentContext(w, r, name)
 	case "marketplace":
 		s.handleAgentMarketplace(w, r, name)
+	case "manifest":
+		s.handleAgentManifest(w, r, name)
 	default:
 		http.Error(w, "not found", http.StatusNotFound)
 	}
@@ -897,6 +901,24 @@ func (s *Server) handleAgentMarketplace(w http.ResponseWriter, r *http.Request, 
 		"services": mp.Services(),
 		"escrows":  mp.Escrows(),
 	})
+}
+
+func (s *Server) handleAgentManifest(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	ag := s.sw.GetAgent(name)
+	if ag == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
+		return
+	}
+	manifest := ag.GenerateManifest()
+	w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	enc := yaml.NewEncoder(w)
+	enc.SetIndent(2)
+	_ = enc.Encode(manifest)
 }
 
 func (s *Server) handleMarketplace(w http.ResponseWriter, r *http.Request) {

@@ -114,6 +114,10 @@ func (fs *EvolutionFS) ExportExperience(evo *EvolutionEngine) (int, error) {
 			Source: &manifest.ExperienceSource{
 				Type: "evolution",
 			},
+			Sanitization: &manifest.SanitizationInfo{
+				Level:       "L1",
+				SanitizedAt: time.Now().Format(time.RFC3339),
+			},
 		})
 		exported++
 	}

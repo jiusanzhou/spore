@@ -483,6 +483,13 @@ func (a *Agent) Run() error {
 		fmt.Printf("🏪 [%s] Marketplace started (price=%.1f, DHT+topics)\n", a.cfg.Agent.Name, a.cfg.Marketplace.PricePerTask)
 	}
 
+	// Generate OpenAgent manifest (agent.yaml)
+	if a.workDir != "" {
+		if err := a.SaveManifest(); err != nil {
+			fmt.Printf("⚠️  [%s] Failed to save agent.yaml: %v\n", a.cfg.Agent.Name, err)
+		}
+	}
+
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 

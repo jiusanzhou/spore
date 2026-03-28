@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -171,7 +172,14 @@ func (c *Config) Save(path string) error {
 func LoadConfig(cfgPath, dir string) (*Config, error) {
 	path := cfgPath
 	if path == "" && dir != "" {
-		path = filepath.Join(dir, "spore.toml")
+		// Try agent.yaml first (OpenAgent spec), then spore.toml
+		yamlPath := filepath.Join(dir, "agent.yaml")
+		tomlPath := filepath.Join(dir, "spore.toml")
+		if _, err := os.Stat(yamlPath); err == nil {
+			path = yamlPath
+		} else {
+			path = tomlPath
+		}
 	}
 	if path == "" {
 		// try default location
@@ -183,8 +191,19 @@ func LoadConfig(cfgPath, dir string) (*Config, error) {
 	}
 
 	cfg := &Config{}
-	if _, err := toml.DecodeFile(path, cfg); err != nil {
-		return nil, fmt.Errorf("decoding config %s: %w", path, err)
+
+	if strings.HasSuffix(path, ".yaml") || strings.HasSuffix(path, ".yml") {
+		// Load OpenAgent agent.yaml format
+		loadedCfg, _, err := LoadManifest(path)
+		if err != nil {
+			return nil, fmt.Errorf("loading agent.yaml %s: %w", path, err)
+		}
+		cfg = loadedCfg
+	} else {
+		// Load Spore native TOML format
+		if _, err := toml.DecodeFile(path, cfg); err != nil {
+			return nil, fmt.Errorf("decoding config %s: %w", path, err)
+		}
 	}
 
 	// override API key from env if not set

@@ -1,0 +1,219 @@
+/*
+ * Copyright (c) 2026 wellwell.work, LLC by Zoe
+ *
+ * Licensed under the Apache License 2.0 (the "License");
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package agent
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	manifest "go.zoe.im/agentbox/pkg/agent"
+	"gopkg.in/yaml.v3"
+)
+
+// ───── OpenAgent Spec v1.0.0-draft ─────────────────────────────────────
+// Aligns with https://openagent.wencai.app / openagent-spec/spec
+// Types are defined in go.zoe.im/agentbox/pkg/agent (manifest.Manifest)
+
+// ExperienceLevel returns the OpenAgent experience level for a pack count.
+func ExperienceLevel(packs int) string {
+	switch {
+	case packs >= 200:
+		return "expert"
+	case packs >= 51:
+		return "senior"
+	case packs >= 11:
+		return "mid"
+	case packs >= 1:
+		return "junior"
+	default:
+		return "junior"
+	}
+}
+
+// GenerateManifest creates an OpenAgent agent.yaml manifest from a live Agent.
+func (a *Agent) GenerateManifest() *manifest.Manifest {
+	m := &manifest.Manifest{
+		ID:          a.ID(),
+		Name:        a.cfg.Agent.Name,
+		Version:     "0.1.0",
+		Description: a.cfg.Agent.Description,
+		Emoji:       "🦠",
+		Author:      "spore",
+		License:     "Apache-2.0",
+
+		Persona: &manifest.Persona{
+			Style: fmt.Sprintf("Autonomous agent: %s", a.cfg.Agent.Role),
+			Tone:  "adaptive, task-focused",
+		},
+
+		Collaboration: &manifest.Collaboration{
+			CanDelegate: a.cfg.Agent.CanDelegate,
+			CanReceive:  a.cfg.Agent.CanReceive,
+			Protocols:   []string{"spore/gossipsub", "spore/service-ad/1.0.0", "libp2p/kad-dht"},
+		},
+
+		Adapters: &manifest.Adapters{
+			Frameworks: []manifest.FrameworkRef{
+				{Name: "spore", Version: ">=0.1", Native: true},
+			},
+			Tools: &manifest.ToolRequirements{
+				Required: []manifest.ToolRef{
+					{Name: "web_search", Reason: "Information retrieval"},
+					{Name: "web_fetch", Reason: "Content extraction"},
+				},
+			},
+		},
+
+		Runtime: &manifest.RuntimeRequirements{
+			Platform:     []string{"darwin", "linux"},
+			Dependencies: []string{"go >= 1.22"},
+			Sandbox:      "optional",
+		},
+	}
+
+	// Skills: config + evolved
+	for _, sk := range a.cfg.Agent.Skills {
+		m.Skills = append(m.Skills, manifest.SkillRef{Name: sk})
+	}
+	if a.skillStore != nil {
+		if active, err := a.skillStore.ActiveSkills(); err == nil {
+			for _, s := range active {
+				found := false
+				for _, ms := range m.Skills {
+					if ms.Name == s.Name {
+						found = true
+						break
+					}
+				}
+				if !found {
+					ms := manifest.SkillRef{Name: s.Name}
+					if s.Generation > 0 {
+						ms.Version = fmt.Sprintf("gen%d", s.Generation)
+					}
+					m.Skills = append(m.Skills, ms)
+				}
+			}
+		}
+	}
+
+	// Model
+	if a.cfg.LLM.Model != "" {
+		m.Model = &manifest.ModelRequirements{
+			Recommended:   inferModelTier(a.cfg.LLM.Model),
+			ContextWindow: "200k",
+		}
+	}
+
+	// Experience from index
+	if a.workDir != "" {
+		indexPath := filepath.Join(a.workDir, "experience", "index.yaml")
+		if data, err := os.ReadFile(indexPath); err == nil {
+			var idx struct {
+				Packs []struct {
+					ID      string `yaml:"id"`
+					Summary string `yaml:"summary"`
+				} `yaml:"packs"`
+			}
+			if yaml.Unmarshal(data, &idx) == nil {
+				packCount := len(idx.Packs)
+				exp := &manifest.Experience{
+					Level:   ExperienceLevel(packCount),
+					Packs:   packCount,
+					Domains: a.cfg.Agent.Skills,
+				}
+				// Top 5 highlights
+				for i, p := range idx.Packs {
+					if i >= 5 {
+						break
+					}
+					summary := p.Summary
+					if len(summary) > 200 {
+						summary = summary[:197] + "..."
+					}
+					exp.Highlights = append(exp.Highlights, manifest.ExperienceHighlight{
+						ID:      p.ID,
+						Summary: summary,
+					})
+				}
+				m.Experience = exp
+			}
+		}
+	}
+
+	// Marketplace
+	if a.cfg.Marketplace.Enabled {
+		pricingModel := "usage"
+		if a.cfg.Marketplace.PricePerTask == 0 {
+			pricingModel = "free"
+		}
+		m.Marketplace = &manifest.Marketplace{
+			Category: "autonomous-agent",
+			Tags:     a.cfg.Agent.Skills,
+			Pricing: &manifest.Pricing{
+				Model: pricingModel,
+				Base:  fmt.Sprintf("%.1f tokens/task", a.cfg.Marketplace.PricePerTask),
+			},
+		}
+	}
+
+	return m
+}
+
+// SaveManifest writes agent.yaml to the agent's work directory.
+func (a *Agent) SaveManifest() error {
+	if a.workDir == "" {
+		return fmt.Errorf("no work directory set")
+	}
+	m := a.GenerateManifest()
+	path := filepath.Join(a.workDir, "agent.yaml")
+
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	_, _ = fmt.Fprintf(f, "# OpenAgent Manifest — auto-generated by Spore\n")
+	_, _ = fmt.Fprintf(f, "# Spec: https://openagent.wencai.app\n")
+	_, _ = fmt.Fprintf(f, "# Generated: %s\n\n", time.Now().Format(time.RFC3339))
+
+	enc := yaml.NewEncoder(f)
+	enc.SetIndent(2)
+	return enc.Encode(m)
+}
+
+// inferModelTier maps a model name to an OpenAgent advisory tier.
+func inferModelTier(model string) string {
+	m := strings.ToLower(model)
+	switch {
+	case strings.Contains(m, "opus"):
+		return "opus"
+	case strings.Contains(m, "sonnet"):
+		return "sonnet"
+	case strings.Contains(m, "haiku"):
+		return "haiku"
+	case strings.Contains(m, "gpt-4"):
+		return "sonnet"
+	case strings.Contains(m, "gpt-3"):
+		return "haiku"
+	default:
+		return "sonnet"
+	}
+}
