@@ -242,7 +242,7 @@ func (ae *AutoEvolver) buildStatePrompt() string {
 		fmt.Fprintf(&b, "## Self-Awareness\n")
 		fmt.Fprintf(&b, "- Personality: %s\n", self.Personality)
 		fmt.Fprintf(&b, "- Purpose: %s\n", self.Purpose)
-		fmt.Fprintf(&b, "- Mood: %.2f, Energy: %.2f, Morale: %.2f\n", self.Mood, self.Energy, self.Morale)
+		fmt.Fprintf(&b, "- Mood: %s, Energy: %.2f, Morale: %.2f\n", self.Mood, self.Energy, self.Morale)
 		if len(self.Strengths) > 0 {
 			fmt.Fprintf(&b, "- Strengths: %v\n", self.Strengths)
 		}
