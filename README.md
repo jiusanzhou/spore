@@ -1,6 +1,12 @@
 # 🦠 Spore
 
+[![CI](https://github.com/jiusanzhou/spore/actions/workflows/ci.yml/badge.svg)](https://github.com/jiusanzhou/spore/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/go.zoe.im/spore)](https://goreportcard.com/report/go.zoe.im/spore)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+
 Decentralized AI agent swarm protocol and runtime. Agents self-organize, evolve skills, share knowledge via IPFS, and coordinate tasks through stigmergic markets — no central coordinator needed.
+
+**🦋 Agents evolve themselves autonomously** — every 8 hours, each agent analyzes its own performance, proposes improvements, and applies them automatically.
 
 ## What Spore Does
 
@@ -14,6 +20,21 @@ Agent A evolves a skill → publishes to IPFS → Agent B learns it automaticall
 - **Stigmergic coordination** — ant-colony task market: broadcast → bid → assign → execute
 - **Token economy** — birth capital, task rewards, metabolism costs, knowledge sharing payments
 - **Self-awareness** — intrinsic drives, mood/energy/morale, collective consciousness
+
+## Install
+
+```bash
+# From source
+git clone https://github.com/jiusanzhou/spore.git
+cd spore && go build -o bin/spore ./cmd/spore
+
+# Docker
+docker build -t spore .
+docker run -v ~/.spore:/root/.spore -p 9292:9292 spore run
+
+# Or download binary from releases
+# https://github.com/jiusanzhou/spore/releases
+```
 
 ## Quick Start
 
@@ -91,6 +112,28 @@ spore peers connect /ip4/<ip>/tcp/9000/p2p/<peer-id>
 | **NAT Traversal** | Hole punching + relay for internet-wide P2P |
 | **Identity Persistence** | Ed25519 keys survive restarts |
 | **Autonomous Spawning** | Agents can spawn children with inherited skills |
+
+## Self-Evolution 🦋
+
+Spore agents evolve autonomously — inspired by [yoyo-evolve](https://github.com/yologdev/yoyo-evolve):
+
+```
+Every 8 hours:
+  Read own state → LLM analysis → Propose improvements → Validate → Apply/Revert
+```
+
+```bash
+# Manual evolution (dry-run)
+spore evolve -d ~/.spore/my-agent
+
+# Apply changes
+spore evolve -d ~/.spore/my-agent --apply
+
+# Or let it run autonomously (enabled by default)
+# Config: auto_evolve.enabled = true, auto_evolve.interval_hours = 8
+```
+
+**Memory Synthesis**: Old memories are compressed by time (< 24h full, 1-7d summarized, > 7d aggressive). Everything recorded in `JOURNAL.md`.
 
 ## API
 
