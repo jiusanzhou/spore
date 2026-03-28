@@ -153,6 +153,9 @@ type Agent struct {
 	// Evolution journal
 	evoJournal *EvolutionJournal
 
+	// Autonomous self-evolution engine
+	autoEvolver *AutoEvolver
+
 	// Working directory for file-based persistence
 	workDir string
 
@@ -273,6 +276,13 @@ func (a *Agent) SetWorkDir(dir string) {
 
 	// Initialize evolution journal
 	a.evoJournal = NewEvolutionJournal(dir)
+
+	// Initialize autonomous self-evolution engine
+	if a.cfg.AutoEvolve.Enabled {
+		a.autoEvolver = NewAutoEvolver(a)
+		fmt.Printf("🦋 [%s] Auto-evolution enabled (every %dh, auto_apply=%v)\n",
+			a.cfg.Agent.Name, a.cfg.AutoEvolve.IntervalHours, a.cfg.AutoEvolve.AutoApply)
+	}
 
 	// Load seed skills if no skills exist yet
 	if a.skillStore != nil {
@@ -591,6 +601,14 @@ func (a *Agent) Run() error {
 						fmt.Printf("⚠️  [%s] Memory synthesis failed: %v\n", a.cfg.Agent.Name, err)
 					}
 				}
+				// Autonomous self-evolution — analyze and improve self
+				if a.autoEvolver != nil && a.autoEvolver.ShouldEvolve() {
+					go func() {
+						if err := a.autoEvolver.Evolve(ctx); err != nil {
+							fmt.Printf("⚠️  [%s] Auto-evolution failed: %v\n", a.cfg.Agent.Name, err)
+						}
+					}()
+				}
 			}
 		}
 	}
@@ -733,6 +751,9 @@ func (a *Agent) Synthesizer() *memory.MemorySynthesizer { return a.synthesizer }
 
 // Journal returns the evolution journal (may be nil).
 func (a *Agent) Journal() *EvolutionJournal { return a.evoJournal }
+
+// AutoEvolver returns the auto-evolution engine (may be nil).
+func (a *Agent) AutoEvolver() *AutoEvolver { return a.autoEvolver }
 
 // Peers returns the current peer registry.
 func (a *Agent) Peers() map[string]*PeerInfo {

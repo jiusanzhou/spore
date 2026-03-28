@@ -39,7 +39,8 @@ type Config struct {
 	Drive     *Drive            `toml:"drive" yaml:"drive" json:"drive,omitempty"`
 	Token     *TokenConfig      `toml:"token" yaml:"token" json:"token,omitempty"`
 	Marketplace MarketplaceConfig `toml:"marketplace" yaml:"marketplace" json:"marketplace"`
-	Synthesis SynthesisConfig   `toml:"synthesis" yaml:"synthesis" json:"synthesis"`
+	Synthesis  SynthesisConfig   `toml:"synthesis" yaml:"synthesis" json:"synthesis"`
+	AutoEvolve AutoEvolveConfig  `toml:"auto_evolve" yaml:"auto_evolve" json:"auto_evolve"`
 }
 
 // AgentConfig defines the agent's basic identity and behavior.
@@ -117,6 +118,13 @@ type SynthesisConfig struct {
 	IntervalHours int `toml:"interval_hours" yaml:"interval_hours" json:"interval_hours" opts:"help=memory synthesis interval in hours (default 6)"`
 }
 
+// AutoEvolveConfig configures the autonomous self-evolution cycle.
+type AutoEvolveConfig struct {
+	Enabled       bool `toml:"enabled" yaml:"enabled" json:"enabled" opts:"help=enable autonomous self-evolution"`
+	IntervalHours int  `toml:"interval_hours" yaml:"interval_hours" json:"interval_hours" opts:"help=self-evolution interval in hours (default 8)"`
+	AutoApply     bool `toml:"auto_apply" yaml:"auto_apply" json:"auto_apply" opts:"help=automatically apply evolution proposals (default true)"`
+}
+
 // DefaultConfig returns a Config with sensible defaults.
 func DefaultConfig(name, model string) *Config {
 	return &Config{
@@ -162,6 +170,11 @@ func DefaultConfig(name, model string) *Config {
 		Marketplace: DefaultMarketplaceConfig(),
 		Synthesis: SynthesisConfig{
 			IntervalHours: 6,
+		},
+		AutoEvolve: AutoEvolveConfig{
+			Enabled:       true,
+			IntervalHours: 8,
+			AutoApply:     true,
 		},
 	}
 }
