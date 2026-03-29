@@ -23,7 +23,7 @@
   },
   "3e5c61afd9a5cb22": {
     "agent_id": "3e5c61afd9a5cb22",
-    "score": 0.6080000000000001,
+    "score": 0.5,
     "tasks_completed": 0,
     "tasks_failed": 0,
     "tasks_timeout": 0,
@@ -45,7 +45,7 @@
   },
   "da65396e61a34c93": {
     "agent_id": "da65396e61a34c93",
-    "score": 0.56,
+    "score": 0.5,
     "tasks_completed": 0,
     "tasks_failed": 0,
     "tasks_timeout": 10,

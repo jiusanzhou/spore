@@ -33,29 +33,39 @@ import (
 //   - FIX: repair broken skill instructions
 //   - DERIVED: enhance an existing skill for a new pattern
 //   - CAPTURED: capture a novel pattern as a brand-new skill
+//
+// V2: operates on SkillFS (file-system-first, IPFS-backed) instead of legacy SkillStore.
 type SkillEvolver struct {
 	provider llm.Provider
-	store    *SkillStore
+	fs       *SkillFS
 	agentID  string
 }
 
-// NewSkillEvolver creates an evolver.
-func NewSkillEvolver(provider llm.Provider, store *SkillStore, agentID string) *SkillEvolver {
+// NewSkillEvolver creates an evolver backed by SkillFS.
+func NewSkillEvolver(provider llm.Provider, fs *SkillFS, agentID string) *SkillEvolver {
 	return &SkillEvolver{
 		provider: provider,
-		store:    store,
+		fs:       fs,
 		agentID:  agentID,
 	}
 }
 
-// Evolve processes a list of evolution suggestions from the analyzer.
+// EvolvedSkill is the result of a single evolution action.
+type EvolvedSkill struct {
+	Name       string
+	Type       EvolutionType
+	Generation int
+	Summary    string
+}
+
+// Evolve processes evolution suggestions from the analyzer.
 // It applies high-priority suggestions (priority >= threshold).
-func (se *SkillEvolver) Evolve(ctx context.Context, analysis *ExecutionAnalysisResult, threshold float64) ([]*SkillRecord, error) {
-	if se.store == nil || se.provider == nil {
+func (se *SkillEvolver) Evolve(ctx context.Context, analysis *ExecutionAnalysisResult, threshold float64) ([]*EvolvedSkill, error) {
+	if se.fs == nil || se.provider == nil {
 		return nil, nil
 	}
 
-	var evolved []*SkillRecord
+	var evolved []*EvolvedSkill
 
 	for _, sug := range analysis.Suggestions {
 		if sug.Priority < threshold {
@@ -68,16 +78,16 @@ func (se *SkillEvolver) Evolve(ctx context.Context, analysis *ExecutionAnalysisR
 		default:
 		}
 
-		var rec *SkillRecord
+		var result *EvolvedSkill
 		var err error
 
 		switch sug.Type {
 		case EvolutionFix:
-			rec, err = se.executeFix(ctx, &sug, analysis.TaskID)
+			result, err = se.executeFix(ctx, &sug, analysis.TaskID)
 		case EvolutionDerived:
-			rec, err = se.executeDerive(ctx, &sug, analysis.TaskID)
+			result, err = se.executeDerive(ctx, &sug, analysis.TaskID)
 		case EvolutionCaptured:
-			rec, err = se.executeCapture(ctx, &sug, analysis.TaskID)
+			result, err = se.executeCapture(ctx, &sug, analysis.TaskID)
 		default:
 			fmt.Printf("⚠️  [evolver] Unknown evolution type: %s\n", sug.Type)
 			continue
@@ -88,37 +98,39 @@ func (se *SkillEvolver) Evolve(ctx context.Context, analysis *ExecutionAnalysisR
 			continue
 		}
 
-		if rec != nil {
-			evolved = append(evolved, rec)
+		if result != nil {
+			evolved = append(evolved, result)
 			fmt.Printf("🧬 [evolver] %s → %s: %s (gen=%d)\n",
-				sug.Type, rec.Name, truncate(rec.Description, 60), rec.Generation)
+				result.Type, result.Name, truncate(result.Summary, 60), result.Generation)
 		}
 	}
 
 	return evolved, nil
 }
 
-// executeFix repairs a broken skill. Finds the existing skill, asks LLM to fix it.
-func (se *SkillEvolver) executeFix(ctx context.Context, sug *EvolutionSuggestion, taskID string) (*SkillRecord, error) {
-	// Find existing skill by name
-	parent, err := se.findSkillByName(sug.SkillName)
-	if err != nil || parent == nil {
+// executeFix repairs a broken skill by generating a new SKILL.md body via LLM.
+func (se *SkillEvolver) executeFix(ctx context.Context, sug *EvolutionSuggestion, taskID string) (*EvolvedSkill, error) {
+	existing, ok := se.fs.Get(sug.SkillName)
+	if !ok {
 		return nil, fmt.Errorf("skill %q not found for fix", sug.SkillName)
 	}
 
-	// Ask LLM for the fix
-	prompt := fmt.Sprintf(`You are fixing a broken AI agent skill.
+	prompt := fmt.Sprintf(`You are fixing a broken AI agent skill defined in SKILL.md format.
 
-Skill name: %s
-Current description: %s
-Problem: %s
+## Current SKILL.md body:
+%s
 
-Generate a FIXED description for this skill. The fix should address the problem while keeping the skill's core purpose.
+## Problem:
+%s
+
+Generate a FIXED version of the skill body in Markdown.
+Keep the same structure (headings: When to Use, Procedure, Pitfalls, Verification) but fix the problem.
 
 Respond with ONLY a JSON object:
 {
-  "description": "the fixed skill description (detailed, actionable instructions)"
-}`, parent.Name, parent.Description, sug.Reason)
+  "body": "the complete fixed SKILL.md body in markdown (use \\n for newlines)",
+  "change_summary": "one-line description of what was fixed"
+}`, existing.Body, sug.Reason)
 
 	resp, err := se.provider.Chat(ctx, []llm.Message{
 		{Role: "user", Content: prompt},
@@ -127,62 +139,60 @@ Respond with ONLY a JSON object:
 		return nil, err
 	}
 
-	fixResult, err := parseEvolutionResponse(resp.Content)
+	fixResult, err := parseSkillEvolutionResponse(resp.Content)
 	if err != nil {
 		return nil, err
 	}
 
-	// Deactivate old version
-	parent.IsActive = false
-	if err := se.store.PutSkill(parent); err != nil {
-		return nil, fmt.Errorf("deactivate parent: %w", err)
+	meta := existing.Meta
+	meta.Origin = "fixed"
+	meta.Generation = existing.Meta.Generation + 1
+	meta.ParentIDs = []string{existing.Meta.Name}
+	meta.SourceTask = taskID
+
+	skill, err := se.fs.Update(sug.SkillName, meta, fixResult.Body, fixResult.ChangeSummary)
+	if err != nil {
+		return nil, fmt.Errorf("writing fixed skill: %w", err)
 	}
 
-	// Create new version
-	newID := generateSkillID(parent.Name, "fix", taskID)
-	rec := &SkillRecord{
-		SkillID:       newID,
-		Name:          parent.Name,
-		Description:   fixResult.Description,
-		IsActive:      true,
-		Origin:        SkillOriginFixed,
-		Generation:    parent.Generation + 1,
-		ParentIDs:     []string{parent.SkillID},
-		SourceTaskID:  taskID,
-		ChangeSummary: sug.Reason,
-		CreatedAt:     time.Now().UTC(),
-		UpdatedAt:     time.Now().UTC(),
-	}
-
-	if err := se.store.PutSkill(rec); err != nil {
-		return nil, fmt.Errorf("store fixed skill: %w", err)
-	}
-
-	return rec, nil
+	return &EvolvedSkill{
+		Name:       skill.Meta.Name,
+		Type:       EvolutionFix,
+		Generation: skill.Meta.Generation,
+		Summary:    fixResult.ChangeSummary,
+	}, nil
 }
 
 // executeDerive creates an enhanced version of an existing skill.
-func (se *SkillEvolver) executeDerive(ctx context.Context, sug *EvolutionSuggestion, taskID string) (*SkillRecord, error) {
-	parent, err := se.findSkillByName(sug.SkillName)
-	if err != nil || parent == nil {
-		// If no existing skill, treat as capture instead
+func (se *SkillEvolver) executeDerive(ctx context.Context, sug *EvolutionSuggestion, taskID string) (*EvolvedSkill, error) {
+	existing, ok := se.fs.Get(sug.SkillName)
+	if !ok {
+		// No existing skill — treat as capture
 		return se.executeCapture(ctx, sug, taskID)
 	}
 
-	prompt := fmt.Sprintf(`You are enhancing an AI agent skill.
+	prompt := fmt.Sprintf(`You are enhancing an AI agent skill (SKILL.md format).
 
-Parent skill: %s
-Parent description: %s
-Enhancement goal: %s
-What the derived skill should do: %s
+## Parent skill: %s
+## Parent SKILL.md body:
+%s
 
-Generate a DERIVED skill that improves on the parent.
+## Enhancement goal:
+%s
+
+## What the derived skill should do:
+%s
+
+Generate a DERIVED version. If the enhancement is for a different use case, give it a new name.
+Use standard SKILL.md structure: When to Use, Procedure, Pitfalls, Verification.
 
 Respond with ONLY a JSON object:
 {
-  "name": "new skill name (can be same or different)",
-  "description": "enhanced skill description (detailed, actionable)"
-}`, parent.Name, parent.Description, sug.Reason, sug.Description)
+  "name": "skill name (same or new, lowercase-hyphenated)",
+  "body": "the complete SKILL.md body in markdown (use \\n for newlines)",
+  "description": "one-line description of the skill",
+  "change_summary": "what changed from parent"
+}`, existing.Meta.Name, existing.Body, sug.Reason, sug.Description)
 
 	resp, err := se.provider.Chat(ctx, []llm.Message{
 		{Role: "user", Content: prompt},
@@ -191,52 +201,82 @@ Respond with ONLY a JSON object:
 		return nil, err
 	}
 
-	deriveResult, err := parseEvolutionResponse(resp.Content)
+	result, err := parseSkillEvolutionResponse(resp.Content)
 	if err != nil {
 		return nil, err
 	}
 
-	name := deriveResult.Name
+	name := result.Name
 	if name == "" {
 		name = sug.SkillName
 	}
 
-	newID := generateSkillID(name, "derived", taskID)
-	rec := &SkillRecord{
-		SkillID:       newID,
-		Name:          name,
-		Description:   deriveResult.Description,
-		IsActive:      true,
-		Origin:        SkillOriginDerived,
-		Generation:    parent.Generation + 1,
-		ParentIDs:     []string{parent.SkillID},
-		SourceTaskID:  taskID,
-		ChangeSummary: sug.Reason,
-		CreatedAt:     time.Now().UTC(),
-		UpdatedAt:     time.Now().UTC(),
+	if name == existing.Meta.Name {
+		// In-place update
+		meta := existing.Meta
+		meta.Origin = "derived"
+		meta.Generation = existing.Meta.Generation + 1
+		meta.SourceTask = taskID
+		if result.Description != "" {
+			meta.Description = result.Description
+		}
+
+		skill, err := se.fs.Update(name, meta, result.Body, result.ChangeSummary)
+		if err != nil {
+			return nil, err
+		}
+		return &EvolvedSkill{
+			Name:       skill.Meta.Name,
+			Type:       EvolutionDerived,
+			Generation: skill.Meta.Generation,
+			Summary:    result.ChangeSummary,
+		}, nil
 	}
 
-	if err := se.store.PutSkill(rec); err != nil {
-		return nil, fmt.Errorf("store derived skill: %w", err)
+	// New skill derived from parent
+	meta := SkillMeta{
+		Name:        name,
+		Description: result.Description,
+		Category:    existing.Meta.Category,
+		Origin:      "derived",
+		Generation:  existing.Meta.Generation + 1,
+		ParentIDs:   []string{existing.Meta.Name},
+		SourceTask:  taskID,
+		Tags:        existing.Meta.Tags,
 	}
 
-	return rec, nil
+	skill, err := se.fs.Create(meta, result.Body)
+	if err != nil {
+		return nil, err
+	}
+	return &EvolvedSkill{
+		Name:       skill.Meta.Name,
+		Type:       EvolutionDerived,
+		Generation: skill.Meta.Generation,
+		Summary:    result.ChangeSummary,
+	}, nil
 }
 
 // executeCapture creates a brand-new skill from a novel pattern.
-func (se *SkillEvolver) executeCapture(ctx context.Context, sug *EvolutionSuggestion, taskID string) (*SkillRecord, error) {
-	prompt := fmt.Sprintf(`You are capturing a novel pattern as a reusable AI agent skill.
+func (se *SkillEvolver) executeCapture(ctx context.Context, sug *EvolutionSuggestion, taskID string) (*EvolvedSkill, error) {
+	prompt := fmt.Sprintf(`You are capturing a novel pattern as a reusable AI agent skill (SKILL.md format).
 
-Skill name: %s
-Why this pattern is valuable: %s
-What the skill should do: %s
+## Skill name: %s
+## Why this pattern is valuable: %s
+## What the skill should do: %s
 
-Generate a skill description that captures this pattern for future reuse.
+Generate a complete SKILL.md body with these sections:
+- When to Use (trigger conditions)
+- Procedure (numbered steps)
+- Pitfalls (known failure modes)
+- Verification (how to confirm success)
 
 Respond with ONLY a JSON object:
 {
-  "name": "skill name (concise, hyphenated)",
-  "description": "detailed skill description (actionable instructions an AI agent can follow)"
+  "name": "skill name (lowercase-hyphenated)",
+  "body": "the complete SKILL.md body in markdown (use \\n for newlines)",
+  "description": "one-line description of the skill",
+  "category": "skill category (e.g. core, meta, devops, social)"
 }`, sug.SkillName, sug.Reason, sug.Description)
 
 	resp, err := se.provider.Chat(ctx, []llm.Message{
@@ -246,60 +286,63 @@ Respond with ONLY a JSON object:
 		return nil, err
 	}
 
-	captureResult, err := parseEvolutionResponse(resp.Content)
+	result, err := parseSkillEvolutionResponse(resp.Content)
 	if err != nil {
 		return nil, err
 	}
 
-	name := captureResult.Name
+	name := result.Name
 	if name == "" {
-		name = sug.SkillName
+		name = sanitizeSkillName(sug.SkillName)
 	}
 
-	newID := generateSkillID(name, "captured", taskID)
-	rec := &SkillRecord{
-		SkillID:       newID,
-		Name:          name,
-		Description:   captureResult.Description,
-		IsActive:      true,
-		Origin:        SkillOriginCaptured,
-		Generation:    0, // root node
-		SourceTaskID:  taskID,
-		ChangeSummary: fmt.Sprintf("Captured from task: %s", sug.Reason),
-		CreatedAt:     time.Now().UTC(),
-		UpdatedAt:     time.Now().UTC(),
+	meta := SkillMeta{
+		Name:        name,
+		Description: result.Description,
+		Category:    result.Category,
+		Origin:      "captured",
+		Generation:  0,
+		SourceTask:  taskID,
 	}
 
-	if err := se.store.PutSkill(rec); err != nil {
-		return nil, fmt.Errorf("store captured skill: %w", err)
+	// Avoid duplicate
+	if _, exists := se.fs.Get(name); exists {
+		// Update instead of create
+		skill, err := se.fs.Update(name, meta, result.Body, fmt.Sprintf("captured from task: %s", sug.Reason))
+		if err != nil {
+			return nil, err
+		}
+		return &EvolvedSkill{
+			Name:       skill.Meta.Name,
+			Type:       EvolutionCaptured,
+			Generation: skill.Meta.Generation,
+			Summary:    fmt.Sprintf("captured: %s", sug.Reason),
+		}, nil
 	}
 
-	return rec, nil
-}
-
-// findSkillByName searches for an active skill by name (case-insensitive).
-func (se *SkillEvolver) findSkillByName(name string) (*SkillRecord, error) {
-	skills, err := se.store.ActiveSkills()
+	skill, err := se.fs.Create(meta, result.Body)
 	if err != nil {
 		return nil, err
 	}
-	nameLower := strings.ToLower(name)
-	for _, s := range skills {
-		if strings.ToLower(s.Name) == nameLower {
-			return s, nil
-		}
-	}
-	return nil, nil
+	return &EvolvedSkill{
+		Name:       skill.Meta.Name,
+		Type:       EvolutionCaptured,
+		Generation: skill.Meta.Generation,
+		Summary:    fmt.Sprintf("captured: %s", sug.Reason),
+	}, nil
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-type evolutionResponse struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
+type skillEvolutionResponse struct {
+	Name          string `json:"name"`
+	Body          string `json:"body"`
+	Description   string `json:"description"`
+	Category      string `json:"category"`
+	ChangeSummary string `json:"change_summary"`
 }
 
-func parseEvolutionResponse(content string) (*evolutionResponse, error) {
+func parseSkillEvolutionResponse(content string) (*skillEvolutionResponse, error) {
 	content = strings.TrimSpace(content)
 	if strings.HasPrefix(content, "```") {
 		lines := strings.Split(content, "\n")
@@ -315,12 +358,12 @@ func parseEvolutionResponse(content string) (*evolutionResponse, error) {
 		content = content[start : end+1]
 	}
 
-	var r evolutionResponse
+	var r skillEvolutionResponse
 	if err := json.Unmarshal([]byte(content), &r); err != nil {
-		return nil, fmt.Errorf("invalid evolution JSON: %w", err)
+		return nil, fmt.Errorf("invalid evolution JSON: %w\nraw: %s", err, truncate(content, 500))
 	}
-	if r.Description == "" {
-		return nil, fmt.Errorf("empty description in evolution response")
+	if r.Body == "" {
+		return nil, fmt.Errorf("empty body in evolution response")
 	}
 	return &r, nil
 }
@@ -342,7 +385,6 @@ func sanitizeSkillName(name string) string {
 		}
 		return '-'
 	}, name)
-	// Collapse multiple hyphens
 	for strings.Contains(name, "--") {
 		name = strings.ReplaceAll(name, "--", "-")
 	}
@@ -356,7 +398,7 @@ func sanitizeSkillName(name string) string {
 	return name
 }
 
-// ─── Markdown serialization for IPFS sharing ───────────────────────────────
+// ─── Legacy Markdown serialization (kept for backward compatibility) ───────
 
 // SkillToMarkdown serializes a SkillRecord to Markdown for IPFS storage.
 func SkillToMarkdown(rec *SkillRecord) string {
@@ -376,8 +418,6 @@ func SkillToMarkdown(rec *SkillRecord) string {
 	}
 	sb.WriteString(fmt.Sprintf("- **Created**: %s\n", rec.CreatedAt.Format(time.RFC3339)))
 	sb.WriteString(fmt.Sprintf("\n## Description\n\n%s\n", rec.Description))
-
-	// Quality metrics (if any data)
 	if rec.TotalApplied > 0 {
 		sb.WriteString(fmt.Sprintf("\n## Metrics\n\n"))
 		sb.WriteString(fmt.Sprintf("- Selections: %d\n", rec.TotalSelections))
@@ -385,7 +425,6 @@ func SkillToMarkdown(rec *SkillRecord) string {
 		sb.WriteString(fmt.Sprintf("- Completions: %d\n", rec.TotalCompletions))
 		sb.WriteString(fmt.Sprintf("- Success Rate: %.0f%%\n", rec.SuccessRate()*100))
 	}
-
 	return sb.String()
 }
 
@@ -403,7 +442,6 @@ func AnalysisToMarkdown(a *ExecutionAnalysisResult) string {
 	sb.WriteString(fmt.Sprintf("- **Efficiency**: %.1f\n", a.Efficiency))
 	sb.WriteString(fmt.Sprintf("- **Reason**: %s\n", a.QualityReason))
 	sb.WriteString(fmt.Sprintf("- **Analyzed**: %s\n", a.Timestamp.Format(time.RFC3339)))
-
 	if len(a.SkillsUsed) > 0 {
 		sb.WriteString(fmt.Sprintf("\n## Skills Used\n\n%s\n", strings.Join(a.SkillsUsed, ", ")))
 	}
@@ -420,7 +458,7 @@ func AnalysisToMarkdown(a *ExecutionAnalysisResult) string {
 	return sb.String()
 }
 
-// SkillFromMarkdown parses a SkillRecord from Markdown. Best-effort extraction.
+// SkillFromMarkdown parses a SkillRecord from Markdown (legacy format).
 func SkillFromMarkdown(md string) (*SkillRecord, error) {
 	rec := &SkillRecord{IsActive: true}
 	lines := strings.Split(md, "\n")
@@ -446,7 +484,6 @@ func SkillFromMarkdown(md string) (*SkillRecord, error) {
 		case strings.HasPrefix(line, "- **Created**: "):
 			rec.CreatedAt, _ = time.Parse(time.RFC3339, strings.TrimPrefix(line, "- **Created**: "))
 		case line == "## Description":
-			// Collect description: everything until next ## or end
 			var desc []string
 			for j := i + 1; j < len(lines); j++ {
 				if strings.HasPrefix(strings.TrimSpace(lines[j]), "## ") {

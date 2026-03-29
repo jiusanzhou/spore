@@ -27,6 +27,20 @@ import (
 	"go.zoe.im/spore/internal/runtime"
 )
 
+// SkillBackend is the interface used by ExecutionAnalyzer and SkillEvolver
+// for reading skill data and storing analyses. Both SkillStore (legacy) and
+// SkillFS (new file-system-first store) implement this.
+type SkillBackend interface {
+	PutAnalysis(a *ExecutionAnalysisResult) error
+	RecentAnalyses(agentID string, limit int) ([]*ExecutionAnalysisResult, error)
+}
+
+// SkillLister provides skill listing for analysis context.
+type SkillLister interface {
+	// ActiveSkillSummary returns human-readable skill summaries for LLM context.
+	ActiveSkillSummary() string
+}
+
 // ExecutionAnalyzer performs post-task LLM analysis to assess quality,
 // identify skill usage, and suggest evolution actions (FIX/DERIVED/CAPTURED).
 //
@@ -34,17 +48,22 @@ import (
 // decentralized multi-agent architecture.
 type ExecutionAnalyzer struct {
 	provider llm.Provider
-	store    *SkillStore
+	backend  SkillBackend
+	lister   SkillLister
 	agentID  string
 }
 
-// NewExecutionAnalyzer creates an analyzer backed by an LLM provider and skill store.
-func NewExecutionAnalyzer(provider llm.Provider, store *SkillStore, agentID string) *ExecutionAnalyzer {
-	return &ExecutionAnalyzer{
+// NewExecutionAnalyzer creates an analyzer backed by an LLM provider and skill backend.
+func NewExecutionAnalyzer(provider llm.Provider, backend SkillBackend, agentID string) *ExecutionAnalyzer {
+	ea := &ExecutionAnalyzer{
 		provider: provider,
-		store:    store,
+		backend:  backend,
 		agentID:  agentID,
 	}
+	if lister, ok := backend.(SkillLister); ok {
+		ea.lister = lister
+	}
+	return ea
 }
 
 // Analyze runs post-execution analysis on a completed task.
@@ -56,16 +75,8 @@ func (ea *ExecutionAnalyzer) Analyze(ctx context.Context, entry *taskEntry, outp
 
 	// Build skill context — what skills does this agent currently have?
 	var skillSummary string
-	if ea.store != nil {
-		skills, err := ea.store.ActiveSkills()
-		if err == nil && len(skills) > 0 {
-			var lines []string
-			for _, s := range skills {
-				lines = append(lines, fmt.Sprintf("- %s (success: %.0f%%, used: %d times, origin: %s)",
-					s.Name, s.SuccessRate()*100, s.TotalApplied, s.Origin))
-			}
-			skillSummary = strings.Join(lines, "\n")
-		}
+	if ea.lister != nil {
+		skillSummary = ea.lister.ActiveSkillSummary()
 	}
 	if skillSummary == "" {
 		skillSummary = "(no skills registered yet)"
@@ -73,8 +84,8 @@ func (ea *ExecutionAnalyzer) Analyze(ctx context.Context, entry *taskEntry, outp
 
 	// Fetch recent analyses for trend context
 	var recentContext string
-	if ea.store != nil {
-		recent, err := ea.store.RecentAnalyses(ea.agentID, 3)
+	if ea.backend != nil {
+		recent, err := ea.backend.RecentAnalyses(ea.agentID, 3)
 		if err == nil && len(recent) > 0 {
 			var lines []string
 			for _, r := range recent {
@@ -163,8 +174,8 @@ Respond with ONLY the JSON object, no markdown fences, no explanation.`,
 	analysis.Timestamp = time.Now().UTC()
 
 	// Persist
-	if ea.store != nil {
-		if storeErr := ea.store.PutAnalysis(analysis); storeErr != nil {
+	if ea.backend != nil {
+		if storeErr := ea.backend.PutAnalysis(analysis); storeErr != nil {
 			fmt.Printf("⚠️  [analyzer] Failed to store analysis: %v\n", storeErr)
 		}
 	}
