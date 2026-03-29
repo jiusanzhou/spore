@@ -165,6 +165,10 @@ func (s *Server) handleAgentRoute(w http.ResponseWriter, r *http.Request) {
 		s.handleAgentContext(w, r, name)
 	case "marketplace":
 		s.handleAgentMarketplace(w, r, name)
+	case "catalog":
+		s.handleAgentCatalog(w, r, name)
+	case "collective-memory":
+		s.handleAgentCollectiveMemory(w, r, name)
 	case "manifest":
 		s.handleAgentManifest(w, r, name)
 	case "journal":
@@ -914,6 +918,95 @@ func (s *Server) handleAgentMarketplace(w http.ResponseWriter, r *http.Request, 
 		"services": mp.Services(),
 		"escrows":  mp.Escrows(),
 	})
+}
+
+func (s *Server) handleAgentCatalog(w http.ResponseWriter, r *http.Request, name string) {
+	ag := s.sw.GetAgent(name)
+	if ag == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
+		return
+	}
+	cat := ag.Catalog()
+	if cat == nil {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "catalog not initialized"})
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		query := r.URL.Query().Get("q")
+		category := r.URL.Query().Get("category")
+		installable := r.URL.Query().Get("installable") == "true"
+
+		results := cat.Browse(agent.BrowseFilter{
+			Query:    query,
+			Category: category,
+			HasCID:   installable,
+		})
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"stats":  cat.Stats(),
+			"unique": cat.UniqueSkills(),
+			"results": results,
+		})
+
+	case http.MethodPost:
+		// POST: install a skill from catalog
+		var req struct {
+			SkillName string `json:"skill_name"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.SkillName == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "skill_name required"})
+			return
+		}
+		sfs := ag.SkillFileStore()
+		if sfs == nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "SkillFS not initialized"})
+			return
+		}
+		// Build fetchFn from agent's P2P bus
+		fetchFn := func(cid string) ([]byte, error) {
+			return nil, fmt.Errorf("no P2P content store available")
+		}
+		if p2pBus, ok := ag.Bus().(*network.P2PBus); ok && p2pBus.Content != nil {
+			fetchFn = func(cid string) ([]byte, error) {
+				return p2pBus.Content.Get(cid)
+			}
+		}
+		if err := cat.Install(req.SkillName, sfs, fetchFn); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "installed", "skill": req.SkillName})
+
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleAgentCollectiveMemory(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	ag := s.sw.GetAgent(name)
+	if ag == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
+		return
+	}
+	cs := ag.CollectiveSynth()
+	if cs == nil {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "collective synthesis not initialized"})
+		return
+	}
+
+	result := map[string]interface{}{
+		"status": cs.Status(),
+	}
+	if content, err := cs.CollectiveLearnings(); err == nil {
+		result["collective_learnings"] = content
+	}
+
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) handleAgentManifest(w http.ResponseWriter, r *http.Request, name string) {

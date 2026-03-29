@@ -360,6 +360,11 @@ func (m *Marketplace) HandleServiceAd(ad *ServiceAd) {
 	m.mu.Lock()
 	m.services[ad.AgentID] = ad
 	m.mu.Unlock()
+
+	// Feed into skill catalog for browsing
+	if m.agent.skillCatalog != nil {
+		m.agent.skillCatalog.IngestServiceAd(ad)
+	}
 }
 
 // FindService queries for agents matching a skill.
