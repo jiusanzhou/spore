@@ -21,6 +21,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -32,6 +33,7 @@ import (
 	"go.zoe.im/spore/internal/memory"
 	"go.zoe.im/spore/internal/network"
 	"go.zoe.im/spore/internal/swarm"
+	"go.zoe.im/spore/web"
 )
 
 //go:embed dashboard.html
@@ -85,7 +87,7 @@ func (s *Server) Close() error {
 }
 
 func (s *Server) routes() {
-	s.mux.HandleFunc("/", s.handleDashboard)
+	// API routes
 	s.mux.HandleFunc("/api/health", s.handleHealth)
 	s.mux.HandleFunc("/api/agents", s.handleAgents)
 	// Pattern: /api/agents/<name>/tasks or /api/agents/<name>/info
@@ -103,6 +105,14 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/feedback", s.handleFeedback)
 	s.mux.HandleFunc("/api/feedback/vote", s.handleFeedbackVote)
 	s.mux.HandleFunc("/api/help-wanted", s.handleHelpWanted)
+
+	// Frontend: embedded React app (web/dist/) with SPA fallback,
+	// or legacy single-file dashboard.html as fallback.
+	if distFS := web.DistFS(); distFS != nil {
+		s.mux.Handle("/", spaHandler{fs: http.FS(distFS), fallbackHTML: dashboardHTML})
+	} else {
+		s.mux.HandleFunc("/", s.handleDashboard)
+	}
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -279,6 +289,41 @@ func (s *Server) handlePeerConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "connected", "addr": addr})
+}
+
+// spaHandler serves embedded static files with SPA fallback to index.html.
+type spaHandler struct {
+	fs           http.FileSystem
+	fallbackHTML []byte // legacy dashboard.html fallback
+}
+
+func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Path
+
+	// Try serving the static file
+	f, err := h.fs.Open(path)
+	if err == nil {
+		defer f.Close()
+		stat, err := f.Stat()
+		if err == nil && !stat.IsDir() {
+			http.FileServer(h.fs).ServeHTTP(w, r)
+			return
+		}
+	}
+
+	// SPA fallback: serve index.html for unmatched paths (client-side routing)
+	idx, err := h.fs.Open("index.html")
+	if err != nil {
+		// No index.html in embed — fallback to legacy dashboard
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write(h.fallbackHTML)
+		return
+	}
+	defer idx.Close()
+
+	stat, _ := idx.Stat()
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	http.ServeContent(w, r, "index.html", stat.ModTime(), idx.(io.ReadSeeker))
 }
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
