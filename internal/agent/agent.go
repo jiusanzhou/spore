@@ -110,7 +110,8 @@ type Agent struct {
 	evoFS       *EvolutionFS      // file-based evolution persistence (OpenAgent layout)
 
 	// Skill evolution system (inspired by OpenSpace)
-	skillStore   *SkillStore        // SQLite skill records + analyses
+	skillStore   *SkillStore        // DEPRECATED: legacy SQLite skill records (read-only migration)
+	skillFS      *SkillFS           // File-system-first skill store with IPFS content addressing
 	analyzer     *ExecutionAnalyzer // post-task LLM analysis
 	skillEvolver *SkillEvolver      // applies FIX/DERIVED/CAPTURED evolutions
 	marketplace  *Marketplace       // cross-owner service marketplace
@@ -247,19 +248,38 @@ func (a *Agent) SetWorkDir(dir string) {
 		a.reputation.SetWorkDir(dir)
 	}
 
-	// Initialize skill evolution system (OpenSpace-inspired)
-	if a.llm != nil && a.skillStore == nil {
+	// Initialize skill evolution system — SkillFS (file-system-first + IPFS)
+	if a.llm != nil && a.skillFS == nil {
 		agentID := a.identity.PublicKeyHex()[:16]
 		skillDir := filepath.Join(dir, "skills")
-		ss, err := NewSkillStore(skillDir)
+
+		// Publish function wired to ContentStore via bus (if available)
+		var publishFn PublishFunc
+		if p2pBus, ok := a.bus.(*network.P2PBus); ok && p2pBus.Content != nil {
+			cs := p2pBus.Content
+			publishFn = func(data []byte, contentType, aid, summary string) (string, error) {
+				ref, err := cs.Put(data, contentType, aid, summary)
+				if err != nil {
+					return "", err
+				}
+				if ref.IPFSCID != "" {
+					return ref.IPFSCID, nil
+				}
+				return ref.CID, nil
+			}
+		}
+
+		sfs, err := NewSkillFS(skillDir, publishFn)
 		if err != nil {
-			fmt.Printf("⚠️  [%s] Skill store init failed: %v\n", a.cfg.Agent.Name, err)
+			fmt.Printf("⚠️  [%s] SkillFS init failed: %v\n", a.cfg.Agent.Name, err)
 		} else {
-			a.skillStore = ss
-			a.analyzer = NewExecutionAnalyzer(a.llm, ss, agentID)
-			a.skillEvolver = NewSkillEvolver(a.llm, ss, agentID)
-			a.importDeclaredSkills()
-			fmt.Printf("🧬 [%s] Skill evolution engine initialized\n", a.cfg.Agent.Name)
+			a.skillFS = sfs
+			// Migrate from legacy SkillStore if it exists and SkillFS is empty
+			a.migrateSkillStoreToFS(dir)
+			a.analyzer = NewExecutionAnalyzer(a.llm, a.skillFS, agentID)
+			a.skillEvolver = NewSkillEvolver(a.llm, a.skillFS, agentID)
+			a.importDeclaredSkillsFS()
+			fmt.Printf("📂 [%s] SkillFS initialized (IPFS: %v)\n", a.cfg.Agent.Name, publishFn != nil)
 		}
 	}
 
@@ -285,8 +305,8 @@ func (a *Agent) SetWorkDir(dir string) {
 	}
 
 	// Load seed skills if no skills exist yet
-	if a.skillStore != nil {
-		a.loadSeedSkills()
+	if a.skillFS != nil {
+		a.loadSeedSkillsFS()
 	}
 }
 
@@ -694,8 +714,8 @@ func (a *Agent) Info() Info {
 		ts := a.tokens.State()
 		info.Economy = &ts
 	}
-	if a.skillStore != nil {
-		info.SkillStats = a.skillStore.Stats(info.ID)
+	if a.skillFS != nil {
+		info.SkillStats = a.skillFS.Stats(info.ID)
 	}
 	if a.marketplace != nil {
 		stats := a.marketplace.Stats()
@@ -734,8 +754,11 @@ func (a *Agent) PeerEvo() *PeerEvolution { return a.peerEvo }
 // Reputation returns the agent's reputation engine (may be nil).
 func (a *Agent) Reputation() *ReputationEngine { return a.reputation }
 
-// Skills returns the agent's skill store (may be nil).
+// Skills returns the agent's legacy skill store (DEPRECATED, may be nil).
 func (a *Agent) Skills() *SkillStore { return a.skillStore }
+
+// SkillStore returns the agent's SkillFS (file-system-first, may be nil).
+func (a *Agent) SkillFileStore() *SkillFS { return a.skillFS }
 
 // Market returns the marketplace engine.
 func (a *Agent) Market() *Marketplace { return a.marketplace }
@@ -1305,38 +1328,31 @@ func (a *Agent) handleMessage(msg *protocol.Message) error {
 			}
 
 			// Fetch and import shared skills
-			if ref.Type == "skill" && a.skillStore != nil {
-				data, err := p2pBus.Content.Get(ref.CID)
-				if err == nil {
-					if rec, err := SkillFromMarkdown(string(data)); err == nil {
-						// Check if we already have this skill
-						existing, _ := a.skillStore.GetSkill(rec.SkillID)
-						if existing == nil {
-							rec.Origin = SkillOriginDerived // mark as learned from peer
-							if err := a.skillStore.PutSkill(rec); err == nil {
-								fmt.Printf("📥 [%s] Learned skill from %s: %s (gen=%d)\n",
-									a.cfg.Agent.Name, msg.From[:8], rec.Name, rec.Generation)
-								// Pay the teacher
-								if a.tokens != nil && a.tokens.CanThink() {
-									payment := a.tokens.config.ShareReward
-									if payment > 0 {
-										payload := TokenTransferPayload{
-											FromAgent: selfID,
-											ToAgent:   msg.From,
-											Amount:    payment,
-											Reason:    "skill_learned",
-										}
-										if transferMsg, err := protocol.NewMessage(selfID, "broadcast", MsgTokenTransfer, payload); err == nil {
-											a.bus.Send(transferMsg)
-											a.identity.Debit(payment)
-										}
-									}
-								}
+			if ref.Type == "skill" && a.skillFS != nil {
+				fetchFn := func(cid string) ([]byte, error) {
+					return p2pBus.Content.Get(cid)
+				}
+				if imported, err := a.skillFS.ImportFromCID(ref.CID, fetchFn); err == nil {
+					fmt.Printf("📥 [%s] Learned skill from %s: %s (gen=%d)\n",
+						a.cfg.Agent.Name, msg.From[:8], imported.Meta.Name, imported.Meta.Generation)
+					// Pay the teacher
+					if a.tokens != nil && a.tokens.CanThink() {
+						payment := a.tokens.config.ShareReward
+						if payment > 0 {
+							payload := TokenTransferPayload{
+								FromAgent: selfID,
+								ToAgent:   msg.From,
+								Amount:    payment,
+								Reason:    "skill_learned",
+							}
+							if transferMsg, err := protocol.NewMessage(selfID, "broadcast", MsgTokenTransfer, payload); err == nil {
+								a.bus.Send(transferMsg)
+								a.identity.Debit(payment)
 							}
 						}
 					}
 				} else {
-					fmt.Printf("⚠️  [%s] Failed to fetch skill %s: %v\n", a.cfg.Agent.Name, ref.CID[:12], err)
+					fmt.Printf("⚠️  [%s] Failed to import skill %s: %v\n", a.cfg.Agent.Name, truncateCID(ref.CID), err)
 				}
 			}
 
@@ -1752,6 +1768,9 @@ func (a *Agent) shutdown() error {
 	if a.skillStore != nil {
 		a.skillStore.Close()
 	}
+	if a.skillFS != nil {
+		a.skillFS.Close()
+	}
 	if a.memory != nil {
 		return a.memory.Close()
 	}
@@ -1790,12 +1809,22 @@ func (a *Agent) runSkillAnalysis(entry *taskEntry, output *runtime.TaskOutput, r
 		if err != nil {
 			fmt.Printf("🧬 [%s] Skill evolution error: %v\n", a.cfg.Agent.Name, err)
 		}
-		for _, rec := range evolved {
-			fmt.Printf("🧬 [%s] New skill: %s (origin=%s, gen=%d)\n",
-				a.cfg.Agent.Name, rec.Name, rec.Origin, rec.Generation)
+		for _, es := range evolved {
+			fmt.Printf("🧬 [%s] Evolved skill: %s (type=%s, gen=%d) %s\n",
+				a.cfg.Agent.Name, es.Name, es.Type, es.Generation, es.Summary)
 
-			// Publish evolved skill to IPFS as Markdown + broadcast CID
-			a.publishSkillToIPFS(rec)
+			// Publish evolved skill to IPFS via SkillFS (already done on write)
+			// Broadcast the CID to peers
+			if a.skillFS != nil {
+				if skill, ok := a.skillFS.Get(es.Name); ok && skill.Meta.IPFSCID != "" {
+					a.broadcastSkillCID(skill)
+				}
+			}
+		}
+
+		// Regenerate index after evolution
+		if a.skillFS != nil && len(evolved) > 0 {
+			a.skillFS.WriteIndex()
 		}
 	}
 }
@@ -1851,7 +1880,33 @@ func (a *Agent) publishSkillToIPFS(rec *SkillRecord) {
 	}
 }
 
-// importDeclaredSkills imports skills from agent config into the skill store.
+// broadcastSkillCID broadcasts a SkillFS skill's IPFS CID to the swarm.
+func (a *Agent) broadcastSkillCID(skill *Skill) {
+	p2pBus, ok := a.bus.(*network.P2PBus)
+	if !ok || p2pBus.Content == nil {
+		return
+	}
+
+	agentID := a.identity.PublicKeyHex()[:16]
+	ref := network.ContentRef{
+		CID:       skill.Meta.ContentHash,
+		IPFSCID:   skill.Meta.IPFSCID,
+		AgentID:   agentID,
+		Type:      "skill",
+		Summary:   fmt.Sprintf("Skill: %s (origin=%s, gen=%d)", skill.Meta.Name, skill.Meta.Origin, skill.Meta.Generation),
+		Timestamp: time.Now().Unix(),
+	}
+
+	msg, err := protocol.NewMessage(agentID, "broadcast", protocol.MsgContentAnnounce, &ref)
+	if err == nil {
+		a.bus.Send(msg)
+		fmt.Printf("📡 [%s] Broadcast skill CID: %s → %s\n",
+			a.cfg.Agent.Name, skill.Meta.Name, truncateCID(skill.Meta.IPFSCID))
+	}
+}
+
+// importDeclaredSkills imports skills from agent config into the legacy skill store.
+// DEPRECATED: use importDeclaredSkillsFS instead.
 func (a *Agent) importDeclaredSkills() {
 	if a.skillStore == nil {
 		return
@@ -1887,6 +1942,128 @@ func (a *Agent) importDeclaredSkills() {
 		if err := a.skillStore.PutSkill(rec); err != nil {
 			fmt.Printf("⚠️  [%s] Failed to import skill %s: %v\n", a.cfg.Agent.Name, skillName, err)
 		}
+	}
+}
+
+// importDeclaredSkillsFS imports skills from agent config into SkillFS.
+func (a *Agent) importDeclaredSkillsFS() {
+	if a.skillFS == nil {
+		return
+	}
+	for _, skillName := range a.cfg.Agent.Skills {
+		if _, exists := a.skillFS.Get(skillName); exists {
+			continue
+		}
+		meta := SkillMeta{
+			Name:        skillName,
+			Description: fmt.Sprintf("Declared skill: %s", skillName),
+			Category:    "declared",
+			Origin:      "imported",
+		}
+		body := fmt.Sprintf("# %s\n\nDeclared skill from agent configuration.\n", skillName)
+		if _, err := a.skillFS.Create(meta, body); err != nil {
+			fmt.Printf("⚠️  [%s] Failed to import skill %s to SkillFS: %v\n", a.cfg.Agent.Name, skillName, err)
+		}
+	}
+}
+
+// migrateSkillStoreToFS migrates skills from the legacy SQLite SkillStore to SkillFS.
+// Only runs if SkillFS is empty and legacy skills.db exists.
+func (a *Agent) migrateSkillStoreToFS(workDir string) {
+	if a.skillFS == nil {
+		return
+	}
+	// Only migrate if SkillFS is empty
+	if len(a.skillFS.List()) > 0 {
+		return
+	}
+
+	legacyDB := filepath.Join(workDir, "skills", "skills.db")
+	if _, err := os.Stat(legacyDB); os.IsNotExist(err) {
+		return
+	}
+
+	legacy, err := NewSkillStore(filepath.Join(workDir, "skills"))
+	if err != nil {
+		return
+	}
+	defer legacy.Close()
+
+	active, err := legacy.ActiveSkills()
+	if err != nil || len(active) == 0 {
+		return
+	}
+
+	migrated := 0
+	for _, rec := range active {
+		meta := SkillMeta{
+			Name:        rec.Name,
+			Description: rec.Description,
+			Origin:      string(rec.Origin),
+			Generation:  rec.Generation,
+			ParentIDs:   rec.ParentIDs,
+			SourceTask:  rec.SourceTaskID,
+			CreatedAt:   rec.CreatedAt.Format(time.RFC3339),
+		}
+		// The old store kept everything in Description — use as body
+		body := fmt.Sprintf("# %s\n\n%s\n", rec.Name, rec.Description)
+		if rec.ChangeSummary != "" {
+			body += fmt.Sprintf("\n## Change History\n%s\n", rec.ChangeSummary)
+		}
+
+		if _, err := a.skillFS.Create(meta, body); err != nil {
+			fmt.Printf("⚠️  Migration: failed to migrate skill %s: %v\n", rec.Name, err)
+			continue
+		}
+		migrated++
+	}
+
+	if migrated > 0 {
+		fmt.Printf("📦 [%s] Migrated %d skills from legacy SkillStore to SkillFS\n", a.cfg.Agent.Name, migrated)
+	}
+}
+
+// loadSeedSkillsFS imports default seed skills into SkillFS if no skills exist yet.
+func (a *Agent) loadSeedSkillsFS() {
+	if a.skillFS == nil {
+		return
+	}
+	if len(a.skillFS.List()) > 0 {
+		return // already have skills
+	}
+
+	seeds := DefaultSeedSkills()
+	imported := 0
+	for _, seed := range seeds {
+		body := fmt.Sprintf("# %s\n\n", seed.Name)
+		body += fmt.Sprintf("## When to Use\n")
+		if len(seed.Triggers) > 0 {
+			body += fmt.Sprintf("Triggers: %s\n\n", strings.Join(seed.Triggers, ", "))
+		}
+		body += fmt.Sprintf("## Procedure\n%s\n", seed.Description)
+		if len(seed.Dependencies) > 0 {
+			body += fmt.Sprintf("\n## Dependencies\n%s\n", strings.Join(seed.Dependencies, ", "))
+		}
+
+		meta := SkillMeta{
+			Name:         seed.Name,
+			Description:  truncateStr(seed.Description, 200),
+			Category:     seed.Category,
+			Origin:       "imported",
+			Triggers:     seed.Triggers,
+			Priority:     seed.Priority,
+			Dependencies: seed.Dependencies,
+		}
+
+		if _, err := a.skillFS.Create(meta, body); err != nil {
+			fmt.Printf("⚠️  [%s] Failed to import seed skill %s: %v\n", a.cfg.Agent.Name, seed.Name, err)
+			continue
+		}
+		imported++
+	}
+
+	if imported > 0 {
+		fmt.Printf("🌱 [%s] Imported %d seed skills to SkillFS\n", a.cfg.Agent.Name, imported)
 	}
 }
 

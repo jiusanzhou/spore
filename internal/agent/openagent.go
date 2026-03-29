@@ -88,11 +88,28 @@ func (a *Agent) GenerateManifest() *manifest.Manifest {
 		},
 	}
 
-	// Skills: config + evolved
+	// Skills: config + evolved (prefer SkillFS, fallback to legacy)
 	for _, sk := range a.cfg.Agent.Skills {
 		m.Skills = append(m.Skills, manifest.SkillRef{Name: sk})
 	}
-	if a.skillStore != nil {
+	if a.skillFS != nil {
+		for _, s := range a.skillFS.All() {
+			found := false
+			for _, ms := range m.Skills {
+				if ms.Name == s.Meta.Name {
+					found = true
+					break
+				}
+			}
+			if !found {
+				ms := manifest.SkillRef{Name: s.Meta.Name}
+				if s.Meta.Generation > 0 {
+					ms.Version = fmt.Sprintf("gen%d", s.Meta.Generation)
+				}
+				m.Skills = append(m.Skills, ms)
+			}
+		}
+	} else if a.skillStore != nil {
 		if active, err := a.skillStore.ActiveSkills(); err == nil {
 			for _, s := range active {
 				found := false

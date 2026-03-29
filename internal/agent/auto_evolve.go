@@ -252,14 +252,16 @@ func (ae *AutoEvolver) buildStatePrompt() string {
 		b.WriteString("\n")
 	}
 
-	// Skill store
-	if a.skillStore != nil {
-		skills, _ := a.skillStore.ActiveSkills()
+	// Skill store (SkillFS)
+	if a.skillFS != nil {
+		skills := a.skillFS.All()
 		if len(skills) > 0 {
-			fmt.Fprintf(&b, "## Active Skills (Skill Store)\n")
+			fmt.Fprintf(&b, "## Active Skills (SkillFS)\n")
 			for _, s := range skills {
-				fmt.Fprintf(&b, "- **%s** (gen=%d, origin=%s): %s\n",
-					s.Name, s.Generation, s.Origin, truncate(s.Description, 100))
+				m := a.skillFS.Metrics(s.Meta.Name)
+				fmt.Fprintf(&b, "- **%s** (gen=%d, origin=%s, used=%d): %s\n",
+					s.Meta.Name, s.Meta.Generation, s.Meta.Origin, m.TotalApplied,
+					truncate(s.Meta.Description, 100))
 			}
 			b.WriteString("\n")
 		}
@@ -288,40 +290,36 @@ func (ae *AutoEvolver) applyProposal(p *autoEvolveProposal) int {
 			applied++
 			fmt.Printf("   🆕 [%s] New skill: %s — %s\n", a.cfg.Agent.Name, ns.Name, ns.Reason)
 
-			// Also add to skill store if available
-			if a.skillStore != nil {
-				id := generateSkillID(ns.Name, "evolved", "auto")
-				rec := &SkillRecord{
-					SkillID:       id,
-					Name:          ns.Name,
-					Description:   ns.Description,
-					IsActive:      true,
-					Origin:        SkillOriginDerived,
-					ChangeSummary: "auto-evolved: " + ns.Reason,
-					CreatedAt:     time.Now().UTC(),
-					UpdatedAt:     time.Now().UTC(),
+			// Also add to SkillFS if available
+			if a.skillFS != nil {
+				meta := SkillMeta{
+					Name:        ns.Name,
+					Description: ns.Description,
+					Category:    "auto-evolved",
+					Origin:      "derived",
 				}
-				a.skillStore.PutSkill(rec)
+				body := fmt.Sprintf("# %s\n\n%s\n\n## Origin\nAuto-evolved: %s\n", ns.Name, ns.Description, ns.Reason)
+				a.skillFS.Create(meta, body)
 			}
 		}
 	}
 
-	// Apply skill improvements to skill store
-	if a.skillStore != nil {
+	// Apply skill improvements to SkillFS
+	if a.skillFS != nil {
 		for _, si := range p.SkillImprovements {
-			skills, _ := a.skillStore.ActiveSkills()
-			for _, existing := range skills {
-				if strings.EqualFold(existing.Name, si.Name) {
-					existing.Description = si.Proposed
-					existing.Generation++
-					existing.ChangeSummary = "auto-evolved: " + si.Reason
-					existing.UpdatedAt = time.Now().UTC()
-					if err := a.skillStore.PutSkill(existing); err == nil {
-						applied++
-						fmt.Printf("   🔧 [%s] Improved skill: %s (gen=%d) — %s\n",
-							a.cfg.Agent.Name, si.Name, existing.Generation, si.Reason)
-					}
-					break
+			if existing, ok := a.skillFS.Get(si.Name); ok {
+				meta := existing.Meta
+				meta.Generation++
+				meta.Origin = "derived"
+				newBody := si.Proposed
+				if newBody == "" {
+					newBody = existing.Body
+				}
+				changeSummary := "auto-evolved: " + si.Reason
+				if _, err := a.skillFS.Update(si.Name, meta, newBody, changeSummary); err == nil {
+					applied++
+					fmt.Printf("   🔧 [%s] Improved skill: %s (gen=%d) — %s\n",
+						a.cfg.Agent.Name, si.Name, meta.Generation, si.Reason)
 				}
 			}
 		}

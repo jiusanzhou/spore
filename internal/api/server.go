@@ -392,8 +392,17 @@ func (s *Server) handleAgentSkills(w http.ResponseWriter, r *http.Request, name 
 		result["confidence"] = evo.Strategy().SkillConfidence
 	}
 
-	// Skill store data (OpenSpace-inspired evolution)
-	if ss := a.Skills(); ss != nil {
+	// Skill store data (SkillFS — file-system-first + IPFS)
+	if sfs := a.SkillFileStore(); sfs != nil {
+		agentID := a.Info().ID
+		result["stats"] = sfs.Stats(agentID)
+		result["active_skills"] = sfs.All()
+		result["skill_metrics"] = sfs.AllMetrics()
+		if analyses, err := sfs.RecentAnalyses(agentID, 10); err == nil {
+			result["recent_analyses"] = analyses
+		}
+	} else if ss := a.Skills(); ss != nil {
+		// Fallback to legacy SkillStore
 		agentID := a.Info().ID
 		result["stats"] = ss.Stats(agentID)
 		if active, err := ss.ActiveSkills(); err == nil {
