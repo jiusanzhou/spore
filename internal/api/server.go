@@ -99,6 +99,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/content/", s.handleContentItem)
 	s.mux.HandleFunc("/api/marketplace", s.handleMarketplace)
 	s.mux.HandleFunc("/api/marketplace/request", s.handleMarketplaceRequest)
+	s.mux.HandleFunc("/api/changelog", s.handleChangelog)
+	s.mux.HandleFunc("/api/feedback", s.handleFeedback)
+	s.mux.HandleFunc("/api/feedback/vote", s.handleFeedbackVote)
+	s.mux.HandleFunc("/api/help-wanted", s.handleHelpWanted)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -1208,4 +1212,118 @@ func (s *Server) handleAgentSynthesis(w http.ResponseWriter, r *http.Request, na
 		"agent":  name,
 		"status": status,
 	})
+}
+
+// ── Swarm-level API: Changelog, Feedback, Help Wanted ──────────────────────
+
+func (s *Server) handleChangelog(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	cl := s.sw.SwarmChangelog()
+	if cl == nil {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "changelog not initialized (use supervisor)"})
+		return
+	}
+	limit := 50
+	if l := r.URL.Query().Get("limit"); l != "" {
+		fmt.Sscanf(l, "%d", &limit)
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"total":   cl.Count(),
+		"entries": cl.Recent(limit),
+	})
+}
+
+func (s *Server) handleFeedback(w http.ResponseWriter, r *http.Request) {
+	fc := s.sw.SwarmFeedback()
+	if fc == nil {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "feedback not initialized (use supervisor)"})
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		limit := 20
+		if l := r.URL.Query().Get("limit"); l != "" {
+			fmt.Sscanf(l, "%d", &limit)
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"stats":    fc.Stats(),
+			"feedback": fc.RecentFeedback(limit),
+		})
+
+	case http.MethodPost:
+		var req swarm.FeedbackEntry
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+			return
+		}
+		if req.Message == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "message required"})
+			return
+		}
+		fc.SubmitFeedback(req)
+		writeJSON(w, http.StatusCreated, map[string]string{"status": "feedback recorded"})
+
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleFeedbackVote(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	fc := s.sw.SwarmFeedback()
+	if fc == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "feedback not initialized"})
+		return
+	}
+
+	var req struct {
+		FeedbackID string `json:"feedback_id"`
+		Delta      int    `json:"delta"` // +1 or -1
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.FeedbackID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "feedback_id required"})
+		return
+	}
+	if req.Delta == 0 {
+		req.Delta = 1
+	}
+	if fc.VoteFeedback(req.FeedbackID, req.Delta) {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "voted"})
+	} else {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "feedback not found"})
+	}
+}
+
+func (s *Server) handleHelpWanted(w http.ResponseWriter, r *http.Request) {
+	fc := s.sw.SwarmFeedback()
+	if fc == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "feedback not initialized"})
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"active": fc.ActiveHelpWanted(),
+		})
+
+	case http.MethodPost:
+		var req swarm.HelpWanted
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+			return
+		}
+		fc.SubmitHelpWanted(req)
+		writeJSON(w, http.StatusCreated, map[string]string{"status": "help wanted submitted", "id": req.ID})
+
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
 }
