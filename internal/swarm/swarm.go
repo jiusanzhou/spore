@@ -59,6 +59,10 @@ type Swarm struct {
 	tasksCompleted int
 	tasksFailed    int
 	tasksQueued    int
+
+	// Swarm-level subsystems (optional, initialized by Supervisor)
+	changelog *Changelog
+	feedback  *FeedbackChannel
 }
 
 // New creates a new swarm with a local in-process bus.
@@ -403,6 +407,11 @@ func (s *Swarm) handleSpawnRequest(parentName, childRole string, childSkills []s
 		parent.Evolution().InheritEvolution(child.Evolution())
 	}
 
+	// Record in changelog
+	if s.changelog != nil {
+		s.changelog.RecordSpawn(parentName, childName, reason)
+	}
+
 	// Start child agent in background
 	go func() {
 		fmt.Printf("🦠 Child agent %s running (spawned by %s)\n", childName, parentName)
@@ -418,3 +427,15 @@ func (s *Swarm) handleSpawnRequest(parentName, childRole string, childSkills []s
 func (s *Swarm) Close() error {
 	return s.bus.Close()
 }
+
+// SetChangelog sets the swarm changelog (typically by Supervisor).
+func (s *Swarm) SetChangelog(cl *Changelog) { s.changelog = cl }
+
+// Changelog returns the swarm changelog (may be nil).
+func (s *Swarm) SwarmChangelog() *Changelog { return s.changelog }
+
+// SetFeedback sets the human feedback channel (typically by Supervisor).
+func (s *Swarm) SetFeedback(fc *FeedbackChannel) { s.feedback = fc }
+
+// SwarmFeedback returns the human feedback channel (may be nil).
+func (s *Swarm) SwarmFeedback() *FeedbackChannel { return s.feedback }
