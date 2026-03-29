@@ -20,7 +20,7 @@
 - [x] 记忆分层：raw log (append-only) → active memory (synthesis 压缩)
 - [x] 时间加权：近期保留全文，旧的按主题合并
 - [x] 定期 synthesis：agent 定时自动整理记忆，清理过期/低价值内容
-- [ ] 跨 agent synthesis：群体层面的记忆合成（Spore 独有优势）
+- [x] 跨 agent synthesis：CollectiveSynthesizer — 发布 digest → IPFS → GossipSub → peer 融合 → collective_learnings.md
 
 ## 3. 社区/人类反馈通道
 
@@ -36,7 +36,7 @@
 **已实现**:
 - [x] 内置 5 个 seed skills（self-assess、collaborate、evolve、communicate、research）
 - [x] Skill 格式带 YAML frontmatter（触发条件、优先级、依赖）
-- [ ] Skill marketplace：agent 可以浏览/安装其他 swarm 共享的 skills
+- [x] Skill marketplace：SkillCatalog 聚合 ServiceAd + CID，Browse/Install via IPFS
 
 ## 5. 公开进化日志 ✅ DONE
 
@@ -44,6 +44,25 @@
 - [x] 每个 agent 维护 evolution log（时间、任务、改进、结果）
 - [ ] Swarm 级别的 changelog（群体层面的能力变化）
 - [x] Dashboard 展示进化历史时间线（Journal tab）
+
+## 6. SkillFS — 文件系统优先技能存储 ✅ DONE
+
+**已实现**:
+- [x] Source of truth: skills/<name>/SKILL.md (YAML frontmatter + markdown body)
+- [x] IPFS content addressing: 写入 → SHA-256 → publish → CID in frontmatter
+- [x] SQLite 降级为索引 (metrics + versions + analyses)
+- [x] 渐进式加载: index.yaml → SKILL.md → references/
+- [x] 跨 agent 学习: ImportFromCID
+- [x] 自动迁移: legacy skills.db → SkillFS
+
+---
+
+## 剩余待做
+
+- [ ] Swarm changelog — 群体能力变化记录
+- [ ] 人类反馈通道 — 投票权重 + help wanted + 社区进化决策
+- [ ] 进程守护 — daemon 模式，崩溃自动重启
+- [ ] dependabot 漏洞修复 (1 high)
 
 ---
 
@@ -58,5 +77,8 @@
 - ✅ 自我意识/情绪系统
 - ✅ 多 runtime 适配 (Codex/Claude Code/OpenClaw/ABox/HTTP)
 - ✅ NAT 穿透 + 跨网络组网
+- ✅ SkillFS — SKILL.md 文件系统 + IPFS 内容寻址
+- ✅ 集体记忆 — 跨 agent 记忆融合
+- ✅ Skill Catalog — 去中心化技能市场
 
 **核心思路**: 单体自进化 pipeline 作为每个 agent 的**内循环**，群体协作是**外循环**。
