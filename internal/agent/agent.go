@@ -114,6 +114,7 @@ type Agent struct {
 	skillFS      *SkillFS           // File-system-first skill store with IPFS content addressing
 	analyzer     *ExecutionAnalyzer // post-task LLM analysis
 	skillEvolver *SkillEvolver      // applies FIX/DERIVED/CAPTURED evolutions
+	skillCatalog *SkillCatalog      // swarm-wide skill browsing + install
 	marketplace  *Marketplace       // cross-owner service marketplace
 
 	// Intrinsic drive engine — autonomous behavior generation
@@ -149,7 +150,8 @@ type Agent struct {
 	pendingBids map[string]chan *protocol.TaskBid
 
 	// Memory synthesis engine
-	synthesizer *memory.MemorySynthesizer
+	synthesizer          *memory.MemorySynthesizer
+	collectiveSynth      *memory.CollectiveSynthesizer
 
 	// Evolution journal
 	evoJournal *EvolutionJournal
@@ -294,6 +296,38 @@ func (a *Agent) SetWorkDir(dir string) {
 	}
 	a.synthesizer = memory.NewMemorySynthesizer(a.memory, a.llm, agentID, synthCfg)
 
+	// Initialize collective memory synthesis (cross-agent)
+	{
+		var pubFn func([]byte, string, string, string) (string, error)
+		var fetchFn func(string) ([]byte, error)
+		if p2pBus, ok := a.bus.(*network.P2PBus); ok && p2pBus.Content != nil {
+			cs := p2pBus.Content
+			pubFn = func(data []byte, ct, aid, summary string) (string, error) {
+				ref, err := cs.Put(data, ct, aid, summary)
+				if err != nil {
+					return "", err
+				}
+				if ref.IPFSCID != "" {
+					return ref.IPFSCID, nil
+				}
+				return ref.CID, nil
+			}
+			fetchFn = func(cid string) ([]byte, error) {
+				return cs.Get(cid)
+			}
+		}
+		a.collectiveSynth = memory.NewCollectiveSynthesizer(
+			a.llm, agentID,
+			memory.CollectiveSynthesisConfig{
+				IntervalHours: synthCfg.IntervalHours * 2, // collective runs less frequently
+				WorkDir:       dir,
+			},
+			pubFn, fetchFn,
+		)
+		fmt.Printf("🧠 [%s] Collective memory synthesis initialized (peers: %d)\n",
+			a.cfg.Agent.Name, a.collectiveSynth.PeerCount())
+	}
+
 	// Initialize evolution journal
 	a.evoJournal = NewEvolutionJournal(dir)
 
@@ -308,6 +342,9 @@ func (a *Agent) SetWorkDir(dir string) {
 	if a.skillFS != nil {
 		a.loadSeedSkillsFS()
 	}
+
+	// Initialize skill catalog (swarm-wide browsing)
+	a.skillCatalog = NewSkillCatalog()
 }
 
 // taskEntry wraps a task with optional runtime preference.
@@ -621,6 +658,21 @@ func (a *Agent) Run() error {
 						fmt.Printf("⚠️  [%s] Memory synthesis failed: %v\n", a.cfg.Agent.Name, err)
 					}
 				}
+				// Collective memory synthesis — publish own digest + merge peer digests
+				if a.collectiveSynth != nil && a.synthesizer != nil {
+					// Publish our active learnings to IPFS
+					cid, err := a.collectiveSynth.PublishDigest(a.synthesizer.ActiveLearningsPath())
+					if err == nil && cid != "" {
+						// Broadcast CID to swarm
+						a.publishToIPFS(nil, "memory_digest_announce",
+							fmt.Sprintf("Memory digest from %s", a.cfg.Agent.Name))
+						fmt.Printf("🧠 [%s] Published memory digest: %s\n", a.cfg.Agent.Name, truncateCID(cid))
+					}
+					// Synthesize collective learnings from own + peers
+					if err := a.collectiveSynth.Synthesize(ctx, a.synthesizer.ActiveLearningsPath()); err != nil {
+						fmt.Printf("⚠️  [%s] Collective synthesis failed: %v\n", a.cfg.Agent.Name, err)
+					}
+				}
 				// Autonomous self-evolution — analyze and improve self
 				if a.autoEvolver != nil && a.autoEvolver.ShouldEvolve() {
 					go func() {
@@ -762,6 +814,15 @@ func (a *Agent) SkillFileStore() *SkillFS { return a.skillFS }
 
 // Market returns the marketplace engine.
 func (a *Agent) Market() *Marketplace { return a.marketplace }
+
+// Bus returns the agent's network bus (may be nil).
+func (a *Agent) Bus() network.Bus { return a.bus }
+
+// Catalog returns the agent's skill catalog (may be nil).
+func (a *Agent) Catalog() *SkillCatalog { return a.skillCatalog }
+
+// CollectiveSynth returns the collective memory synthesizer (may be nil).
+func (a *Agent) CollectiveSynth() *memory.CollectiveSynthesizer { return a.collectiveSynth }
 
 // WorkDir returns the agent's working directory.
 func (a *Agent) WorkDir() string { return a.workDir }
@@ -1329,6 +1390,10 @@ func (a *Agent) handleMessage(msg *protocol.Message) error {
 
 			// Fetch and import shared skills
 			if ref.Type == "skill" && a.skillFS != nil {
+				// Record in skill catalog for browse/install
+				if a.skillCatalog != nil {
+					a.skillCatalog.IngestSkillCID(ref.Summary, ref.CID, ref.AgentID, ref.Summary, 0)
+				}
 				fetchFn := func(cid string) ([]byte, error) {
 					return p2pBus.Content.Get(cid)
 				}
@@ -1360,6 +1425,13 @@ func (a *Agent) handleMessage(msg *protocol.Message) error {
 			if ref.Type == "skill_analysis" {
 				fmt.Printf("📊 [%s] Peer %s shared analysis: %s\n",
 					a.cfg.Agent.Name, msg.From[:8], ref.Summary)
+			}
+
+			// Receive peer memory digest for collective synthesis
+			if ref.Type == "memory_digest" && a.collectiveSynth != nil {
+				a.collectiveSynth.ReceivePeerDigest(ref.AgentID, "", ref.CID, ref.Summary)
+				fmt.Printf("🧠 [%s] Received memory digest from %s: %s\n",
+					a.cfg.Agent.Name, msg.From[:8], truncateCID(ref.CID))
 			}
 		}
 
