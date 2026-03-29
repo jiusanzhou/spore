@@ -47,8 +47,7 @@ getting_started.md
 grocery_list.txt
 hello_world.html
 installation_instructions.md
-interactive-web-app/node_modules/
-interactive-web-app/build/
+web/node_modules/
 introduction.md
 motivational_quote.html
 project_management_framework.md
