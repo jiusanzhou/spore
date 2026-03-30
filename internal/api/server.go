@@ -941,6 +941,18 @@ func (s *Server) buildStatePayload() []byte {
 		"ts": time.Now().UnixMilli(),
 	}
 
+	// Swarm-level: changelog, feedback, help wanted
+	if cl := s.sw.SwarmChangelog(); cl != nil {
+		payload["changelog"] = cl.Recent(20)
+	}
+	if fc := s.sw.SwarmFeedback(); fc != nil {
+		payload["feedback"] = map[string]interface{}{
+			"stats":       fc.Stats(),
+			"recent":      fc.RecentFeedback(10),
+			"help_wanted": fc.ActiveHelpWanted(),
+		}
+	}
+
 	data, _ := json.Marshal(payload)
 	return data
 }

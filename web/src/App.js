@@ -12,6 +12,9 @@ import MemoryTab from './components/MemoryTab';
 import ActivityTab from './components/ActivityTab';
 import JournalTab from './components/JournalTab';
 import SynthesisTab from './components/SynthesisTab';
+import ChangelogTab from './components/ChangelogTab';
+import FeedbackTab from './components/FeedbackTab';
+import CatalogTab from './components/CatalogTab';
 import './App.css';
 
 function App() {
@@ -46,6 +49,9 @@ function App() {
         {activeTab === 'activity' && <ActivityTab state={state} />}
         {activeTab === 'journal' && <JournalTab state={state} />}
         {activeTab === 'synthesis' && <SynthesisTab state={state} />}
+        {activeTab === 'changelog' && <ChangelogTab state={state} />}
+        {activeTab === 'feedback' && <FeedbackTab state={state} />}
+        {activeTab === 'catalog' && <CatalogTab state={state} />}
       </section>
 
       <footer className="footer">
