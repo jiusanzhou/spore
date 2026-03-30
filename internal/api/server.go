@@ -18,7 +18,6 @@ package api
 
 import (
 	"context"
-	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -35,9 +34,6 @@ import (
 	"go.zoe.im/spore/internal/swarm"
 	"go.zoe.im/spore/web"
 )
-
-//go:embed dashboard.html
-var dashboardHTML []byte
 
 // Server is the HTTP API server for the swarm.
 type Server struct {
@@ -106,12 +102,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/feedback/vote", s.handleFeedbackVote)
 	s.mux.HandleFunc("/api/help-wanted", s.handleHelpWanted)
 
-	// Frontend: embedded React app (web/dist/) with SPA fallback,
-	// or legacy single-file dashboard.html as fallback.
+	// Frontend: embedded React app (web/dist/) with SPA fallback.
 	if distFS := web.DistFS(); distFS != nil {
-		s.mux.Handle("/", spaHandler{fs: http.FS(distFS), fallbackHTML: dashboardHTML})
-	} else {
-		s.mux.HandleFunc("/", s.handleDashboard)
+		s.mux.Handle("/", spaHandler{fs: http.FS(distFS)})
 	}
 }
 
@@ -293,8 +286,7 @@ func (s *Server) handlePeerConnect(w http.ResponseWriter, r *http.Request) {
 
 // spaHandler serves embedded static files with SPA fallback to index.html.
 type spaHandler struct {
-	fs           http.FileSystem
-	fallbackHTML []byte // legacy dashboard.html fallback
+	fs http.FileSystem
 }
 
 func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -314,9 +306,7 @@ func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// SPA fallback: serve index.html for unmatched paths (client-side routing)
 	idx, err := h.fs.Open("index.html")
 	if err != nil {
-		// No index.html in embed — fallback to legacy dashboard
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write(h.fallbackHTML)
+		http.NotFound(w, r)
 		return
 	}
 	defer idx.Close()
@@ -324,15 +314,6 @@ func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	stat, _ := idx.Stat()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	http.ServeContent(w, r, "index.html", stat.ModTime(), idx.(io.ReadSeeker))
-}
-
-func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(dashboardHTML)
 }
 
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
