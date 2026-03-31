@@ -92,6 +92,9 @@ type SkillMeta struct {
 	Priority    int      `yaml:"priority,omitempty"`      // 0-100
 	Dependencies []string `yaml:"dependencies,omitempty"` // required peer skills
 
+	// Executable tools — agent-created tools from evolution
+	Tools []SkillToolMeta `yaml:"tools,omitempty"`
+
 	// Content addressing
 	ContentHash string `yaml:"x-content-hash,omitempty"` // SHA-256 of body
 	IPFSCID     string `yaml:"x-ipfs-cid,omitempty"`     // IPFS CIDv1
@@ -99,6 +102,15 @@ type SkillMeta struct {
 	// Timestamps
 	CreatedAt string `yaml:"created_at,omitempty"`
 	UpdatedAt string `yaml:"updated_at,omitempty"`
+}
+
+// SkillToolMeta defines an executable tool in a SKILL.md frontmatter.
+type SkillToolMeta struct {
+	Name        string `yaml:"name"`
+	Description string `yaml:"description"`
+	Command     string `yaml:"command"`               // shell template, {{input}} replaced
+	Timeout     string `yaml:"timeout,omitempty"`      // e.g. "10s"
+	Interpreter string `yaml:"interpreter,omitempty"`  // "sh", "bash", "python3"
 }
 
 // Skill is a loaded skill with metadata + body.

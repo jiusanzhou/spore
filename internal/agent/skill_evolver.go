@@ -243,6 +243,19 @@ Respond with ONLY a JSON object:
 		ParentIDs:   []string{existing.Meta.Name},
 		SourceTask:  taskID,
 		Tags:        existing.Meta.Tags,
+		Tools:       existing.Meta.Tools, // inherit parent tools
+	}
+
+	// If LLM provided new tools, use those instead
+	for _, t := range result.Tools {
+		if t.Name != "" && t.Command != "" {
+			meta.Tools = append(meta.Tools, SkillToolMeta{
+				Name:        t.Name,
+				Description: t.Description,
+				Command:     t.Command,
+				Timeout:     t.Timeout,
+			})
+		}
 	}
 
 	skill, err := se.fs.Create(meta, result.Body)
@@ -271,13 +284,32 @@ Generate a complete SKILL.md body with these sections:
 - Pitfalls (known failure modes)
 - Verification (how to confirm success)
 
+IMPORTANT: If this skill involves fetching external data (weather, APIs, web content, DNS, etc.),
+you MUST include executable tools. Tools are shell commands the agent can invoke at runtime.
+
 Respond with ONLY a JSON object:
 {
   "name": "skill name (lowercase-hyphenated)",
   "body": "the complete SKILL.md body in markdown (use \\n for newlines)",
   "description": "one-line description of the skill",
-  "category": "skill category (e.g. core, meta, devops, social)"
-}`, sug.SkillName, sug.Reason, sug.Description)
+  "category": "skill category (e.g. core, meta, devops, social)",
+  "tools": [
+    {
+      "name": "tool-name",
+      "description": "what the tool does",
+      "command": "shell command with {{input}} placeholder for the argument",
+      "timeout": "10s"
+    }
+  ]
+}
+
+Tools examples:
+- Weather: {"name": "get-weather", "command": "curl -s \"wttr.in/{{input}}?format=3\"", "timeout": "10s"}
+- DNS: {"name": "check-dns", "command": "dig +short {{input}}", "timeout": "5s"}
+- HTTP GET: {"name": "http-get", "command": "curl -sL {{input}}", "timeout": "15s"}
+- Date: {"name": "current-date", "command": "date '+%%Y-%%m-%%d %%H:%%M:%%S'", "timeout": "2s"}
+
+If no executable tool makes sense for this skill, return "tools": [].`, sug.SkillName, sug.Reason, sug.Description)
 
 	resp, err := se.provider.Chat(ctx, []llm.Message{
 		{Role: "user", Content: prompt},
@@ -303,6 +335,18 @@ Respond with ONLY a JSON object:
 		Origin:      "captured",
 		Generation:  0,
 		SourceTask:  taskID,
+	}
+
+	// Convert evolved tools to SkillToolMeta
+	for _, t := range result.Tools {
+		if t.Name != "" && t.Command != "" {
+			meta.Tools = append(meta.Tools, SkillToolMeta{
+				Name:        t.Name,
+				Description: t.Description,
+				Command:     t.Command,
+				Timeout:     t.Timeout,
+			})
+		}
 	}
 
 	// Avoid duplicate
@@ -335,11 +379,19 @@ Respond with ONLY a JSON object:
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 type skillEvolutionResponse struct {
-	Name          string `json:"name"`
-	Body          string `json:"body"`
-	Description   string `json:"description"`
-	Category      string `json:"category"`
-	ChangeSummary string `json:"change_summary"`
+	Name          string                  `json:"name"`
+	Body          string                  `json:"body"`
+	Description   string                  `json:"description"`
+	Category      string                  `json:"category"`
+	ChangeSummary string                  `json:"change_summary"`
+	Tools         []skillToolEvolutionDef `json:"tools,omitempty"`
+}
+
+type skillToolEvolutionDef struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Command     string `json:"command"`
+	Timeout     string `json:"timeout,omitempty"`
 }
 
 func parseSkillEvolutionResponse(content string) (*skillEvolutionResponse, error) {

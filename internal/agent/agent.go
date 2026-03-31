@@ -818,6 +818,34 @@ func (a *Agent) Market() *Marketplace { return a.marketplace }
 // Bus returns the agent's network bus (may be nil).
 func (a *Agent) Bus() network.Bus { return a.bus }
 
+// collectSkillTools gathers all executable tool definitions from SkillFS.
+// These are tools defined in SKILL.md frontmatter `tools:` sections,
+// created through agent evolution (the "tool creation" capability).
+func (a *Agent) collectSkillTools() []engine.SkillToolDef {
+	if a.skillFS == nil {
+		return nil
+	}
+	var tools []engine.SkillToolDef
+	for _, name := range a.skillFS.List() {
+		skill, ok := a.skillFS.Get(name)
+		if !ok {
+			continue
+		}
+		for _, t := range skill.Meta.Tools {
+			if t.Name != "" && t.Command != "" {
+				tools = append(tools, engine.SkillToolDef{
+					Name:        t.Name,
+					Description: t.Description,
+					Command:     t.Command,
+					Timeout:     t.Timeout,
+					Interpreter: t.Interpreter,
+				})
+			}
+		}
+	}
+	return tools
+}
+
 // Catalog returns the agent's skill catalog (may be nil).
 func (a *Agent) Catalog() *SkillCatalog { return a.skillCatalog }
 
@@ -1181,6 +1209,11 @@ func (a *Agent) executeTaskDirect(ctx context.Context, entry *taskEntry) error {
 		ID:          entry.ID,
 		Description: entry.Description,
 		WorkDir:     entry.WorkDir,
+	}
+
+	// Inject evolved skill tools into builtin runtime
+	if builtinRT, ok := rt.(*runtime.Builtin); ok {
+		builtinRT.SkillTools = a.collectSkillTools()
 	}
 
 	// Execute with retry for transient errors (529/5xx/overloaded)

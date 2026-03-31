@@ -1,3 +1,35 @@
+advanced-coding:
+  name: advanced-coding
+  attempts: 0
+  successes: 0
+  avgduration: 0
+  successrate: 0.5
+  trend: stable
+  lastused: 0
+ai-concepts-explanation:
+  name: ai-concepts-explanation
+  attempts: 0
+  successes: 0
+  avgduration: 0
+  successrate: 0.5
+  trend: stable
+  lastused: 0
+ai-system-comparison:
+  name: ai-system-comparison
+  attempts: 0
+  successes: 0
+  avgduration: 0
+  successrate: 0.5
+  trend: stable
+  lastused: 0
+algorithm-optimization:
+  name: algorithm-optimization
+  attempts: 0
+  successes: 0
+  avgduration: 0
+  successrate: 0.5
+  trend: stable
+  lastused: 0
 analysis:
   name: analysis
   attempts: 0
@@ -14,6 +46,14 @@ coding:
   successrate: 0.8
   trend: stable
   lastused: 1774522377
+creative-technical-writing:
+  name: creative-technical-writing
+  attempts: 0
+  successes: 0
+  avgduration: 0
+  successrate: 0.5
+  trend: stable
+  lastused: 0
 delegation:
   name: delegation
   attempts: 0
@@ -30,8 +70,64 @@ documentation:
   successrate: 0.5
   trend: stable
   lastused: 0
+efficient-go-programming:
+  name: efficient-go-programming
+  attempts: 0
+  successes: 0
+  avgduration: 0
+  successrate: 0.5
+  trend: stable
+  lastused: 0
+efficient-research-synthesis:
+  name: efficient-research-synthesis
+  attempts: 0
+  successes: 0
+  avgduration: 0
+  successrate: 0.5
+  trend: stable
+  lastused: 0
+framework-analysis:
+  name: framework-analysis
+  attempts: 0
+  successes: 0
+  avgduration: 0
+  successrate: 0.5
+  trend: stable
+  lastused: 0
+go-code-analysis:
+  name: go-code-analysis
+  attempts: 0
+  successes: 0
+  avgduration: 0
+  successrate: 0.5
+  trend: stable
+  lastused: 0
+go-programming:
+  name: go-programming
+  attempts: 0
+  successes: 0
+  avgduration: 0
+  successrate: 0.5
+  trend: stable
+  lastused: 0
+improvement_planning:
+  name: improvement_planning
+  attempts: 0
+  successes: 0
+  avgduration: 0
+  successrate: 0.5
+  trend: stable
+  lastused: 0
 planning:
   name: planning
+  attempts: 0
+  successes: 0
+  avgduration: 0
+  successrate: 0.5
+  trend: stable
+  lastused: 0
+rapid-concept-explanation:
+  name: rapid-concept-explanation
   attempts: 0
   successes: 0
   avgduration: 0
@@ -46,6 +142,46 @@ research:
   successrate: 0.8
   trend: stable
   lastused: 1774522377
+resource-optimization:
+  name: resource-optimization
+  attempts: 0
+  successes: 0
+  avgduration: 0
+  successrate: 0.5
+  trend: stable
+  lastused: 0
+software-architecture:
+  name: software-architecture
+  attempts: 0
+  successes: 0
+  avgduration: 0
+  successrate: 0.5
+  trend: stable
+  lastused: 0
+team-coordination:
+  name: team-coordination
+  attempts: 0
+  successes: 0
+  avgduration: 0
+  successrate: 0.5
+  trend: stable
+  lastused: 0
+technical-analysis:
+  name: technical-analysis
+  attempts: 0
+  successes: 0
+  avgduration: 0
+  successrate: 0.5
+  trend: stable
+  lastused: 0
+technical_writing:
+  name: technical_writing
+  attempts: 0
+  successes: 0
+  avgduration: 0
+  successrate: 0.5
+  trend: stable
+  lastused: 0
 writing:
   name: writing
   attempts: 0
