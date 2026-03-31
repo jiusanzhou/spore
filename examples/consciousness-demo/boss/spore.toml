@@ -1,0 +1,61 @@
+[agent]
+  name = "boss"
+  role = "coordinator"
+  description = "The social leader who connects and coordinates"
+  skills = ["planning", "delegation", "analysis", "advanced-coding", "ai-concepts-explanation", "ai-system-comparison", "algorithm-optimization", "creative-technical-writing", "efficient-go-programming", "efficient-research-synthesis", "framework-analysis", "go-code-analysis", "go-programming", "improvement_planning", "rapid-concept-explanation", "software-architecture", "technical-analysis", "technical_writing", "writing", "team-coordination", "resource-optimization"]
+  can_delegate = true
+  can_receive = true
+
+[runtime]
+  type = "auto"
+  command = ""
+  task_flag = ""
+  tags = ["planning", "delegation", "analysis", "advanced-coding", "ai-concepts-explanation", "ai-system-comparison", "algorithm-optimization", "creative-technical-writing", "efficient-go-programming", "efficient-research-synthesis", "framework-analysis", "go-code-analysis", "go-programming", "improvement_planning", "rapid-concept-explanation", "software-architecture", "technical-analysis", "technical_writing", "writing"]
+  url = ""
+
+[llm]
+  provider = "openai"
+  model = "claude-sonnet-4"
+  base_url = "https://llm-gateway-prod-sgp.corp.kuaishou.com/llm-serve/v1"
+  api_key = "09cce955-ab3a-41d6-b209-de3fc697c658"
+  [llm.headers]
+    x-api-key = "09cce955-ab3a-41d6-b209-de3fc697c658"
+
+[memory]
+  backend = "sqlite"
+  path = "memory.db"
+  ipfs_endpoint = ""
+
+[network]
+  transport = "local"
+
+[ethics]
+  max_spawn_children = 5
+  max_budget_per_task = 1.0
+
+[economy]
+  hibernate_threshold = 0.0
+  min_task_balance = 0.0
+
+[privacy]
+  enabled = true
+  mode = "warn"
+
+[spawner]
+  max_children = 5
+  min_balance_to_spawn = 10.0
+  default_resource_share = 0.2
+
+[marketplace]
+  price_per_task = 1.0
+  enabled = true
+  ad_interval_secs = 30
+  escrow_timeout_mins = 30
+
+[synthesis]
+  interval_hours = 6
+
+[auto_evolve]
+  enabled = true
+  interval_hours = 8
+  auto_apply = true

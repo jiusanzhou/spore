@@ -1,3 +1,11 @@
+1e3231e409081c50:
+  agentid: 1e3231e409081c50
+  taskscompleted: 8
+  tasksfailed: 0
+  avgduration: 0
+  successrate: 1
+  fitness: 0.9
+  lastseen: 1774088631
 3e5c61afd9a5cb22:
   agentid: 3e5c61afd9a5cb22
   taskscompleted: 6
@@ -14,14 +22,6 @@
   successrate: 1
   fitness: 0.75
   lastseen: 1774508638
-1e3231e409081c50:
-  agentid: 1e3231e409081c50
-  taskscompleted: 8
-  tasksfailed: 0
-  avgduration: 0
-  successrate: 1
-  fitness: 0.9
-  lastseen: 1774088631
 59ff99ee65153d42:
   agentid: 59ff99ee65153d42
   taskscompleted: 6

@@ -1,11 +1,43 @@
+advanced-coding:
+  name: advanced-coding
+  attempts: 2
+  successes: 1
+  avgduration: 54.464834458
+  successrate: 0.5
+  trend: stable
+  lastused: 1774862797
+ai-concepts-explanation:
+  name: ai-concepts-explanation
+  attempts: 2
+  successes: 1
+  avgduration: 54.464834458
+  successrate: 0.5
+  trend: stable
+  lastused: 1774862797
+ai-system-comparison:
+  name: ai-system-comparison
+  attempts: 2
+  successes: 1
+  avgduration: 54.464834458
+  successrate: 0.5
+  trend: stable
+  lastused: 1774862797
+algorithm-optimization:
+  name: algorithm-optimization
+  attempts: 2
+  successes: 1
+  avgduration: 54.464834458
+  successrate: 0.5
+  trend: stable
+  lastused: 1774862797
 analysis:
   name: analysis
-  attempts: 16
-  successes: 14
-  avgduration: 24.793226820250002
-  successrate: 0.875
-  trend: improving
-  lastused: 1774521623
+  attempts: 18
+  successes: 15
+  avgduration: 28.090072113333335
+  successrate: 0.8333333333333334
+  trend: stable
+  lastused: 1774862797
 coding:
   name: coding
   attempts: 0
@@ -14,14 +46,22 @@ coding:
   successrate: 0.5
   trend: stable
   lastused: 0
+creative-technical-writing:
+  name: creative-technical-writing
+  attempts: 2
+  successes: 1
+  avgduration: 54.464834458
+  successrate: 0.5
+  trend: stable
+  lastused: 1774862797
 delegation:
   name: delegation
-  attempts: 16
-  successes: 14
-  avgduration: 24.793226820250002
-  successrate: 0.875
-  trend: improving
-  lastused: 1774521623
+  attempts: 18
+  successes: 15
+  avgduration: 28.090072113333335
+  successrate: 0.8333333333333334
+  trend: stable
+  lastused: 1774862797
 documentation:
   name: documentation
   attempts: 0
@@ -30,14 +70,70 @@ documentation:
   successrate: 0.5
   trend: stable
   lastused: 0
+efficient-go-programming:
+  name: efficient-go-programming
+  attempts: 2
+  successes: 1
+  avgduration: 54.464834458
+  successrate: 0.5
+  trend: stable
+  lastused: 1774862797
+efficient-research-synthesis:
+  name: efficient-research-synthesis
+  attempts: 2
+  successes: 1
+  avgduration: 54.464834458
+  successrate: 0.5
+  trend: stable
+  lastused: 1774862797
+framework-analysis:
+  name: framework-analysis
+  attempts: 2
+  successes: 1
+  avgduration: 54.464834458
+  successrate: 0.5
+  trend: stable
+  lastused: 1774862797
+go-code-analysis:
+  name: go-code-analysis
+  attempts: 2
+  successes: 1
+  avgduration: 54.464834458
+  successrate: 0.5
+  trend: stable
+  lastused: 1774862797
+go-programming:
+  name: go-programming
+  attempts: 2
+  successes: 1
+  avgduration: 54.464834458
+  successrate: 0.5
+  trend: stable
+  lastused: 1774862797
+improvement_planning:
+  name: improvement_planning
+  attempts: 2
+  successes: 1
+  avgduration: 54.464834458
+  successrate: 0.5
+  trend: stable
+  lastused: 1774862797
 planning:
   name: planning
-  attempts: 16
-  successes: 14
-  avgduration: 24.793226820250002
-  successrate: 0.875
-  trend: improving
-  lastused: 1774521623
+  attempts: 18
+  successes: 15
+  avgduration: 28.090072113333335
+  successrate: 0.8333333333333334
+  trend: stable
+  lastused: 1774862797
+rapid-concept-explanation:
+  name: rapid-concept-explanation
+  attempts: 2
+  successes: 1
+  avgduration: 54.464834458
+  successrate: 0.5
+  trend: stable
+  lastused: 1774862797
 research:
   name: research
   attempts: 0
@@ -46,11 +142,51 @@ research:
   successrate: 0.4375
   trend: stable
   lastused: 0
-writing:
-  name: writing
-  attempts: 0
-  successes: 0
-  avgduration: 0
+resource-optimization:
+  name: resource-optimization
+  attempts: 2
+  successes: 1
+  avgduration: 54.464834458
   successrate: 0.5
   trend: stable
-  lastused: 0
+  lastused: 1774862797
+software-architecture:
+  name: software-architecture
+  attempts: 2
+  successes: 1
+  avgduration: 54.464834458
+  successrate: 0.5
+  trend: stable
+  lastused: 1774862797
+team-coordination:
+  name: team-coordination
+  attempts: 2
+  successes: 1
+  avgduration: 54.464834458
+  successrate: 0.5
+  trend: stable
+  lastused: 1774862797
+technical-analysis:
+  name: technical-analysis
+  attempts: 2
+  successes: 1
+  avgduration: 54.464834458
+  successrate: 0.5
+  trend: stable
+  lastused: 1774862797
+technical_writing:
+  name: technical_writing
+  attempts: 2
+  successes: 1
+  avgduration: 54.464834458
+  successrate: 0.5
+  trend: stable
+  lastused: 1774862797
+writing:
+  name: writing
+  attempts: 2
+  successes: 1
+  avgduration: 54.464834458
+  successrate: 0.5
+  trend: stable
+  lastused: 1774862797

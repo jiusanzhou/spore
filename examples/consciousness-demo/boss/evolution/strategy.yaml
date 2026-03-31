@@ -1,13 +1,30 @@
 preferredruntime: builtin
 runtimescores:
-  builtin: 23.199999999999985
+  builtin: 23.899999999999984
 skillconfidence:
-  analysis: 0.9625000000000001
+  advanced-coding: 0.5
+  ai-concepts-explanation: 0.5
+  ai-system-comparison: 0.5
+  algorithm-optimization: 0.5
+  analysis: 0.8333333333333334
   coding: 0.45
-  delegation: 0.9625000000000001
+  creative-technical-writing: 0.5
+  delegation: 0.8333333333333334
   documentation: 0.45
-  planning: 0.9625000000000001
+  efficient-go-programming: 0.5
+  efficient-research-synthesis: 0.5
+  framework-analysis: 0.5
+  go-code-analysis: 0.5
+  go-programming: 0.5
+  improvement_planning: 0.5
+  planning: 0.8333333333333334
+  rapid-concept-explanation: 0.5
   research: 0.39375
-  writing: 0.45
+  resource-optimization: 0.5
+  software-architecture: 0.5
+  team-coordination: 0.5
+  technical-analysis: 0.5
+  technical_writing: 0.5
+  writing: 0.5
 delegatethreshold: 0.3
-adaptedat: 1774746867
+adaptedat: 1774889269

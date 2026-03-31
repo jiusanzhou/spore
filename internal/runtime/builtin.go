@@ -29,6 +29,9 @@ import (
 type Builtin struct {
 	provider llm.Provider
 	store    memory.Store
+	// SkillTools are dynamically loaded from SKILL.md definitions.
+	// Set by the agent before task execution.
+	SkillTools []engine.SkillToolDef
 }
 
 // NewBuiltin creates the built-in LLM-based runtime.
@@ -55,6 +58,11 @@ func (b *Builtin) Execute(ctx context.Context, task TaskInput) (*TaskOutput, err
 	eng.RegisterTool(&engine.ShellTool{WorkDir: task.WorkDir})
 	eng.RegisterTool(&engine.WebSearchTool{})
 	eng.RegisterTool(&engine.WebFetchTool{})
+
+	// Register skill-evolved tools (dynamically created by agent evolution)
+	for _, def := range b.SkillTools {
+		eng.RegisterTool(engine.NewSkillTool(def, "evolved"))
+	}
 
 	t := &engine.Task{
 		ID:          task.ID,
