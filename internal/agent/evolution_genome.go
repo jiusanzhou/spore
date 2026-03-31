@@ -361,6 +361,7 @@ func (e *EvolutionEngine) BuildDigest() *ExperienceDigest {
 }
 
 // ShareExperience broadcasts an experience digest to the swarm via GossipSub.
+// Only broadcasts when experience has changed since last share (new tasks completed).
 func (a *Agent) ShareExperience() error {
 	if a.bus == nil || a.evolution == nil {
 		return nil
@@ -370,6 +371,16 @@ func (a *Agent) ShareExperience() error {
 	if digest.TotalTasks < 3 {
 		return nil // not enough experience to share
 	}
+
+	// Skip if experience hasn't changed since last share
+	a.mu.Lock()
+	shareKey := fmt.Sprintf("%d:%.4f", digest.TotalTasks, digest.SuccessRate)
+	if a.lastShareKey == shareKey {
+		a.mu.Unlock()
+		return nil // no new experience to share
+	}
+	a.lastShareKey = shareKey
+	a.mu.Unlock()
 
 	selfID := a.identity.PublicKeyHex()[:16]
 

@@ -121,6 +121,14 @@ func (cs *ContentStore) Put(data []byte, contentType, agentID, summary string) (
 	hash := sha256.Sum256(data)
 	cid := hex.EncodeToString(hash[:])
 
+	// Dedup: if CID already exists, return existing ref without re-writing.
+	if cs.db != nil {
+		if _, existingRef, err := cs.db.Get(cid); err == nil && existingRef != nil {
+			existingRef.CID = cid
+			return existingRef, nil
+		}
+	}
+
 	ref := ContentRef{
 		CID:       cid,
 		AgentID:   agentID,

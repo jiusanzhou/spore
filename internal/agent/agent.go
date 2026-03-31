@@ -135,6 +135,7 @@ type Agent struct {
 	activeTasks int32 // atomic: number of currently executing tasks
 	taskCount int
 	startedAt time.Time
+	lastShareKey string // dedup ShareExperience broadcasts
 
 	// Peer registry from CapabilityAd messages
 	peersMu  sync.RWMutex
@@ -663,9 +664,6 @@ func (a *Agent) Run() error {
 					// Publish our active learnings to IPFS
 					cid, err := a.collectiveSynth.PublishDigest(a.synthesizer.ActiveLearningsPath())
 					if err == nil && cid != "" {
-						// Broadcast CID to swarm
-						a.publishToIPFS(nil, "memory_digest_announce",
-							fmt.Sprintf("Memory digest from %s", a.cfg.Agent.Name))
 						fmt.Printf("🧠 [%s] Published memory digest: %s\n", a.cfg.Agent.Name, truncateCID(cid))
 					}
 					// Synthesize collective learnings from own + peers
@@ -1936,6 +1934,9 @@ func (a *Agent) runSkillAnalysis(entry *taskEntry, output *runtime.TaskOutput, r
 
 // publishToIPFS stores content in the collective memory store (IPFS + SQLite).
 func (a *Agent) publishToIPFS(data []byte, contentType, summary string) {
+	if len(data) == 0 {
+		return // nothing to publish
+	}
 	p2pBus, ok := a.bus.(*network.P2PBus)
 	if !ok || p2pBus.Content == nil {
 		return
