@@ -4,15 +4,11 @@ description: Orchestrate multi-agent workflows, track progress, resolve conflict
 version: 0.1.0
 category: auto-evolved
 origin: derived
-x-content-hash: adfbfd52d809f90f894b9e274cb37aea78b80de83f9ed48f4f110253fca4d594
-x-ipfs-cid: bafkreigceieekpraj2rn54y3jj4op3vjcfjcu3ii4amknlfmktvgp7hzkm
+generation: 1
+x-content-hash: cd8fdda1692980e233684d437ed4665c1a16bbd262302b99b0ca5bd09f51e515
+x-ipfs-cid: bafkreicyiqffwj4bsnviutstoueebsrc4z4v5sxsiyrdorecchc67pbtdm
 created_at: "2026-03-30T16:43:08+08:00"
-updated_at: "2026-03-30T16:43:08+08:00"
+updated_at: "2026-03-31T10:03:39+08:00"
 ---
 
-# team-coordination
-
-Orchestrate multi-agent workflows, track progress, resolve conflicts, and optimize team dynamics for technical projects
-
-## Origin
-Auto-evolved: Role as 'social leader' with strong delegation skills indicates need for comprehensive team management capabilities
+Integrate conflict resolution patterns and progress tracking mechanisms

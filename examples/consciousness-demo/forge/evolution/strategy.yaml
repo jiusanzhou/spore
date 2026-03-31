@@ -1,6 +1,6 @@
 preferredruntime: builtin
 runtimescores:
-  builtin: 26.899999999999967
+  builtin: 27.299999999999965
 skillconfidence:
   advanced-coding: 0.45
   ai-concepts-explanation: 0.45
@@ -27,4 +27,4 @@ skillconfidence:
   technical_writing: 0.45
   writing: 0.9500000000000001
 delegatethreshold: 0.3
-adaptedat: 1774889269
+adaptedat: 1774937070

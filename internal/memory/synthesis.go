@@ -64,6 +64,7 @@ type MemorySynthesizer struct {
 	agentID  string
 
 	lastSynthesis time.Time
+	lastRawTS     int64  // last appended entry timestamp (dedup)
 	rawPath       string // learnings.jsonl (append-only)
 	activePath    string // active_learnings.md
 }
@@ -283,13 +284,26 @@ func (ms *MemorySynthesizer) appendRawEntries(entries []*Entry) {
 	if err := os.MkdirAll(filepath.Dir(ms.rawPath), 0755); err != nil {
 		return
 	}
+
+	// Filter: only append entries newer than last appended timestamp
+	var newEntries []*Entry
+	for _, e := range entries {
+		if e.UpdatedAt > ms.lastRawTS {
+			newEntries = append(newEntries, e)
+		}
+	}
+	if len(newEntries) == 0 {
+		return
+	}
+
 	f, err := os.OpenFile(ms.rawPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return
 	}
 	defer f.Close()
 
-	for _, e := range entries {
+	var maxTS int64
+	for _, e := range newEntries {
 		le := LearningEntry{
 			ID:        e.ID,
 			Timestamp: time.Unix(e.CreatedAt, 0),
@@ -302,6 +316,12 @@ func (ms *MemorySynthesizer) appendRawEntries(entries []*Entry) {
 			continue
 		}
 		fmt.Fprintf(f, "%s\n", data)
+		if e.UpdatedAt > maxTS {
+			maxTS = e.UpdatedAt
+		}
+	}
+	if maxTS > ms.lastRawTS {
+		ms.lastRawTS = maxTS
 	}
 }
 

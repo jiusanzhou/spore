@@ -4,15 +4,11 @@ description: Manage multi-agent workflows by assessing agent capabilities, deleg
 version: 0.1.0
 category: auto-evolved
 origin: derived
-x-content-hash: 178856649b08e3b278e04ad82e8129f6b4abc3f0719e3e1b6ec79e2b68b6118f
-x-ipfs-cid: bafkreia3cykwmzkg4ttz2vgcy6avrk7dyi4f4jvxh2vzovzyicczycxafq
+generation: 2
+x-content-hash: bd1d2661e86fd5f2b08fae8fa863513b2f15886fe428bc2510a9ac199d4c7f9b
+x-ipfs-cid: bafkreigzbxupnbn4ryjhpm2tagzkii7624ffj6jffuw2rpuhl3idngiydm
 created_at: "2026-03-30T16:43:07+08:00"
-updated_at: "2026-03-30T16:43:07+08:00"
+updated_at: "2026-03-31T14:04:57+08:00"
 ---
 
-# swarm-coordination
-
-Manage multi-agent workflows by assessing agent capabilities, delegating tasks effectively, monitoring progress, and ensuring quality outcomes across the swarm
-
-## Origin
-Auto-evolved: Agent has coordinator role but 0% delegation usage despite 0.30 threshold. Needs explicit coordination skills to fulfill leadership purpose.
+Lead collaborative agent networks by identifying optimal task distribution, monitoring progress across agents, resolving coordination conflicts, and ensuring quality standards

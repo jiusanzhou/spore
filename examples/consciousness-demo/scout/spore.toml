@@ -2,7 +2,7 @@
   name = "scout"
   role = "coordinator"
   description = "The curious explorer who ventures into new domains"
-  skills = ["research", "coding", "advanced-coding", "ai-concepts-explanation", "ai-system-comparison", "algorithm-optimization", "content-completion", "creative-technical-writing", "efficient-go-programming", "efficient-research-synthesis", "framework-analysis", "go-code-analysis", "go-programming", "improvement_planning", "rapid-concept-explanation", "software-architecture", "technical-analysis", "technical-explanation", "technical_writing", "writing", "coordination-optimization", "resource-trend-analysis"]
+  skills = ["research", "coding", "advanced-coding", "ai-concepts-explanation", "ai-system-comparison", "algorithm-optimization", "content-completion", "creative-technical-writing", "efficient-go-programming", "efficient-research-synthesis", "framework-analysis", "go-code-analysis", "go-programming", "improvement_planning", "rapid-concept-explanation", "software-architecture", "technical-analysis", "technical-explanation", "technical_writing", "writing", "coordination-optimization", "resource-trend-analysis", "cross-domain-synthesis", "skill-activation-strategy", "performance-analytics", "strategic-specialization"]
   can_delegate = true
   can_receive = true
 
@@ -10,7 +10,7 @@
   type = "auto"
   command = ""
   task_flag = ""
-  tags = ["research", "coding", "advanced-coding", "ai-concepts-explanation", "ai-system-comparison", "algorithm-optimization", "content-completion", "creative-technical-writing", "efficient-go-programming", "efficient-research-synthesis", "framework-analysis", "go-code-analysis", "go-programming", "improvement_planning", "rapid-concept-explanation", "software-architecture", "technical-analysis", "technical-explanation", "technical_writing", "writing"]
+  tags = ["research", "coding", "advanced-coding", "ai-concepts-explanation", "ai-system-comparison", "algorithm-optimization", "content-completion", "creative-technical-writing", "efficient-go-programming", "efficient-research-synthesis", "framework-analysis", "go-code-analysis", "go-programming", "improvement_planning", "rapid-concept-explanation", "software-architecture", "technical-analysis", "technical-explanation", "technical_writing", "writing", "coordination-optimization", "resource-trend-analysis", "cross-domain-synthesis", "skill-activation-strategy"]
   url = ""
 
 [llm]
