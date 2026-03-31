@@ -3,11 +3,11 @@ name: research
 description: 'Declared skill: research'
 version: 0.1.0
 origin: derived
-generation: 1
-x-content-hash: 5bfe43db2a7786cdd6f18dab7797a5b9b313913dfc052318b3779117c03ea4d0
-x-ipfs-cid: bafkreigazottjewxy5b46khggjmudzsvjkkdv3m7q2ubbjcyx6t3ds2jdy
+generation: 3
+x-content-hash: 644810bb53ff092d6510417b0796fab94a55951faa06d9f0348d08488118102a
+x-ipfs-cid: bafkreihxoivglttwoyzon34d57rjxshllehryyuaf4rkgxexfl4c5cvdoq
 created_at: "2026-03-26T06:01:25Z"
-updated_at: "2026-03-30T16:43:01+08:00"
+updated_at: "2026-03-31T14:05:10+08:00"
 ---
 
-Enhanced research with domain-specific depth tracking and source quality assessment
+Split into 'technical-research' and 'market-research' skills based on task context analysis

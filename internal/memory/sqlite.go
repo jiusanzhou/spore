@@ -79,11 +79,14 @@ func (s *SQLiteStore) Put(entry *Entry) error {
 	entry.EnsureID()
 
 	// Use upsert keyed on `key` (the logical dedup field).
-	// We query existing id first to avoid PRIMARY KEY conflicts.
-	var existingID string
-	err := s.db.QueryRow("SELECT id FROM memories WHERE key = ?", entry.Key).Scan(&existingID)
+	// Skip update if value hasn't changed (avoids churn in downstream JSONL).
+	var existingID, existingValue string
+	err := s.db.QueryRow("SELECT id, value FROM memories WHERE key = ?", entry.Key).Scan(&existingID, &existingValue)
 	if err == nil {
-		// Key exists — update in place, keep original id
+		// Key exists — only update if value changed
+		if existingValue == entry.Value {
+			return nil // no change, skip
+		}
 		_, err = s.db.Exec(`
 			UPDATE memories SET value = ?, updated_at = ?, access_cnt = access_cnt + 1
 			WHERE key = ?

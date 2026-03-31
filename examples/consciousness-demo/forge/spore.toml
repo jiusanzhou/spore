@@ -2,7 +2,7 @@
   name = "forge"
   role = "coordinator"
   description = "The creator who synthesizes knowledge and builds tools"
-  skills = ["writing", "coding", "documentation", "advanced-coding", "ai-concepts-explanation", "ai-system-comparison", "algorithm-optimization", "creative-technical-writing", "efficient-go-programming", "efficient-research-synthesis", "framework-analysis", "go-code-analysis", "go-programming", "improvement_planning", "rapid-concept-explanation", "software-architecture", "technical-analysis", "technical_writing", "swarm-coordination", "resource-optimization"]
+  skills = ["writing", "coding", "documentation", "advanced-coding", "ai-concepts-explanation", "ai-system-comparison", "algorithm-optimization", "creative-technical-writing", "efficient-go-programming", "efficient-research-synthesis", "framework-analysis", "go-code-analysis", "go-programming", "improvement_planning", "rapid-concept-explanation", "software-architecture", "technical-analysis", "technical_writing", "swarm-coordination", "resource-optimization", "active-delegation", "cross-domain-synthesis", "performance-monitoring", "quality-assurance"]
   can_delegate = true
   can_receive = true
 
@@ -10,7 +10,7 @@
   type = "auto"
   command = ""
   task_flag = ""
-  tags = ["writing", "coding", "documentation", "advanced-coding", "ai-concepts-explanation", "ai-system-comparison", "algorithm-optimization", "creative-technical-writing", "efficient-go-programming", "efficient-research-synthesis", "framework-analysis", "go-code-analysis", "go-programming", "improvement_planning", "rapid-concept-explanation", "software-architecture", "technical-analysis", "technical_writing"]
+  tags = ["writing", "coding", "documentation", "advanced-coding", "ai-concepts-explanation", "ai-system-comparison", "algorithm-optimization", "creative-technical-writing", "efficient-go-programming", "efficient-research-synthesis", "framework-analysis", "go-code-analysis", "go-programming", "improvement_planning", "rapid-concept-explanation", "software-architecture", "technical-analysis", "technical_writing", "swarm-coordination", "resource-optimization", "active-delegation", "cross-domain-synthesis"]
   url = ""
 
 [llm]
