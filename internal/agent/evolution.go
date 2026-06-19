@@ -265,12 +265,26 @@ func (e *EvolutionEngine) SkillProfiles() map[string]*SkillProfile {
 	return out
 }
 
-// Strategy returns a snapshot of the current strategy profile.
+// Strategy returns a deep copy of the strategy profile.
+//
+// Important: StrategyProfile contains maps (RuntimeScores, SkillConfidence)
+// which are reference types in Go. A shallow copy would let callers read maps
+// that the evolution loop is still writing to, producing a data race. We deep
+// copy the maps so the returned value is a safe snapshot the caller can read
+// without holding the lock.
 func (e *EvolutionEngine) Strategy() *StrategyProfile {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
 	cp := *e.strategy
+	cp.RuntimeScores = make(map[string]float64, len(e.strategy.RuntimeScores))
+	for k, v := range e.strategy.RuntimeScores {
+		cp.RuntimeScores[k] = v
+	}
+	cp.SkillConfidence = make(map[string]float64, len(e.strategy.SkillConfidence))
+	for k, v := range e.strategy.SkillConfidence {
+		cp.SkillConfidence[k] = v
+	}
 	return &cp
 }
 
