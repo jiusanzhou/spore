@@ -32,6 +32,11 @@ type Builtin struct {
 	// SkillTools are dynamically loaded from SKILL.md definitions.
 	// Set by the agent before task execution.
 	SkillTools []engine.SkillToolDef
+	// MCPTools are tools loaded from external Model Context Protocol servers
+	// at agent startup. Each task's per-call engine gets the same instances —
+	// the underlying MCP client connections are pooled in the agent's
+	// mcp.Manager so we don't pay a stdio handshake per task.
+	MCPTools []engine.Tool
 }
 
 // NewBuiltin creates the built-in LLM-based runtime.
@@ -62,6 +67,12 @@ func (b *Builtin) Execute(ctx context.Context, task TaskInput) (*TaskOutput, err
 	// Register skill-evolved tools (dynamically created by agent evolution)
 	for _, def := range b.SkillTools {
 		eng.RegisterTool(engine.NewSkillTool(def, "evolved"))
+	}
+
+	// Register MCP tools (Model Context Protocol). The agent owns the
+	// connection lifecycle; we just register the wrappers here.
+	for _, t := range b.MCPTools {
+		eng.RegisterTool(t)
 	}
 
 	t := &engine.Task{

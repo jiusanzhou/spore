@@ -425,7 +425,20 @@ func (s *Swarm) handleSpawnRequest(parentName, childRole string, childSkills []s
 
 // Close shuts down the swarm.
 func (s *Swarm) Close() error {
-	return s.bus.Close()
+	// Close every agent first so per-agent resources (MCP manager, future
+	// inline-curator goroutines, etc.) shut down cleanly before the bus
+	// goes away. Errors are collected but don't short-circuit; we want
+	// every agent to get a chance to release its resources.
+	var firstErr error
+	for _, a := range s.Agents() {
+		if err := a.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	if err := s.bus.Close(); err != nil && firstErr == nil {
+		firstErr = err
+	}
+	return firstErr
 }
 
 // SetChangelog sets the swarm changelog (typically by Supervisor).

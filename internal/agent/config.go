@@ -23,6 +23,9 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+
+	"go.zoe.im/spore/internal/gateway"
+	"go.zoe.im/spore/internal/mcp"
 )
 
 // Config is the top-level agent configuration.
@@ -41,6 +44,15 @@ type Config struct {
 	Marketplace MarketplaceConfig `toml:"marketplace" yaml:"marketplace" json:"marketplace"`
 	Synthesis  SynthesisConfig   `toml:"synthesis" yaml:"synthesis" json:"synthesis"`
 	AutoEvolve AutoEvolveConfig  `toml:"auto_evolve" yaml:"auto_evolve" json:"auto_evolve"`
+	MCP        mcp.Config        `toml:"mcp" yaml:"mcp" json:"mcp,omitempty"`
+	Gateway    GatewayConfig     `toml:"gateway" yaml:"gateway" json:"gateway,omitempty"`
+}
+
+// GatewayConfig groups all chat-gateway adapters (Telegram, Discord, ...).
+// Each adapter is independently enabled; an agent can run zero, one, or
+// multiple gateways at once.
+type GatewayConfig struct {
+	Telegram gateway.TelegramConfig `toml:"telegram" yaml:"telegram" json:"telegram,omitempty"`
 }
 
 // AgentConfig defines the agent's basic identity and behavior.
@@ -175,6 +187,11 @@ func DefaultConfig(name, model string) *Config {
 			Enabled:       true,
 			IntervalHours: 8,
 			AutoApply:     true,
+		},
+		MCP: mcp.Config{
+			Enabled:    false, // off by default; users opt in by adding [mcp.servers.*] entries
+			ToolPrefix: "mcp",
+			Servers:    map[string]mcp.ServerConfig{},
 		},
 	}
 }

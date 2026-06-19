@@ -32,6 +32,7 @@ import (
 	"go.zoe.im/spore/internal/engine"
 	"go.zoe.im/spore/internal/ethics"
 	"go.zoe.im/spore/internal/llm"
+	"go.zoe.im/spore/internal/mcp"
 	"go.zoe.im/spore/internal/memory"
 	"go.zoe.im/spore/internal/network"
 	"go.zoe.im/spore/internal/protocol"
@@ -165,6 +166,13 @@ type Agent struct {
 
 	// Coordinator state for tracking delegated subtasks (legacy, used by broadcastTask flow)
 	coordStates map[string]*coordinatorState
+
+	// MCP servers (Model Context Protocol) — wires external tool servers in
+	// as engine.Tools, so the agent can call any of the hundreds of public
+	// MCP servers (filesystem, github, postgres, playwright, ...) without a
+	// hand-written wrapper each.
+	mcpManager *mcp.Manager
+	mcpTools   []engine.Tool // snapshot for runtime injection (Builtin per-task engine)
 }
 
 // SetOnTaskUpdate registers a callback for task lifecycle events.
@@ -493,6 +501,42 @@ func New(cfg *Config) (*Agent, error) {
 	// Initialize collective consciousness
 	a.collective = NewCollective(a)
 
+	// Register inline skill curator tools so the LLM can patch SKILL.md
+	// the moment it spots an issue, rather than waiting for the post-task
+	// evolution pass. Hermes-style "use it, fix it" loop.
+	//
+	// SkillFS is created later (in SetWorkDir → initSkillSystem), so we
+	// install the tools eagerly with a closure that re-checks fs at call
+	// time. This mirrors how DelegateTool's SendFunc captures `a`.
+	a.engine.RegisterTool(NewSkillPatchToolFn(func() *SkillFS { return a.skillFS }))
+	a.engine.RegisterTool(NewSkillNoteToolFn(func() *SkillFS { return a.skillFS }))
+
+	// Initialize MCP servers (Model Context Protocol). Errors here are
+	// non-fatal: the agent still runs with its built-in tools, and a partial
+	// failure (one server unreachable) doesn't poison the others.
+	if cfg.MCP.Enabled && len(cfg.MCP.Servers) > 0 {
+		mgr := mcp.NewManager(cfg.MCP)
+		report, err := mgr.Load(context.Background())
+		if err != nil {
+			fmt.Printf("⚠️  MCP load failed: %v (continuing without MCP)\n", err)
+		} else {
+			fmt.Printf("🔌 %s\n", report.String())
+			a.mcpManager = mgr
+			for _, t := range mgr.Tools() {
+				// engine.Tool is structurally identical to mcp.EngineTool.
+				a.mcpTools = append(a.mcpTools, t.(engine.Tool))
+				a.engine.RegisterTool(t.(engine.Tool))
+			}
+			// Inject the same tools into the builtin runtime so per-task
+			// engines (created in Builtin.Execute) also see them.
+			if rt, ok := a.registry.Get("builtin"); ok {
+				if b, ok := rt.(*runtime.Builtin); ok {
+					b.MCPTools = a.mcpTools
+				}
+			}
+		}
+	}
+
 	return a, nil
 }
 
@@ -815,6 +859,24 @@ func (a *Agent) Market() *Marketplace { return a.marketplace }
 
 // Bus returns the agent's network bus (may be nil).
 func (a *Agent) Bus() network.Bus { return a.bus }
+
+// MCPManager returns the agent's MCP manager (may be nil when MCP is disabled).
+// Callers can use it to inspect connected servers or close the manager early.
+func (a *Agent) MCPManager() *mcp.Manager { return a.mcpManager }
+
+// Close releases the agent's external resources. Currently this shuts down
+// all MCP server connections; safe to call multiple times. Other subsystems
+// (memory store, libp2p host) are owned by their respective components and
+// closed elsewhere.
+func (a *Agent) Close() error {
+	if a.mcpManager != nil {
+		if err := a.mcpManager.Close(); err != nil {
+			return fmt.Errorf("closing mcp manager: %w", err)
+		}
+		a.mcpManager = nil
+	}
+	return nil
+}
 
 // collectSkillTools gathers all executable tool definitions from SkillFS.
 // These are tools defined in SKILL.md frontmatter `tools:` sections,
