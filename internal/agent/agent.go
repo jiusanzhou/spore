@@ -864,6 +864,65 @@ func (a *Agent) Bus() network.Bus { return a.bus }
 // Callers can use it to inspect connected servers or close the manager early.
 func (a *Agent) MCPManager() *mcp.Manager { return a.mcpManager }
 
+// makeRuntimeEventHandler returns a runtime.EventHandler tuned for this
+// agent: it surfaces streaming events from external runtimes (claude-code,
+// codex, ...) to stdout in a compact, scannable format, and updates the
+// agent's awareness counters when relevant.
+//
+// Design notes:
+//   - The handler is invoked synchronously by the runtime's stream parser, so
+//     we keep it cheap. No I/O beyond a buffered fmt.Printf.
+//   - We deliberately do NOT broadcast every event to the swarm bus —
+//     intra-task chatter would drown the gossip channel. The post-task
+//     analyzer / changelog already publishes the *summary* the swarm cares
+//     about. Future hooks (dashboard SSE, WebSocket) should subscribe here.
+//   - Errors from the handler stop the stream; we return nil unconditionally
+//     because dropping a log line should never abort a real task.
+func (a *Agent) makeRuntimeEventHandler(taskID, runtimeName string) runtime.EventHandler {
+	prefix := fmt.Sprintf("   ↳ [%s/%s/%s]", a.cfg.Agent.Name, runtimeName, taskID)
+	return func(ev runtime.StreamEvent) error {
+		switch ev.Type {
+		case runtime.EventInit:
+			fmt.Printf("%s 🔌 init session=%s %s\n", prefix, ev.Session, ev.Content)
+		case runtime.EventThinking:
+			text := ev.Content
+			// Reasoning blocks can be long; show a single-line preview.
+			line := strings.ReplaceAll(text, "\n", " ")
+			if len(line) > 200 {
+				line = line[:200] + "…"
+			}
+			fmt.Printf("%s 💭 %s\n", prefix, line)
+		case runtime.EventToolCall:
+			arg := ev.ToolInput
+			if len(arg) > 120 {
+				arg = arg[:120] + "…"
+			}
+			fmt.Printf("%s 🔧 %s %s\n", prefix, ev.ToolName, arg)
+		case runtime.EventToolResult:
+			marker := "✓"
+			if ev.ToolError {
+				marker = "✗"
+			}
+			out := strings.ReplaceAll(ev.ToolOutput, "\n", " ")
+			if len(out) > 120 {
+				out = out[:120] + "…"
+			}
+			fmt.Printf("%s %s tool_result %s\n", prefix, marker, out)
+		case runtime.EventError:
+			lvl := "warn"
+			if ev.Fatal {
+				lvl = "ERROR"
+			}
+			fmt.Printf("%s ⚠️  %s: %s\n", prefix, lvl, ev.Content)
+		case runtime.EventComplete:
+			fmt.Printf("%s ✅ done in=%d out=%d cached=%d cost=$%.4f duration=%dms\n",
+				prefix, ev.InputTokens, ev.OutputTokens, ev.CachedTokens,
+				ev.CostUSD, ev.DurationMS)
+		}
+		return nil
+	}
+}
+
 // Close releases the agent's external resources. Currently this shuts down
 // all MCP server connections; safe to call multiple times. Other subsystems
 // (memory store, libp2p host) are owned by their respective components and
@@ -1276,11 +1335,22 @@ func (a *Agent) executeTaskDirect(ctx context.Context, entry *taskEntry) error {
 		builtinRT.SkillTools = a.collectSkillTools()
 	}
 
-	// Execute with retry for transient errors (529/5xx/overloaded)
+	// Execute with retry for transient errors (529/5xx/overloaded). When the
+	// runtime supports streaming (StreamingRuntime), we wire a handler that
+	// surfaces tool calls and partial reasoning to the agent's log so an
+	// operator watching stdout (or the dashboard, eventually) sees progress
+	// instead of black-box silence. Token/cost accounting in TaskOutput is
+	// populated either way.
 	var output *runtime.TaskOutput
 	maxRetries := 2
+	streamingRT, _ := rt.(runtime.StreamingRuntime)
 	for attempt := 0; attempt <= maxRetries; attempt++ {
-		output, err = rt.Execute(ctx, input)
+		if streamingRT != nil {
+			handler := a.makeRuntimeEventHandler(entry.ID, rt.Info().Name)
+			output, err = streamingRT.ExecuteStream(ctx, input, handler)
+		} else {
+			output, err = rt.Execute(ctx, input)
+		}
 		if err == nil && output != nil && output.Success {
 			break
 		}
