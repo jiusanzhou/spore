@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"err-thread-001"}
+{"type":"turn.started"}
+{"type":"error","message":"Reconnecting... 1/5 (network glitch)"}
+{"type":"error","message":"Reconnecting... 2/5 (network glitch)"}
+{"type":"error","message":"unexpected status 401 Unauthorized"}
+{"type":"turn.failed","error":{"message":"unexpected status 401 Unauthorized"}}

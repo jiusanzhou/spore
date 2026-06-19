@@ -1,0 +1,11 @@
+{"type":"thread.started","thread_id":"019edf7b-fd06-7852-9133-7dc06230266d"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"reason_1","type":"reasoning"}}
+{"type":"item.completed","item":{"id":"reason_1","type":"reasoning","text":"User wants me to count files. I'll run ls and count."}}
+{"type":"item.started","item":{"id":"cmd_1","type":"command_execution","command":"ls /tmp"}}
+{"type":"item.completed","item":{"id":"cmd_1","type":"command_execution","command":"ls /tmp","exit_code":0,"status":"completed","aggregated_output":"file1.txt\nfile2.txt\nfile3.txt\n"}}
+{"type":"item.started","item":{"id":"plan_1","type":"plan_update"}}
+{"type":"item.completed","item":{"id":"plan_1","type":"plan_update","text":"1. List files\n2. Count them\n3. Report"}}
+{"type":"item.started","item":{"id":"agent_1","type":"agent_message"}}
+{"type":"item.completed","item":{"id":"agent_1","type":"agent_message","text":"There are 3 files in /tmp."}}
+{"type":"turn.completed","usage":{"input_tokens":150,"cached_input_tokens":80,"output_tokens":40}}
