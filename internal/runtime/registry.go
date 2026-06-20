@@ -182,8 +182,39 @@ func (r *Registry) AutoDiscover(ctx context.Context) []string {
 		cancel()
 	}
 
+	// ── 4. Legacy alias: when ACP didn't claim "claude-code" (claude-agent-acp
+	//    not in PATH), the abox "claude" adapter doubles as "claude-code"
+	//    so callers asking for the canonical name don't get a "not found"
+	//    error. Removing this alias would require updating manifest.go,
+	//    swarm flags, and existing agent.yaml configs across the fleet.
+	if _, hasACP := r.Get("claude-code"); !hasACP {
+		if abox, ok := r.Get("claude"); ok {
+			r.Register(&aliasRuntime{inner: abox, name: "claude-code"})
+			discovered = append(discovered, "claude-code (alias→claude)")
+		}
+	}
+
 	return discovered
 }
+
+// aliasRuntime exposes an existing Runtime under a different name. It's a
+// pass-through wrapper used by AutoDiscover to keep the canonical
+// "claude-code" name reachable when ACP isn't available.
+type aliasRuntime struct {
+	inner Runtime
+	name  string
+}
+
+func (a *aliasRuntime) Info() Info {
+	info := a.inner.Info()
+	info.Name = a.name
+	return info
+}
+func (a *aliasRuntime) Execute(ctx context.Context, task TaskInput) (*TaskOutput, error) {
+	return a.inner.Execute(ctx, task)
+}
+func (a *aliasRuntime) Healthy(ctx context.Context) error { return a.inner.Healthy(ctx) }
+func (a *aliasRuntime) Close() error                      { return a.inner.Close() }
 
 // Close shuts down all runtimes.
 func (r *Registry) Close() error {

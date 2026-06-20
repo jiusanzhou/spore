@@ -19,6 +19,7 @@ package runtime
 import (
 	"context"
 	"os/exec"
+	"strings"
 	"testing"
 )
 
@@ -99,6 +100,48 @@ func TestAutoDiscover_ACPLabel(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("no 'claude-code (acp)' label in discovery output: %v", discovered)
+	}
+}
+
+// TestAutoDiscover_AliasFallback: when ACP isn't available, the legacy
+// abox "claude" adapter should be exposed under the canonical "claude-code"
+// name via aliasRuntime. We can't easily make claude-agent-acp un-findable
+// from inside the test, so we directly exercise the alias type.
+func TestAutoDiscover_AliasRuntime(t *testing.T) {
+	// Use the existing builtin runtime as the inner — it's always healthy
+	// and doesn't need external deps.
+	inner := &Builtin{}
+	alias := &aliasRuntime{inner: inner, name: "claude-code"}
+
+	if got := alias.Info().Name; got != "claude-code" {
+		t.Errorf("alias.Info().Name = %q, want claude-code", got)
+	}
+	// Capabilities should pass through.
+	if len(alias.Info().Capabilities) != len(inner.Info().Capabilities) {
+		t.Errorf("alias capabilities not forwarded from inner")
+	}
+	// Healthy passes through.
+	if err := alias.Healthy(context.Background()); err != nil {
+		t.Errorf("alias.Healthy = %v, want nil (builtin always healthy)", err)
+	}
+}
+
+// TestAutoDiscover_AliasOnlyWhenNoACP: alias only fires when ACP didn't
+// claim "claude-code". Driven by inspecting the discovery output: with
+// claude-agent-acp installed there should be no "(alias→claude)" tag.
+func TestAutoDiscover_NoAliasWhenACPPresent(t *testing.T) {
+	if _, err := exec.LookPath("claude-agent-acp"); err != nil {
+		t.Skip("claude-agent-acp not in PATH; can't verify alias suppression")
+	}
+
+	reg := NewRegistry()
+	discovered := reg.AutoDiscover(context.Background())
+
+	for _, label := range discovered {
+		if strings.Contains(label, "alias→claude") {
+			t.Errorf("alias should not fire when ACP claims claude-code: %v",
+				discovered)
+		}
 	}
 }
 

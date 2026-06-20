@@ -21,6 +21,13 @@ import (
 	"testing"
 )
 
+// strErr is a tiny error helper used by streaming-runtime tests to avoid
+// importing the errors package. Originally defined in claude_code_test.go;
+// migrated here when that file was removed.
+type strErr string
+
+func (e strErr) Error() string { return string(e) }
+
 // codexFixtureToolUse exercises a complete codex JSONL turn with reasoning,
 // command_execution (one tool call), plan_update, agent_message, and final
 // turn.completed usage. Schema captured from real `codex exec --json` output
