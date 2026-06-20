@@ -2,8 +2,8 @@
 bin/
 *.exe
 
-# GoReleaser output
-dist/
+# GoReleaser output (project root only — must not match web/dist/)
+/dist/
 spore-acp-server
 spore-mcp-server
 
