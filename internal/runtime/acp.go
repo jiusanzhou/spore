@@ -438,6 +438,16 @@ func (c *acpClient) writeResponse(id any, result any, rpcErr *acpRPCError) error
 	return c.writeMessage(msg)
 }
 
+// notify sends a JSON-RPC notification (no id, no response expected).
+// Used by the ACP server side to push session/update events to the peer.
+func (c *acpClient) notify(method string, params any) error {
+	return c.writeMessage(map[string]any{
+		"jsonrpc": "2.0",
+		"method":  method,
+		"params":  params,
+	})
+}
+
 // readLoop reads server messages and dispatches them. Exits on EOF or
 // scanner error; signals closed on exit.
 func (c *acpClient) readLoop(ctx context.Context) {
