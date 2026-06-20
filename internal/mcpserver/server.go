@@ -32,6 +32,10 @@
 //   spore_agent_skills       a single agent's active skills
 //   spore_agent_experience   evolution digest (drives, fitness, learnings)
 //   spore_peer_fitness       peer-evolution rankings as seen by one agent
+//   spore_propose_skill      external clients contribute new skills to the
+//                            collective memory of a named agent (gated by
+//                            the agent's ethics engine; rejected proposals
+//                            never touch disk)
 //
 // Transport is stdio — same wire as ACP and the rest of the MCP ecosystem.
 // Run via cmd/spore-mcp-server (or embed Server.AddTo and call ServeStdio
@@ -42,11 +46,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
 	"go.zoe.im/spore/internal/agent"
+	"go.zoe.im/spore/internal/ethics"
 	"go.zoe.im/spore/internal/swarm"
 )
 
@@ -164,6 +171,36 @@ func (s *Server) registerTools(srv *server.MCPServer) {
 		mcp.WithString("agent", mcp.Required(),
 			mcp.Description("Observing agent name")),
 	), s.handlePeerFitness)
+
+	srv.AddTool(mcp.NewTool("spore_propose_skill",
+		mcp.WithDescription("Propose a new skill for inclusion in a named agent's "+
+			"collective memory. The proposal is screened by the agent's ethics "+
+			"engine — destructive shell patterns or data-exfil attempts are "+
+			"rejected and never touch disk. On accept, the skill lands in "+
+			"SkillFS with origin=proposed and the proposer recorded in the "+
+			"frontmatter for audit. Use this from any MCP client (Claude Code, "+
+			"Codex, Cursor, ...) to contribute reusable approaches you discover "+
+			"into the spore swarm. Returns {status, skill_name, reason} where "+
+			"status is 'accepted' or 'rejected'."),
+		mcp.WithString("agent", mcp.Required(),
+			mcp.Description("Target agent that will own the skill")),
+		mcp.WithString("name", mcp.Required(),
+			mcp.Description("Skill name (lowercase, hyphens/underscores, e.g. 'goproxy-cn-fallback')")),
+		mcp.WithString("description", mcp.Required(),
+			mcp.Description("One-line description of what the skill does and when to use it")),
+		mcp.WithString("body", mcp.Required(),
+			mcp.Description("Full SKILL.md body in markdown (no frontmatter — pass meta as separate fields). "+
+				"Should contain trigger conditions, numbered steps, exact commands, and pitfalls.")),
+		mcp.WithString("category",
+			mcp.Description("Optional category for organizing the skill (e.g. 'devops', 'data-science')")),
+		mcp.WithArray("triggers", mcp.Items(map[string]any{"type": "string"}),
+			mcp.Description("Optional activation conditions — phrases or context cues that suggest when this skill applies")),
+		mcp.WithArray("tags", mcp.Items(map[string]any{"type": "string"}),
+			mcp.Description("Optional tags for discovery/search")),
+		mcp.WithString("proposer",
+			mcp.Description("Optional identifier of the proposing client (e.g. 'claude-code-session-abc'); "+
+				"recorded in the skill frontmatter for provenance")),
+	), s.handleProposeSkill)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -274,6 +311,157 @@ func (s *Server) handlePeerFitness(ctx context.Context, req mcp.CallToolRequest)
 		return jsonResult([]any{})
 	}
 	return jsonResult(pe.Rankings())
+}
+
+// handleProposeSkill ingests a skill proposal from any MCP client, runs it
+// past the target agent's ethics engine, and on accept persists it via
+// SkillFS. Rejected proposals never touch disk — the audit trail lives in
+// the ethics engine's own audit_log.
+//
+// Provenance:
+//   - origin     = "proposed" (distinct from imported/captured/derived/fixed)
+//   - source_task = "mcp-propose: <proposer-id>" so the proposer is recoverable
+//     from frontmatter alone, no separate audit lookup needed
+//
+// Failure modes (each returns a structured JSON result, never a transport error):
+//   - agent not found                  → tool error
+//   - missing/empty required field     → tool error
+//   - duplicate skill name             → tool error (caller should pick a new name)
+//   - ethics deny on description/body  → status="rejected" with reason
+//   - SkillFS.Create failure (disk)    → tool error
+func (s *Server) handleProposeSkill(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	agentName, err := req.RequireString("agent")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	skillName, err := req.RequireString("name")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	description, err := req.RequireString("description")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	body, err := req.RequireString("body")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	// Light input validation. SkillFS itself will normalize the name to a
+	// directory but we want to fail loudly on obviously-bad inputs.
+	skillName = strings.TrimSpace(skillName)
+	description = strings.TrimSpace(description)
+	body = strings.TrimSpace(body)
+	if skillName == "" || description == "" || body == "" {
+		return mcp.NewToolResultError("name, description, and body must be non-empty"), nil
+	}
+
+	args := req.GetArguments()
+	category := stringArg(args, "category")
+	proposer := stringArg(args, "proposer")
+	triggers := stringSliceArg(args, "triggers")
+	tags := stringSliceArg(args, "tags")
+	if proposer == "" {
+		proposer = "anonymous-mcp-client"
+	}
+
+	a := s.swarm.GetAgent(agentName)
+	if a == nil {
+		return mcp.NewToolResultErrorf("agent %q not found", agentName), nil
+	}
+	fs := a.SkillFileStore()
+	if fs == nil {
+		return mcp.NewToolResultErrorf("agent %q has no skill store (not running with SkillFS)", agentName), nil
+	}
+
+	// Ethics gate. We feed both the description and the body to the engine
+	// separately — destructive patterns can live in either. If either is
+	// denied, we bail without writing.
+	if e := a.Ethics(); e != nil {
+		taskID := fmt.Sprintf("propose-skill:%s", skillName)
+		// Check the description first (cheap), then body.
+		for label, payload := range map[string]string{
+			"description": description,
+			"body":        body,
+		} {
+			dec, lvl, reason := e.Check(agentName, taskID, payload)
+			if dec == ethics.Deny {
+				return jsonResult(map[string]any{
+					"status":     "rejected",
+					"skill_name": skillName,
+					"reason":     fmt.Sprintf("ethics %s rejected %s: %s", lvl, label, reason),
+					"proposer":   proposer,
+				})
+			}
+		}
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	meta := agent.SkillMeta{
+		Name:        skillName,
+		Description: description,
+		Category:    category,
+		Tags:        tags,
+		Triggers:    triggers,
+		Origin:      "proposed",
+		SourceTask:  fmt.Sprintf("mcp-propose: %s", proposer),
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	if _, err := fs.Create(meta, body); err != nil {
+		return mcp.NewToolResultErrorFromErr("create skill", err), nil
+	}
+
+	return jsonResult(map[string]any{
+		"status":     "accepted",
+		"skill_name": skillName,
+		"agent":      agentName,
+		"origin":     "proposed",
+		"proposer":   proposer,
+		"reason":     "passed ethics screening; persisted to SkillFS",
+	})
+}
+
+// stringArg pulls a string argument from a CallTool request's argument map,
+// returning "" if it's missing or the wrong type.
+func stringArg(args map[string]any, key string) string {
+	v, ok := args[key]
+	if !ok {
+		return ""
+	}
+	s, ok := v.(string)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(s)
+}
+
+// stringSliceArg pulls a []string from a CallTool request's argument map.
+// MCP arrays arrive as []any; we coerce element-wise. Returns nil on
+// missing/empty/wrong-typed values.
+func stringSliceArg(args map[string]any, key string) []string {
+	v, ok := args[key]
+	if !ok || v == nil {
+		return nil
+	}
+	raw, ok := v.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(raw))
+	for _, x := range raw {
+		if s, ok := x.(string); ok {
+			s = strings.TrimSpace(s)
+			if s != "" {
+				out = append(out, s)
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // jsonResult marshals v to a JSON string and wraps it as a TextContent

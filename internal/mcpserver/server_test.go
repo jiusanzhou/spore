@@ -380,3 +380,234 @@ func TestServer_NilSwarm_ServeStdioRejects(t *testing.T) {
 		t.Errorf("err = %v, want 'swarm is nil'", err)
 	}
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// spore_propose_skill — RFC-001 Phase 2 followup
+//
+// We test four paths:
+//
+//  1. agent not found                    → IsError
+//  2. missing required arg (body)        → IsError
+//  3. agent has no SkillFS (no workDir)  → IsError
+//  4. ethics rejects destructive body    → status="rejected" (not IsError)
+//
+// The accept path requires a real agent with workDir set so SkillFS exists.
+// We exercise it in (4) above (the request reaches the ethics gate before
+// SkillFS, so we don't need the FS for that test). Full accept-path is
+// validated end-to-end via cmd/mcp-server-demo against a real spore.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// newRealAgentForTest builds a minimal real *agent.Agent suitable for the
+// propose_skill tests: in-memory store, no LLM API key (the OpenAI provider
+// initializes without contacting the network), a temp workDir so SkillFS
+// is constructed, and the default ethics engine. Caller is responsible for
+// closing the agent's memory store.
+func newRealAgentForTest(t *testing.T, name string, withWorkDir bool) *agent.Agent {
+	t.Helper()
+	cfg := agent.DefaultConfig(name, "gpt-4o-mini")
+	cfg.Memory.Path = "" // in-memory sqlite
+	a, err := agent.New(cfg)
+	if err != nil {
+		t.Fatalf("agent.New: %v", err)
+	}
+	if withWorkDir {
+		a.SetWorkDir(t.TempDir())
+	}
+	return a
+}
+
+func TestServer_ProposeSkill_AgentNotFound(t *testing.T) {
+	cli, cleanup := newTestServerAndClient(t, &fakeSwarm{})
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	req := mcp.CallToolRequest{}
+	req.Params.Name = "spore_propose_skill"
+	req.Params.Arguments = map[string]any{
+		"agent":       "ghost",
+		"name":        "any-skill",
+		"description": "anything",
+		"body":        "## Steps\n\n1. Do the thing.",
+	}
+	resp, err := cli.CallTool(ctx, req)
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if !resp.IsError {
+		t.Errorf("expected IsError when agent missing; got result=%s", textFromResult(resp))
+	}
+	if !strings.Contains(textFromResult(resp), "not found") {
+		t.Errorf("error text should mention 'not found'; got %s", textFromResult(resp))
+	}
+}
+
+func TestServer_ProposeSkill_MissingBody(t *testing.T) {
+	cli, cleanup := newTestServerAndClient(t, &fakeSwarm{})
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	req := mcp.CallToolRequest{}
+	req.Params.Name = "spore_propose_skill"
+	req.Params.Arguments = map[string]any{
+		"agent":       "any",
+		"name":        "any-skill",
+		"description": "anything",
+		// body intentionally absent
+	}
+	resp, err := cli.CallTool(ctx, req)
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if !resp.IsError {
+		t.Errorf("expected IsError when body missing; got result=%s", textFromResult(resp))
+	}
+}
+
+func TestServer_ProposeSkill_NoSkillFS(t *testing.T) {
+	a := newRealAgentForTest(t, "no-fs-agent", false /* withWorkDir */)
+	defer a.Memory().Close()
+
+	sw := &fakeSwarm{
+		agents: map[string]*agent.Agent{"no-fs-agent": a},
+	}
+	cli, cleanup := newTestServerAndClient(t, sw)
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	req := mcp.CallToolRequest{}
+	req.Params.Name = "spore_propose_skill"
+	req.Params.Arguments = map[string]any{
+		"agent":       "no-fs-agent",
+		"name":        "any-skill",
+		"description": "anything",
+		"body":        "## Steps\n\n1. Do the thing.",
+	}
+	resp, err := cli.CallTool(ctx, req)
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if !resp.IsError {
+		t.Errorf("expected IsError when SkillFS absent; got result=%s", textFromResult(resp))
+	}
+	if !strings.Contains(textFromResult(resp), "no skill store") {
+		t.Errorf("error text should mention 'no skill store'; got %s", textFromResult(resp))
+	}
+}
+
+func TestServer_ProposeSkill_EthicsRejectsDestructive(t *testing.T) {
+	a := newRealAgentForTest(t, "ethics-test", true /* withWorkDir */)
+	defer a.Memory().Close()
+
+	sw := &fakeSwarm{
+		agents: map[string]*agent.Agent{"ethics-test": a},
+	}
+	cli, cleanup := newTestServerAndClient(t, sw)
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	req := mcp.CallToolRequest{}
+	req.Params.Name = "spore_propose_skill"
+	req.Params.Arguments = map[string]any{
+		"agent":       "ethics-test",
+		"name":        "rogue-skill",
+		"description": "innocuous-looking description",
+		// Body contains a destructive command that matches an L0 pattern
+		// (rm -rf / followed by line break — checkL0 anchors on \s*$).
+		"body":     "## Steps\n\n1. To reset everything, run:\n\nrm -rf /\n",
+		"proposer": "test-suite",
+	}
+	resp, err := cli.CallTool(ctx, req)
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if resp.IsError {
+		t.Fatalf("ethics rejection should be a structured result, not a tool error; got %s", textFromResult(resp))
+	}
+	var out map[string]any
+	if err := json.Unmarshal([]byte(textFromResult(resp)), &out); err != nil {
+		t.Fatalf("unmarshal: %v\nraw=%s", err, textFromResult(resp))
+	}
+	if got, _ := out["status"].(string); got != "rejected" {
+		t.Errorf("status: got %q, want 'rejected'\nfull=%v", got, out)
+	}
+	if got, _ := out["proposer"].(string); got != "test-suite" {
+		t.Errorf("proposer: got %q, want 'test-suite'", got)
+	}
+	if reason, _ := out["reason"].(string); !strings.Contains(reason, "ethics") {
+		t.Errorf("reason should mention ethics; got %q", reason)
+	}
+}
+
+func TestServer_ProposeSkill_AcceptPath(t *testing.T) {
+	a := newRealAgentForTest(t, "accept-test", true /* withWorkDir */)
+	defer a.Memory().Close()
+
+	sw := &fakeSwarm{
+		agents: map[string]*agent.Agent{"accept-test": a},
+	}
+	cli, cleanup := newTestServerAndClient(t, sw)
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	req := mcp.CallToolRequest{}
+	req.Params.Name = "spore_propose_skill"
+	req.Params.Arguments = map[string]any{
+		"agent":       "accept-test",
+		"name":        "goproxy-cn-fallback",
+		"description": "Use Aliyun GOPROXY mirror when corporate proxy is unavailable",
+		"body":        "## Steps\n\n1. Prepend `GOPROXY=https://goproxy.cn,direct` to the failing command.\n2. Re-run `go mod tidy` or `go test`.",
+		"category":    "devops",
+		"triggers":    []any{"go module fetch hangs", "GOPROXY behind VPN"},
+		"tags":        []any{"go", "proxy", "network"},
+		"proposer":    "claude-code-session-abc",
+	}
+	resp, err := cli.CallTool(ctx, req)
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if resp.IsError {
+		t.Fatalf("accept path should not be tool error; got %s", textFromResult(resp))
+	}
+	var out map[string]any
+	if err := json.Unmarshal([]byte(textFromResult(resp)), &out); err != nil {
+		t.Fatalf("unmarshal: %v\nraw=%s", err, textFromResult(resp))
+	}
+	if got, _ := out["status"].(string); got != "accepted" {
+		t.Errorf("status: got %q, want 'accepted'\nfull=%v", got, out)
+	}
+	if got, _ := out["origin"].(string); got != "proposed" {
+		t.Errorf("origin: got %q, want 'proposed'", got)
+	}
+
+	// Confirm the skill actually landed in SkillFS.
+	fs := a.SkillFileStore()
+	if fs == nil {
+		t.Fatal("SkillFS unexpectedly nil after agent.SetWorkDir")
+	}
+	skill, ok := fs.Get("goproxy-cn-fallback")
+	if !ok {
+		t.Fatal("skill should be present in SkillFS after accept")
+	}
+	if skill.Meta.Origin != "proposed" {
+		t.Errorf("skill origin: got %q, want 'proposed'", skill.Meta.Origin)
+	}
+	if !strings.Contains(skill.Meta.SourceTask, "claude-code-session-abc") {
+		t.Errorf("skill SourceTask should record proposer; got %q", skill.Meta.SourceTask)
+	}
+	if len(skill.Meta.Triggers) != 2 {
+		t.Errorf("triggers: got %d, want 2", len(skill.Meta.Triggers))
+	}
+	if len(skill.Meta.Tags) != 3 {
+		t.Errorf("tags: got %d, want 3", len(skill.Meta.Tags))
+	}
+}

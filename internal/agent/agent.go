@@ -848,6 +848,11 @@ func (a *Agent) PeerEvo() *PeerEvolution { return a.peerEvo }
 // Reputation returns the agent's reputation engine (may be nil).
 func (a *Agent) Reputation() *ReputationEngine { return a.reputation }
 
+// Ethics returns the agent's ethics engine (may be nil). External callers
+// (e.g. the MCP server) use it to vet content proposed by remote clients
+// before it touches the agent's state.
+func (a *Agent) Ethics() *ethics.Engine { return a.ethics }
+
 // Skills returns the agent's legacy skill store (DEPRECATED, may be nil).
 func (a *Agent) Skills() *SkillStore { return a.skillStore }
 
