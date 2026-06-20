@@ -168,3 +168,8 @@ homebrew_casks:
     description: "Decentralized AI agent swarm protocol and runtime"
     license: "Apache-2.0"
     skip_upload: true  # TODO: enable when jiusanzhou/homebrew-spore tap repo exists
+
+# Auto-detect prerelease from tag name (e.g. v0.2.0-rc1, v0.2.0-beta.1).
+# Stable tags (v0.2.0) become full releases; suffixed tags become prereleases.
+release:
+  prerelease: auto
