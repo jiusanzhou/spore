@@ -96,9 +96,14 @@ type ACPRuntime struct {
 }
 
 // NewACPRuntime returns a runtime preconfigured for claude-agent-acp.
+//
+// The Info().Name is "claude-code" — the same ID the legacy stream-json
+// adapter uses — so AutoDiscover swaps it in transparently for callers
+// that ask for "claude-code" by name (manifest.go, runtimes CLI, etc.).
+// Set RuntimeName explicitly to use a different ID.
 func NewACPRuntime() *ACPRuntime {
 	return &ACPRuntime{
-		RuntimeName:            "acp-claude",
+		RuntimeName:            "claude-code",
 		BinPath:                "claude-agent-acp",
 		HandshakeTimeout:       60 * time.Second,
 		PromptTimeout:          5 * time.Minute,
@@ -117,8 +122,9 @@ func (r *ACPRuntime) Info() Info {
 		Name:    r.RuntimeName,
 		Version: "auto",
 		Capabilities: []Capability{
-			{Name: "coding", Description: "ACP-bridged coding agent", Tags: []string{"coding", "acp"}},
-			{Name: "shell", Description: "Tool calls via ACP", Tags: []string{"shell", "acp"}},
+			{Name: "coding", Description: "Write, review, and refactor code (ACP)", Tags: []string{"coding", "shell"}},
+			{Name: "research", Description: "Research and analysis (ACP)", Tags: []string{"research"}},
+			{Name: "general", Description: "General task execution (ACP)", Tags: []string{"general"}},
 		},
 		MaxConcurrent: 2,
 	}

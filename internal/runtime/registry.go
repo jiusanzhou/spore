@@ -128,28 +128,51 @@ func (r *Registry) fallback() (Runtime, error) {
 }
 
 // AutoDiscover probes common agent CLIs and registers those that are available.
-// It checks both native Spore runtimes and agentbox-backed adapters.
+// It checks ACP-capable agents first (preferred — bidirectional, structured),
+// then native Spore runtimes, then agentbox-backed adapters as fallback.
 func (r *Registry) AutoDiscover(ctx context.Context) []string {
-	// Native Spore runtimes (kept for openclaw which has custom Execute logic)
-	natives := []Runtime{
-		NewOpenClaw(),
-	}
-
 	var discovered []string
-	for _, rt := range natives {
+
+	// ── 1. ACP-capable agents (preferred path; RFC-001 Stage 1) ──────────
+	//    Bidirectional JSON-RPC, structured session/update notifications,
+	//    no per-runtime stream-json parser. Claims the canonical name
+	//    ("claude-code", etc.) so abox/legacy adapters below skip it.
+	acpRuntimes := []Runtime{
+		NewACPRuntime(), // claude-agent-acp → "claude-code"
+	}
+	for _, rt := range acpRuntimes {
+		name := rt.Info().Name
 		checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		if err := rt.Healthy(checkCtx); err == nil {
 			r.Register(rt)
-			discovered = append(discovered, rt.Info().Name)
+			discovered = append(discovered, name+" (acp)")
 		}
 		cancel()
 	}
 
-	// agentbox-backed adapters (claude, codex, opencode, gemini, aider, goose, openhands)
+	// ── 2. Native Spore runtimes (kept for openclaw's custom Execute) ────
+	natives := []Runtime{
+		NewOpenClaw(),
+	}
+	for _, rt := range natives {
+		name := rt.Info().Name
+		if _, exists := r.Get(name); exists {
+			continue
+		}
+		checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		if err := rt.Healthy(checkCtx); err == nil {
+			r.Register(rt)
+			discovered = append(discovered, name)
+		}
+		cancel()
+	}
+
+	// ── 3. agentbox-backed adapters (legacy fallback) ────────────────────
+	//    claude, codex, opencode, gemini, aider, goose, openhands
 	for _, rt := range DefaultAboxAdapters() {
 		name := rt.Info().Name
 		if _, exists := r.Get(name); exists {
-			continue // don't override native implementations
+			continue // already claimed by ACP or native
 		}
 		checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		if err := rt.Healthy(checkCtx); err == nil {

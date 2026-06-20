@@ -43,49 +43,67 @@ func init() {
 }
 
 func discoverRuntimes() {
-	reg := runtime.NewRegistry()
-
-	// Always have builtin
 	fmt.Println("🔍 Discovering available agent runtimes...")
 	fmt.Println()
 
-	// Check each known runtime
-	type probe struct {
-		name    string
-		runtime runtime.Runtime
-	}
+	reg := runtime.NewRegistry()
 
-	probes := []probe{
-		{"claude-code", runtime.NewClaudeCode()},
-		{"codex", runtime.NewCodex()},
-		{"opencode", runtime.NewOpenCode()},
-		{"openclaw", runtime.NewOpenClaw()},
-	}
+	// builtin is always available — register it explicitly so it shows up
+	// in the same listing.
+	// (NewBuiltin needs an LLM provider; for the discovery view we just
+	// print a hardcoded row.)
+	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(w, "RUNTIME	STATUS	SOURCE	CAPABILITIES")
+	fmt.Fprintf(w, "builtin	✅ available	native	general, shell\n")
 
-	ctx := context.Background()
-	checkCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "RUNTIME\tSTATUS\tCAPABILITIES")
-	fmt.Fprintf(w, "builtin\t✅ available\tgeneral, shell\n")
-
-	for _, p := range probes {
-		if err := p.runtime.Healthy(checkCtx); err == nil {
-			reg.Register(p.runtime)
-			info := p.runtime.Info()
-			var tags []string
-			for _, cap := range info.Capabilities {
-				tags = append(tags, cap.Tags...)
-			}
-			fmt.Fprintf(w, "%s\t✅ available\t%s\n", p.name, strings.Join(tags, ", "))
-		} else {
-			fmt.Fprintf(w, "%s\t❌ not found\t-\n", p.name)
+	// Single source of truth: registry's own auto-discovery (ACP first,
+	// then native, then agentbox fallback).
+	discovered := reg.AutoDiscover(ctx)
+	discoveredSet := make(map[string]string, len(discovered)) // name → label
+	for _, label := range discovered {
+		// Labels look like "claude-code (acp)" or "openclaw"; key is the
+		// bare name so we can match Info().Name directly.
+		name := label
+		source := "native"
+		if idx := strings.Index(label, " ("); idx > 0 {
+			name = label[:idx]
+			source = strings.TrimSuffix(label[idx+2:], ")")
 		}
+		discoveredSet[name] = source
+	}
+
+	for _, info := range reg.List() {
+		var tags []string
+		for _, cap := range info.Capabilities {
+			tags = append(tags, cap.Tags...)
+		}
+		source := discoveredSet[info.Name]
+		if source == "" {
+			source = "native"
+		}
+		fmt.Fprintf(w, "%s	✅ available	%s	%s\n", info.Name, source, strings.Join(tags, ", "))
+	}
+
+	// Show the runtimes we *probed* but didn't find, so the user knows
+	// what's wired up.
+	notFound := []string{}
+	candidates := []string{"claude-code", "codex", "opencode", "openclaw", "gemini", "aider", "goose"}
+	for _, name := range candidates {
+		if _, ok := reg.Get(name); !ok {
+			notFound = append(notFound, name)
+		}
+	}
+	for _, name := range notFound {
+		fmt.Fprintf(w, "%s	❌ not found	-	-\n", name)
 	}
 	w.Flush()
 
 	fmt.Println()
+	fmt.Println("Source legend: acp = bidirectional Agent Client Protocol (preferred);")
+	fmt.Println("               native = built into spore; abox = legacy stream-json adapter.")
 	fmt.Println("Use --runtime <name> with 'spore swarm' to select a runtime.")
 	fmt.Println("Use --runtime auto to let Spore pick the best available one.")
 }
