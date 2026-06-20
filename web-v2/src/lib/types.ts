@@ -44,16 +44,19 @@ export interface SwarmStats {
   [key: string]: unknown
 }
 
+/** From swarm.TaskEvent. submitted_at/completed_at are ISO timestamps from Go time.Time. */
 export interface TaskLogEntry {
   id?: string
   description?: string
   agent?: string
   status?: string
+  runtime?: string
   result?: string
   error?: string
-  created_at?: number
-  completed_at?: number
-  duration_seconds?: number
+  submitted_at?: string
+  completed_at?: string
+  /** session_id is set when task originated from a chat session (rc2+). */
+  session_id?: string
   [key: string]: unknown
 }
 

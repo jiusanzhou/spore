@@ -10,6 +10,7 @@ export function ActivityTab({ state }: { state: SwarmState | null }) {
   const [targetAgent, setTargetAgent] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [flash, setFlash] = useState<{ tone: 'green' | 'red'; msg: string } | null>(null)
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -111,16 +112,62 @@ export function ActivityTab({ state }: { state: SwarmState | null }) {
                 : status === 'failed'
                 ? 'red'
                 : 'amber'
+            // Compute duration from ISO timestamps when both ends are known.
+            let durationLabel: string | null = null
+            if (t.submitted_at && t.completed_at) {
+              const ms = new Date(t.completed_at).getTime() - new Date(t.submitted_at).getTime()
+              if (Number.isFinite(ms) && ms >= 0) {
+                durationLabel = formatDuration(ms / 1000)
+              }
+            }
+            const result = (t.result as string | undefined)?.trim()
+            const error = (t.error as string | undefined)?.trim()
+            const expandable = Boolean(result || error)
+            const expanded = expandedIds.has(t.id ?? String(i))
+            const key = (t.id as string) ?? String(i)
             return (
-              <Card key={(t.id as string) ?? i} className="flex items-center justify-between gap-4 !py-3">
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13px]">{(t.description as string) ?? '—'}</div>
-                  <div className="mt-0.5 text-[11px] text-[var(--color-muted)]">
-                    {(t.agent as string) ?? 'unknown'} · {formatRelative(t.created_at as number | undefined)}
-                    {t.duration_seconds ? ` · ${formatDuration(Number(t.duration_seconds))}` : null}
+              <Card key={key} className="!py-3">
+                <button
+                  type="button"
+                  className={`flex w-full items-center justify-between gap-4 text-left ${
+                    expandable ? 'cursor-pointer' : 'cursor-default'
+                  }`}
+                  onClick={() => {
+                    if (!expandable) return
+                    setExpandedIds((prev) => {
+                      const next = new Set(prev)
+                      if (next.has(key)) next.delete(key)
+                      else next.add(key)
+                      return next
+                    })
+                  }}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13px]">{(t.description as string) ?? '—'}</div>
+                    <div className="mt-0.5 text-[11px] text-[var(--color-muted)]">
+                      {(t.agent as string) ?? 'unknown'}
+                      {t.runtime ? ` · ${t.runtime}` : ''}
+                      {t.submitted_at ? ` · ${formatRelative(t.submitted_at)}` : ''}
+                      {durationLabel ? ` · ${durationLabel}` : ''}
+                      {expandable ? <span className="ml-1 opacity-60">{expanded ? '▾' : '▸'}</span> : null}
+                    </div>
                   </div>
-                </div>
-                <Badge tone={tone}>{status}</Badge>
+                  <Badge tone={tone}>{status}</Badge>
+                </button>
+                {expandable && expanded ? (
+                  <div className="mt-2 border-t border-[var(--color-border)] pt-2">
+                    {result ? (
+                      <pre className="whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-[var(--color-fg)]">
+                        {result}
+                      </pre>
+                    ) : null}
+                    {error ? (
+                      <pre className="whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-[var(--color-error,#dc2626)]">
+                        {error}
+                      </pre>
+                    ) : null}
+                  </div>
+                ) : null}
               </Card>
             )
           })}
