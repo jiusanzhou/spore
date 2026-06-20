@@ -19,7 +19,7 @@ export function AgentsTab({ state }: { state: SwarmState | null }) {
           description="Start an agent with `spore run` or join an existing swarm via `spore swarm`."
         />
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(320px,1fr))]">
           {agents.map((a, i) => (
             <AgentCard key={a.id ?? a.name ?? i} agent={a} />
           ))}
