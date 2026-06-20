@@ -1,0 +1,166 @@
+# GoReleaser config for spore.
+#
+# See: https://goreleaser.com/customization/
+#
+# Build matrix:
+#   darwin/arm64, darwin/amd64 — built natively when running on macOS
+#   linux/amd64, linux/arm64   — built via zig as a cross C compiler
+#                                (CGO is required for go-sqlite3, our memory store)
+#
+# Three binaries ship in every archive:
+#   spore             — the main CLI (run, swarm, gateway, ...)
+#   spore-acp-server  — RFC-001 Stage 2: spore as an ACP agent
+#   spore-mcp-server  — RFC-001 Stage 3: spore swarm as MCP tools
+#
+# Demo binaries (acp-runtime-demo, acp-server-demo, acp-registry-demo,
+# mcp-server-demo) are intentionally NOT shipped — they exist for local
+# integration verification, not end users.
+#
+# Quick local dry-run (does not push anything):
+#   goreleaser release --snapshot --clean --skip=publish,sign
+#
+# To actually publish to GitHub Releases:
+#   1. Bump the tag: git tag -a v0.1.0 -m "..." && git push origin v0.1.0
+#   2. Set GITHUB_TOKEN with repo:write
+#   3. goreleaser release --clean
+#
+# Linux cross-compile prerequisite (one-time):
+#   brew install zig
+
+version: 2
+
+project_name: spore
+
+before:
+  hooks:
+    - go mod tidy
+    # Frontend bundle is embedded by `make build` — same here so SSE/dashboard work in the released binary.
+    - sh -c 'cd web && npm ci --prefer-offline --no-audit && BUILD_PATH=dist npx react-scripts build'
+
+builds:
+  - id: spore
+    binary: spore
+    main: ./cmd/spore
+    env:
+      - CGO_ENABLED=1
+      - >-
+        {{- if and (eq .Os "linux") (eq .Arch "amd64") }}CC=zig cc -target x86_64-linux-musl
+        {{- else if and (eq .Os "linux") (eq .Arch "arm64") }}CC=zig cc -target aarch64-linux-musl
+        {{- else }}CC=cc{{- end }}
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X go.zoe.im/x/version.GitVersion={{.Version}}
+      - -X go.zoe.im/x/version.GitCommit={{.FullCommit}}
+      - -X go.zoe.im/x/version.GitTreeState={{ if .IsGitDirty }}dirty{{ else }}clean{{ end }}
+      - -X go.zoe.im/x/version.BuildDate={{.Date}}
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+
+  - id: spore-acp-server
+    binary: spore-acp-server
+    main: ./cmd/spore-acp-server
+    env:
+      - CGO_ENABLED=1
+      - >-
+        {{- if and (eq .Os "linux") (eq .Arch "amd64") }}CC=zig cc -target x86_64-linux-musl
+        {{- else if and (eq .Os "linux") (eq .Arch "arm64") }}CC=zig cc -target aarch64-linux-musl
+        {{- else }}CC=cc{{- end }}
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X go.zoe.im/x/version.GitVersion={{.Version}}
+      - -X go.zoe.im/x/version.GitCommit={{.FullCommit}}
+      - -X go.zoe.im/x/version.BuildDate={{.Date}}
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+
+  - id: spore-mcp-server
+    binary: spore-mcp-server
+    main: ./cmd/spore-mcp-server
+    env:
+      - CGO_ENABLED=1
+      - >-
+        {{- if and (eq .Os "linux") (eq .Arch "amd64") }}CC=zig cc -target x86_64-linux-musl
+        {{- else if and (eq .Os "linux") (eq .Arch "arm64") }}CC=zig cc -target aarch64-linux-musl
+        {{- else }}CC=cc{{- end }}
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X go.zoe.im/x/version.GitVersion={{.Version}}
+      - -X go.zoe.im/x/version.GitCommit={{.FullCommit}}
+      - -X go.zoe.im/x/version.BuildDate={{.Date}}
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+
+archives:
+  - id: default
+    ids: [spore, spore-acp-server, spore-mcp-server]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - LICENSE
+      - README.md
+      - docs/RFC-001-acp-integration.md
+      - docs/JOINING.md
+      - docs/QUICKSTART-ACP.md
+      - docs/QUICKSTART-MCP.md
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot"
+
+changelog:
+  sort: asc
+  use: github
+  groups:
+    - title: 'Features'
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: 'Bug Fixes'
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: 'Refactors'
+      regexp: '^.*?refactor(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: 'Documentation'
+      regexp: '^.*?docs(\([[:word:]]+\))??!?:.+$'
+      order: 3
+    - title: 'Other'
+      order: 999
+  filters:
+    exclude:
+      - '^chore'
+      - '^test:'
+      - '^ci:'
+      - 'merge conflict'
+
+# Homebrew tap config — DRAFT ONLY, not active until brews.repository.owner
+# is updated and a personal access token (HOMEBREW_TAP_TOKEN env var) is
+# wired up. Leaving the block here as a runway for the eventual `brew tap
+# zoe-corp/spore && brew install spore` story.
+brews:
+  - name: spore
+    ids: [default]
+    repository:
+      owner: PLACEHOLDER-OWNER
+      name: homebrew-spore
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/jiusanzhou/spore"
+    description: "Decentralized AI agent swarm protocol and runtime"
+    license: "Apache-2.0"
+    install: |
+      bin.install "spore"
+      bin.install "spore-acp-server"
+      bin.install "spore-mcp-server"
+    test: |
+      system "#{bin}/spore", "--version"
+    skip_upload: auto  # only push for full releases, not snapshots / pre-releases
