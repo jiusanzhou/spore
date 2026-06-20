@@ -24,17 +24,21 @@ Thumbs.db
 *.db
 .spore/
 
-# Demo runtime artifacts (consciousness-demo etc. — agents mutate their own state)
-examples/*/boss/
-examples/*/scout/
-examples/*/forge/
+# Demo runtime artifacts — agents mutate these at runtime.
+# Already-tracked baseline files (agent.yaml, spore.toml, skills/<baseline>)
+# are unaffected; this just stops new runtime-generated skills/experience/
+# evolution/memory data from getting committed.
 examples/*/*/JOURNAL.md
-examples/*/*/agent.yaml
-examples/*/*/spore.toml
 examples/*/*/evolution/
 examples/*/*/experience/
 examples/*/*/memory/
 examples/*/*/skills/
+# Nested agent dirs created by mistake during demo runs (e.g. scout/scout/)
+examples/*/*/identity.json
+examples/*/*/identity.key
+examples/consciousness-demo/scout/scout/
+examples/consciousness-demo/boss/boss/
+examples/consciousness-demo/forge/forge/
 
 # Secrets
 *.key
