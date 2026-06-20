@@ -1,0 +1,119 @@
+/* Tailwind v4 + Spore design tokens.
+ *
+ * Token system designed for a P2P swarm cockpit:
+ *   - `bg` / `surface` / `card` / `border` — three layers of depth
+ *   - `fg` / `dim` / `muted` — text hierarchy
+ *   - `accent` (purple) — primary brand + active state
+ *   - `cyan` (P2P) — peers, network, content addressing
+ *   - `green` / `amber` / `red` — health states
+ *   - `--radius` scale follows shadcn convention
+ *
+ * Dark mode is the default. Light mode swaps via [data-theme="light"] on <html>.
+ */
+
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Inter', system-ui, sans-serif;
+  --font-mono: 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+
+  /* Surfaces */
+  --color-bg: #08090c;
+  --color-surface: #11131a;
+  --color-card: #161823;
+  --color-border: #232636;
+  --color-border-strong: #2f3349;
+
+  /* Text */
+  --color-fg: #e6e7eb;
+  --color-dim: #8b8fa3;
+  --color-muted: #5a5f73;
+
+  /* Brand */
+  --color-accent: #8b5cf6;
+  --color-accent-fg: #ffffff;
+  --color-accent-soft: rgba(139, 92, 246, 0.14);
+
+  /* P2P / Content */
+  --color-cyan: #22d3ee;
+  --color-cyan-soft: rgba(34, 211, 238, 0.14);
+
+  /* States */
+  --color-green: #34d399;
+  --color-green-soft: rgba(52, 211, 153, 0.14);
+  --color-amber: #fbbf24;
+  --color-amber-soft: rgba(251, 191, 36, 0.14);
+  --color-red: #f87171;
+  --color-red-soft: rgba(248, 113, 113, 0.14);
+
+  /* Radii */
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+
+  /* Shadows for cards (subtle, glow on accent) */
+  --shadow-glow: 0 0 24px rgba(139, 92, 246, 0.08);
+}
+
+/* Light mode override */
+:root[data-theme='light'] {
+  --color-bg: #f6f7fa;
+  --color-surface: #ffffff;
+  --color-card: #ffffff;
+  --color-border: #e5e7ef;
+  --color-border-strong: #cdd1de;
+  --color-fg: #1a1d29;
+  --color-dim: #3f4359;
+  --color-muted: #6b7088;
+  --color-accent-soft: rgba(139, 92, 246, 0.1);
+  --color-cyan-soft: rgba(34, 211, 238, 0.1);
+  --color-green-soft: rgba(52, 211, 153, 0.1);
+  --color-amber-soft: rgba(251, 191, 36, 0.1);
+  --color-red-soft: rgba(248, 113, 113, 0.1);
+  --shadow-glow: 0 0 24px rgba(139, 92, 246, 0.06);
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.5;
+}
+
+/* Pulse animation reused by status dots */
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.pulse-soft {
+  animation: pulse-soft 2s ease-in-out infinite;
+}
+
+/* Scrollbar — subtle on dark */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted);
+}

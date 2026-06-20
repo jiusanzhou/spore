@@ -1,70 +1,39 @@
-# Getting Started with Create React App
+# web/
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+This directory holds **only** the `//go:embed` machinery and the built dist/.
 
-## Available Scripts
+The actual frontend source lives under [`../web-v2/`](../web-v2/) — a Vite +
+React 19 + TypeScript + Tailwind v4 SPA.
 
-In the project directory, you can run:
+## How it works
 
-### `npm start`
+- `web-v2/` is the source-of-truth source tree. Edit there.
+- `make web-build` runs `pnpm build` in `web-v2/` and copies `web-v2/dist`
+  into `web/dist`.
+- `web/embed.go` does `//go:embed dist/*` so the built bundle ships inside
+  the `spore`, `spore-acp-server`, and `spore-mcp-server` binaries.
+- The Go API server (`internal/api/server.go`) mounts the embedded FS at
+  `/` for a single-page-app experience.
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+## Why the indirection?
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+The Go embed directive can't reach outside its own package directory, so
+the build output has to land in `web/dist/` even though sources live in
+`web-v2/`. This split lets us:
 
-### `npm test`
+1. Keep the JS toolchain (Node, pnpm, Vite) cleanly contained.
+2. Avoid polluting the Go module with `node_modules/` or build artifacts.
+3. Roll forward the frontend stack without touching `web/embed.go`.
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## Dev loop
 
-### `npm run build`
+```sh
+# Terminal 1 — Go API server
+go run ./cmd/spore run --api-port 9292 ...
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+# Terminal 2 — Vite dev server (proxies /api → :9292)
+cd web-v2 && pnpm dev
+```
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
-
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+Open http://localhost:5173 (Vite default). For a release-shaped run,
+`make build` produces a single `bin/spore` with everything baked in.
