@@ -8,6 +8,8 @@ Decentralized AI agent swarm protocol and runtime. Agents self-organize, evolve 
 
 **🦋 Agents evolve themselves autonomously** — every 8 hours, each agent analyzes its own performance, proposes improvements, and applies them automatically.
 
+**🔌 Bidirectional ACP + MCP node** — Spore consumes external ACP/MCP agents *and* exposes itself as one. Use it from Zed/JetBrains/Neovim, or hand any MCP-capable client (Claude Code, Codex, Cursor, Goose) the keys to your swarm.
+
 ## What Spore Does
 
 ```
@@ -20,6 +22,7 @@ Agent A evolves a skill → publishes to IPFS → Agent B learns it automaticall
 - **Stigmergic coordination** — ant-colony task market: broadcast → bid → assign → execute
 - **Token economy** — birth capital, task rewards, metabolism costs, knowledge sharing payments
 - **Self-awareness** — intrinsic drives, mood/energy/morale, collective consciousness
+- **ACP + MCP protocols** — bidirectional integration with the wider agent ecosystem (RFC-001)
 
 ## Install
 
@@ -77,26 +80,96 @@ spore peers connect /ip4/<ip>/tcp/9000/p2p/<peer-id>
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                      Application                         │
-│  Dashboard · API · CLI · REPL                           │
-├──────────────────────────────────────────────────────────┤
-│                       Economy                            │
-│  Token Ledger · Task Rewards · Metabolism                │
-├──────────────────────────────────────────────────────────┤
-│                    Coordination                          │
-│  Stigmergic Market · Skill Evolution · Self-Awareness   │
-├──────────────────────────────────────────────────────────┤
-│                   Communication                          │
-│  GossipSub · Content Announce · IPFS Bitswap            │
-├──────────────────────────────────────────────────────────┤
-│                      Identity                            │
-│  Ed25519 Keys · Reputation · Trust Scores               │
-├──────────────────────────────────────────────────────────┤
-│                    Infrastructure                        │
-│  libp2p · SQLite · Embedded IPFS · NAT Traversal        │
-└──────────────────────────────────────────────────────────┘
+                External ACP / MCP clients              External MCP servers
+              (Zed · JetBrains · Cursor · Claude         (filesystem · git ·
+               Code · Codex · Goose · custom)             custom tools · ...)
+                          │                                       ▲
+                  stdio / JSON-RPC                                │
+                          ▼                                       │
+              ┌───────────────────────┐                          │
+              │ spore-acp-server      │                          │
+              │ spore-mcp-server      │                          │
+              │ HTTP API · Dashboard  │                          │
+              └──────────┬────────────┘                          │
+                         │                                       │
+              ┌──────────▼────────────────────────┐              │
+              │           Swarm Manager           │              │
+              │   List · SendTask · Stats · Log   │              │
+              └──────────┬────────────────────────┘              │
+                         │                                       │
+       ┌─────────────────┼─────────────────┐                     │
+       ▼                 ▼                 ▼                     │
+  ┌─────────┐      ┌──────────┐      ┌─────────────┐             │
+  │ Agent A │      │ Agent B  │      │  Agent N    │             │
+  │ ─────── │      │ ──────── │      │  ────────── │             │
+  │ engine  │      │ engine   │      │  engine     │             │
+  │ skills  │      │ skills   │      │  skills     │             │
+  │ memory  │      │ memory   │      │  memory     │             │
+  │ economy │      │ economy  │      │  economy    │             │
+  │ ethics  │      │ ethics   │      │  ethics     │             │
+  └────┬────┘      └────┬─────┘      └────┬────────┘             │
+       │                │                 │                      │
+       │  ┌─────────────┴─────────────┐   │                      │
+       │  │                           │   │                      │
+       ▼  ▼                           ▼   ▼                      │
+  ┌─────────────────┐           ┌────────────────┐               │
+  │ Runtime Layer   │           │ MCP Client     │───────────────┘
+  │ ─────────────── │           │ (consume tools)│
+  │ ACP client      │
+  │   ↳ claude-code │
+  │   ↳ ACP agents  │
+  │ codex (native)  │
+  │ abox alias      │
+  └────────┬────────┘
+           │
+           ▼
+  ┌─────────────────┐
+  │ External agent  │
+  │ runtimes        │
+  │ (Claude Code,   │
+  │  Codex, ...)    │
+  └─────────────────┘
+
+   ──────── Network Layer ────────
+   libp2p (TCP+QUIC) · Kademlia DHT · GossipSub
+   Embedded IPFS · Content-addressed skill store
+   mDNS local discovery · NAT traversal · Reputation
 ```
+
+**Layered view:**
+
+| Layer | Packages | Role |
+|-------|----------|------|
+| **Edge** | `cmd/`, `gateway`, `api`, `mcpserver`, `runtime` (acp_server) | Human + protocol entry points |
+| **Orchestration** | `swarm`, `spawner`, `protocol` | Agent lifecycle + task dispatch |
+| **Cognition** | `agent`, `engine`, `ethics`, `memory` | Single-agent brain, reasoning, action validation |
+| **Execution** | `runtime`, `mcp` (client), `llm` | Turn intent into LLM/tool/subprocess calls |
+| **Network** | `network`, `ipfsnode` | P2P, content-addressed storage, IPFS |
+
+**~27k LOC production · ~10k LOC tests · 14 internal packages · 7 binaries · race-clean (`-race -count=20`)**
+
+## Protocol Surfaces
+
+Spore is a **bidirectional ACP + MCP node**. Four entry points, two directions:
+
+| Direction | Protocol | Binary / Package | What it gets you |
+|-----------|----------|------------------|------------------|
+| Spore → external | **ACP client** | `internal/runtime/acp.go` | Talk to any ACP-compliant agent runtime as if it were native (Claude Code via `claude-agent-acp`, etc.) |
+| External → Spore | **ACP server** | `spore-acp-server` | Pick "Spore" from Zed / JetBrains / Neovim's agent menu and tap the swarm |
+| Spore → external | **MCP client** | `internal/mcp` | Pull external MCP tools (filesystem, git, custom) into every spore agent |
+| External → Spore | **MCP server** | `spore-mcp-server` | Expose 8 swarm primitives (`spore_list_agents`, `spore_send_task`, `spore_agent_skills`, `spore_agent_experience`, `spore_peer_fitness`, …) to any MCP-capable client |
+
+```bash
+# Expose your swarm as an MCP server (any MCP client can drive it)
+spore-mcp-server --dir ~/.spore/my-agent
+
+# Expose spore as an ACP agent (Zed/JetBrains/Neovim ready)
+spore-acp-server --inner claude-code
+```
+
+Three demos live under `cmd/` (`acp-runtime-demo`, `acp-server-demo`, `mcp-server-demo`) showing each protocol path end-to-end.
+
+See [RFC-001: ACP Integration](docs/RFC-001-acp-integration.md) for the full design and rollout history.
 
 ## Key Features
 
@@ -112,6 +185,8 @@ spore peers connect /ip4/<ip>/tcp/9000/p2p/<peer-id>
 | **NAT Traversal** | Hole punching + relay for internet-wide P2P |
 | **Identity Persistence** | Ed25519 keys survive restarts |
 | **Autonomous Spawning** | Agents can spawn children with inherited skills |
+| **ACP Bidirectional** | Spore is both an ACP client and an ACP server (RFC-001) |
+| **MCP Bidirectional** | Spore consumes external MCP tools and exposes its swarm as MCP tools |
 
 ## Self-Evolution 🦋
 
@@ -155,6 +230,7 @@ curl http://localhost:9292/api/content/<cid>?format=html
 - [Joining the Network](docs/JOINING.md) — deploy your own agent, connect to the swarm
 - [Architecture](ARCHITECTURE.md) — 6-layer design, protocol messages, data flows
 - [Design](DESIGN.md) — philosophy and technical decisions
+- [RFC-001: ACP Integration](docs/RFC-001-acp-integration.md) — bidirectional ACP + MCP design and rollout
 
 ## License
 
