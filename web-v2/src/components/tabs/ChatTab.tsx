@@ -26,7 +26,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { SwarmState } from '../../lib/types'
 import { Badge, Button, Card, EmptyState, PageHeader, Textarea } from '../primitives'
-import { formatRelative } from '../../lib/utils'
+import { cn, formatRelative } from '../../lib/utils'
+import { ArrowLeft } from 'lucide-react'
 
 interface Session {
   id: string
@@ -260,9 +261,14 @@ export function ChatTab({ state }: { state: SwarmState | null }) {
   }
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] gap-4">
+    <div className="flex h-[calc(100vh-9rem)] gap-4 md:h-[calc(100vh-8rem)]">
       {/* ── Left rail: session list ────────────────────────────── */}
-      <div className="flex w-[280px] shrink-0 flex-col gap-2">
+      <div
+        className={cn(
+          'flex shrink-0 flex-col gap-2 md:w-[280px]',
+          activeSession ? 'hidden w-full md:flex' : 'flex w-full',
+        )}
+      >
         <div className="flex items-center gap-2">
           <Button variant="primary" onClick={newChat} disabled={agents.length === 0}>
             + New chat
@@ -328,7 +334,12 @@ export function ChatTab({ state }: { state: SwarmState | null }) {
       </div>
 
       {/* ── Right pane: messages + composer ─────────────────────── */}
-      <div className="flex flex-1 flex-col gap-2">
+      <div
+        className={cn(
+          'flex flex-1 flex-col gap-2 min-w-0',
+          activeSession ? 'flex' : 'hidden md:flex',
+        )}
+      >
         {!activeSession ? (
           <div className="flex flex-1 items-center justify-center">
             <EmptyState
@@ -339,12 +350,23 @@ export function ChatTab({ state }: { state: SwarmState | null }) {
           </div>
         ) : (
           <>
-            <PageHeader
-              title={activeSession.title || '(empty chat)'}
-              description={`Talking to ${activeSession.agent} · ${activeSession.turn_count} turn${
-                activeSession.turn_count === 1 ? '' : 's'
-              }`}
-            />
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSelectedId(null)}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-dim)] hover:bg-[var(--color-card)] hover:text-[var(--color-fg)] md:hidden"
+                aria-label="Back to sessions"
+              >
+                <ArrowLeft className="h-4 w-4" strokeWidth={1.75} />
+              </button>
+              <div className="min-w-0 flex-1">
+                <PageHeader
+                  title={activeSession.title || '(empty chat)'}
+                  description={`Talking to ${activeSession.agent} · ${activeSession.turn_count} turn${
+                    activeSession.turn_count === 1 ? '' : 's'
+                  }`}
+                />
+              </div>
+            </div>
 
             <div className="flex-1 space-y-3 overflow-y-auto pr-2">
               {turns.length === 0 && !pendingTask ? (

@@ -104,7 +104,8 @@ export function MemoryTab({ state }: { state: SwarmState | null }) {
         <EmptyState icon="💾" title="No content stored yet" />
       ) : (
         <Card className="!p-0 overflow-hidden">
-          <table className="w-full text-[12px]">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-[12px]">
             <thead className="bg-[var(--color-surface)] text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
               <tr>
                 <th className="w-6 px-2 py-2"></th>
@@ -140,6 +141,7 @@ export function MemoryTab({ state }: { state: SwarmState | null }) {
               })}
             </tbody>
           </table>
+          </div>
         </Card>
       )}
     </div>
