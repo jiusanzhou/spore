@@ -1,9 +1,12 @@
 # RFC-001: ACP (Agent Client Protocol) Integration
 
-**Status:** Draft / Scoping
+**Status:** Implemented (2026-06)
 **Author:** zoe
 **Date:** 2026-06
 **Related:** Phase 1 stream-json (commit `9417d24`), Phase 2 codex tests (commit `5ef20f7`)
+
+**Implementation:** All three stages landed. See "Implementation Status" at the bottom
+for per-stage commits, deliverables, and verification.
 
 ---
 
@@ -318,3 +321,137 @@ client                                      agent
 
 So Phase 1+2 was **not wasted work**: those events are the spore-internal IR and
 Stage 1 just translates ACP into them. Nothing is rewritten.
+
+---
+
+## Implementation Status
+
+**All three stages landed in a single push, 2026-06.** Total: 5 commits, ~5k lines of
+production + test + demo code. Full test suite green with `-race -count=20`.
+
+### Stage 1 — spore as ACP client ✅
+
+**Commits:**
+- `b8ac87e` — `feat(runtime): ACP client adapter — RFC-001 Stage 1` (+1524)
+- `16d7d6d` — `feat(runtime): wire ACPRuntime into AutoDiscover; ACP claims 'claude-code'` (+326 -40)
+- `fc96367` — `refactor(runtime): delete legacy claude_code stream-json adapter` (+81 -768)
+
+**Deliverables:**
+- `internal/runtime/acp.go` (833 lines) — ACP JSON-RPC 2.0 client. Hand-rolled because
+  `joshgarnett/acp-go` v0.2 has a wire-format bug. Implements `initialize`,
+  `session/new`, `session/prompt`, plus `session/update` notification handler for
+  streaming `agent_message_chunk` / `tool_call` / `tool_call_update` → StreamEvent IR.
+- `internal/runtime/acp_test.go` — 19 unit tests, all `-race -count=20` clean.
+- `internal/runtime/registry.go` — three-tier `AutoDiscover`: ACP first → native
+  adapters → abox fallback. New `aliasRuntime` maps abox `claude` → `claude-code`
+  when ACP is absent (preserves backward-compat for existing manifests).
+- `cmd/acp-runtime-demo/` + `cmd/acp-registry-demo/` — end-to-end demos.
+- **Deleted:** `internal/runtime/claude_code.go` (-405), its test (-269),
+  `cmd/runtime-stream-demo/` (-95). Made good on RFC promise to remove 4-of-6 hand-rolled
+  stream parsers.
+
+**Race bugs fixed during implementation** (both pre-existing latent issues exposed
+by the larger test surface):
+1. `call()`'s two-select randomization — first select no longer observes `c.closed`;
+   second select peeks `respCh` when `c.closed` fires.
+2. Write deadlock — moved the actual `c.out.Write` into a goroutine, with `ctx done`
+   closing the writer to unblock.
+
+**Verification:** `acp-runtime-demo "What is 2+2?"` → `claude-agent-acp v0.48` → `"4"`.
+`spore runtimes` now lists `claude-code (source=acp, healthy=true)`.
+
+### Stage 2 — spore as ACP server ✅
+
+**Commit:** `b8384ce` — `feat(runtime): ACP server — RFC-001 Stage 2` (+1166)
+
+**Deliverables:**
+- `internal/runtime/acp_server.go` (~370 lines) — ACP server side. Reuses the existing
+  `acpClient` as a JSON-RPC peer (ACP is symmetric peer-to-peer), so server-side just
+  registers method handlers — no new transport package needed.
+- `internal/runtime/acp_server_test.go` — 8 tests, `-race -count=20` clean.
+- `cmd/spore-acp-server/main.go` — stdio entry point with `--inner` flag (default:
+  `claude-code`).
+- `cmd/acp-server-demo/main.go` — three-hop end-to-end chain demo.
+
+**Agent identity:** `spore/0.1.0`. Implements required `initialize`, `session/new`,
+`session/prompt`; pushes `session/update` notifications for streaming.
+
+**Verification (three-hop chain):**
+```
+acp-server-demo (ACPRuntime as client)
+  ↓ stdio
+spore-acp-server (ACP server, inner=claude-code)
+  ↓ spawns ACPRuntime
+claude-agent-acp v0.48
+```
+All three hops carry streaming chunks and final response correctly.
+
+**Streaming dedup bug fixed:** server was double-echoing the final answer for
+streaming inner runtimes (`"4242"` instead of `"42"`). Streaming runtimes already
+emit the answer via `agent_message_chunk` events; server now only appends a final
+echo for non-streaming inner runtimes.
+
+### Stage 3 — MCP server bridge ✅
+
+**Commit:** `efbcd7d` — `feat(mcpserver): expose spore primitives as MCP tools — RFC-001 Stage 3` (+954)
+
+**Deliverables:**
+- `internal/mcpserver/server.go` — MCP server using `mark3labs/mcp-go`. Wraps a
+  `SwarmAccessor` interface (satisfied by `*swarm.Manager`) and exposes 8 tools.
+- `internal/mcpserver/server_test.go` — 11 test groups; tests use the library's
+  `NewInProcessClient` so no subprocess is needed for unit tests.
+- `cmd/spore-mcp-server/main.go` — stdio entry point. Loads agent config from a
+  spore data dir, brings up the full swarm (LLM-equipped agents really run, so
+  `spore_send_task` works), then runs `mcpserver.ServeStdio`.
+- `cmd/mcp-server-demo/main.go` — end-to-end demo via real subprocess + mcp-go
+  stdio client.
+
+**The 8 tools exposed:**
+
+| Tool                       | Backed by                              | Purpose                       |
+|----------------------------|----------------------------------------|-------------------------------|
+| `spore_list_agents`        | `Swarm.List()`                         | All agent `Info` snapshots    |
+| `spore_get_agent`          | `Swarm.GetAgent(name).Info()`          | Single agent full state       |
+| `spore_send_task`          | `Swarm.SendTask(agent, desc)`          | Delegate a task               |
+| `spore_swarm_stats`        | `Swarm.Stats()`                        | Counts + transport mode       |
+| `spore_recent_tasks`       | `Swarm.TaskLog(limit)`                 | Recent task events (1-200)    |
+| `spore_agent_skills`       | `Agent.Skills().ActiveSkills()`        | Active skill list             |
+| `spore_agent_experience`   | `Agent.Evolution().BuildDigest()`      | Evolution digest              |
+| `spore_peer_fitness`       | `Agent.PeerEvo().Rankings()`           | Peer fitness rankings         |
+
+**Verification:**
+```
+$ spore-mcp-server --dir examples/consciousness-demo/scout &
+$ mcp-server-demo
+[demo] initialized — server=spore/0.1.0
+[demo] 8 tools advertised
+[demo] spore_list_agents → scout (30 skills, full Info)
+[demo] spore_swarm_stats → 1 agent, transport=local
+```
+
+### Architectural notes
+
+- **Symmetric peer reuse**: ACP is JSON-RPC peer-to-peer at the wire level; spore's
+  `acpClient` works as both client (Stage 1) and server (Stage 2) via different
+  handler-registration paths. No second transport implementation.
+- **Three-tier runtime discovery** preserves backward-compat: existing manifests that
+  reference `claude-code` keep working whether ACP is installed, abox is installed,
+  or both. ACP wins when present.
+- **Separation of concerns**: `internal/mcp/` remains MCP *client* (consuming external
+  MCP servers as tools); `internal/mcpserver/` is MCP *server* (exposing spore as
+  tools to others). Different packages, no collision.
+
+### What this unlocks
+
+Per the RFC's original framing:
+- Stage 1 alone lifts spore's "real integration" score from ~30% → ~60%, and removes
+  maintenance debt every time Anthropic/OpenAI rev their event schemas.
+- Stage 2 makes every Zed/JetBrains/Neovim user a possible spore network entry-point.
+- Stage 3 is what makes the value prop reachable: any MCP-capable agent (Claude Code,
+  Codex, Cursor, Goose, Zed, etc.) can now read spore's swarm state and delegate
+  into the swarm — the "collective skill memory accessible to every agent runtime"
+  promise from the TL;DR.
+
+Spore is now a true bidirectional ACP+MCP node: consumes ACP agents, serves itself
+as an ACP agent, and exposes its swarm primitives as MCP tools to the entire agent
+ecosystem.
