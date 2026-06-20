@@ -27,6 +27,7 @@ import (
 
 	"go.zoe.im/spore/internal/agent"
 	"go.zoe.im/spore/internal/network"
+	"go.zoe.im/spore/internal/sessions"
 	"go.zoe.im/spore/internal/spawner"
 )
 
@@ -63,6 +64,13 @@ type Swarm struct {
 	// Swarm-level subsystems (optional, initialized by Supervisor)
 	changelog *Changelog
 	feedback  *FeedbackChannel
+
+	// sessions holds the chat-session store. Lazily opened the first time
+	// it's requested so non-API callers (CLI demos / tests) don't pay the
+	// sqlite open cost. Methods on *sessions.Store are safe for concurrent
+	// use; we just guard the open-once with a mutex.
+	sessionStore   *sessions.Store
+	sessionStoreMu sync.Mutex
 }
 
 // New creates a new swarm with a local in-process bus.
@@ -111,7 +119,11 @@ func (s *Swarm) AddAgent(cfg *agent.Config) (*agent.Agent, error) {
 	os.MkdirAll(agentDir, 0755)
 	a.SetWorkDir(agentDir)
 
-	// Register task lifecycle callback
+	// Register task lifecycle callback. We pull session linkage out of the
+	// store synchronously here — SessionForTask is consume-once, so even if
+	// the same task somehow surfaces multiple completion events (retries,
+	// duplicate broadcasts), we only append the assistant turn the first
+	// time. Failures and bare in-progress updates skip the chat write.
 	agentName := cfg.Agent.Name
 	a.SetOnTaskUpdate(func(taskID, status, runtime, result, errMsg string) {
 		s.LogTask(TaskEvent{
@@ -123,6 +135,31 @@ func (s *Swarm) AddAgent(cfg *agent.Config) (*agent.Agent, error) {
 			Error:       errMsg,
 			CompletedAt: time.Now(),
 		})
+
+		// Chat session glue: if this task originated from a chat session,
+		// land the agent's reply back into that session so the user sees a
+		// continuous transcript on the next /api/sessions/<id> read or SSE
+		// state push. We deliberately gate on terminal statuses + non-empty
+		// content to avoid littering chats with empty "running" markers.
+		if s.sessionStore == nil {
+			return
+		}
+		sid := s.sessionStore.SessionForTask(taskID)
+		if sid == "" {
+			return
+		}
+		switch status {
+		case "completed", "success":
+			if result != "" {
+				_, _ = s.sessionStore.AppendAssistantTurn(sid, result, taskID, runtime)
+			}
+		case "failed":
+			msg := errMsg
+			if msg == "" {
+				msg = "(task failed with no error message)"
+			}
+			_, _ = s.sessionStore.AppendAssistantTurn(sid, "⚠️ "+msg, taskID, runtime)
+		}
 	})
 
 	// Register spawn callback — allows agents to spawn children at runtime
@@ -184,6 +221,93 @@ func (s *Swarm) SendTask(agentName, description string) (string, error) {
 	})
 
 	return taskID, nil
+}
+
+// Sessions returns the chat-session store, opening it on first call.
+// dataDir is used to anchor the sqlite file under <baseDir>/sessions.db; we
+// pass it through Swarm.baseDir so callers don't need to know the layout.
+// Returns nil + error if the open fails — callers should treat that as
+// "chat unavailable" and fall back to direct task submission.
+func (s *Swarm) Sessions() (*sessions.Store, error) {
+	s.sessionStoreMu.Lock()
+	defer s.sessionStoreMu.Unlock()
+	if s.sessionStore != nil {
+		return s.sessionStore, nil
+	}
+	path := ""
+	if s.baseDir != "" {
+		path = filepath.Join(s.baseDir, "sessions.db")
+	}
+	store, err := sessions.New(path)
+	if err != nil {
+		return nil, err
+	}
+	s.sessionStore = store
+	return store, nil
+}
+
+// SendTaskWithSession is the chat-aware variant of SendTask. It looks up the
+// session, formats prior turns into a prompt prefix, submits the combined
+// description to the target agent, then records the user turn and links the
+// task back to the session so the assistant reply lands in the same thread.
+//
+// On any failure (unknown session, agent missing, store error) it falls back
+// to the original behaviour: submit the raw description and surface the
+// error so the API caller can decide whether to soft-degrade.
+func (s *Swarm) SendTaskWithSession(sessionID, description string) (taskID, agentName string, err error) {
+	store, err := s.Sessions()
+	if err != nil {
+		return "", "", fmt.Errorf("session store unavailable: %w", err)
+	}
+	sess, err := store.Get(sessionID)
+	if err != nil {
+		return "", "", fmt.Errorf("loading session: %w", err)
+	}
+	if sess == nil {
+		return "", "", fmt.Errorf("session not found: %s", sessionID)
+	}
+	agentName = sess.Agent
+
+	s.mu.RLock()
+	a, ok := s.agents[agentName]
+	s.mu.RUnlock()
+	if !ok {
+		return "", agentName, fmt.Errorf("agent not found: %s", agentName)
+	}
+
+	// Build prompt: prior turns prefixed, then the new user message. Cap at
+	// 20 turns so a long-running session doesn't blow context windows; we
+	// keep the most recent 20 since recency matters more than origin for
+	// most chat use cases.
+	turns, err := store.Turns(sessionID)
+	if err != nil {
+		return "", agentName, fmt.Errorf("loading turns: %w", err)
+	}
+	prompt := description
+	if hist := sessions.FormatHistory(turns, 20); hist != "" {
+		prompt = hist + "User: " + description
+	}
+
+	taskID = a.SubmitTask(prompt)
+
+	// Record the user turn now (so it shows up immediately even before the
+	// agent finishes), and link the task so the completion callback can
+	// append the assistant reply.
+	if _, err := store.AppendUserTurn(sessionID, description, taskID); err != nil {
+		// Non-fatal: task is already queued. Log via the task error field.
+		fmt.Printf("⚠️ session %s: failed to record user turn: %v\n", sessionID, err)
+	}
+	store.LinkTaskToSession(taskID, sessionID)
+
+	s.LogTask(TaskEvent{
+		ID:          taskID,
+		Agent:       agentName,
+		Description: description, // log only the new user message, not history
+		Status:      "queued",
+		SubmittedAt: time.Now(),
+	})
+
+	return taskID, agentName, nil
 }
 
 // List returns info about all agents.

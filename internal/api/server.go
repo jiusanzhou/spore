@@ -101,6 +101,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/feedback", s.handleFeedback)
 	s.mux.HandleFunc("/api/feedback/vote", s.handleFeedbackVote)
 	s.mux.HandleFunc("/api/help-wanted", s.handleHelpWanted)
+	// Chat sessions — multi-turn conversation memory layered over /api/tasks.
+	s.mux.HandleFunc("/api/sessions", s.handleSessions)
+	s.mux.HandleFunc("/api/sessions/", s.handleSessionRoute)
 
 	// Frontend: embedded React app (web/dist/) with SPA fallback.
 	if distFS := web.DistFS(); distFS != nil {
@@ -334,6 +337,7 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Agent       string `json:"agent"`       // target agent name (empty = broadcast to swarm)
 			Description string `json:"description"` // task description
+			SessionID   string `json:"session_id"`  // optional chat-session anchor
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
@@ -341,6 +345,24 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.Description == "" {
 			http.Error(w, "description is required", http.StatusBadRequest)
+			return
+		}
+
+		// Session-anchored submission: history gets prefixed and the agent
+		// is determined by the session, ignoring req.Agent. This keeps the
+		// chat UI's contract simple (one session ↔ one agent).
+		if req.SessionID != "" {
+			taskID, agent, err := s.sw.SendTaskWithSession(req.SessionID, req.Description)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]interface{}{
+				"task_id":    taskID,
+				"agent":      agent,
+				"session_id": req.SessionID,
+				"status":     "queued",
+			})
 			return
 		}
 
