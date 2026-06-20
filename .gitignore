@@ -24,6 +24,18 @@ Thumbs.db
 *.db
 .spore/
 
+# Demo runtime artifacts (consciousness-demo etc. — agents mutate their own state)
+examples/*/boss/
+examples/*/scout/
+examples/*/forge/
+examples/*/*/JOURNAL.md
+examples/*/*/agent.yaml
+examples/*/*/spore.toml
+examples/*/*/evolution/
+examples/*/*/experience/
+examples/*/*/memory/
+examples/*/*/skills/
+
 # Secrets
 *.key
 *.pem

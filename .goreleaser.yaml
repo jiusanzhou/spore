@@ -167,4 +167,4 @@ homebrew_casks:
     homepage: "https://github.com/jiusanzhou/spore"
     description: "Decentralized AI agent swarm protocol and runtime"
     license: "Apache-2.0"
-    skip_upload: auto  # only push for full releases, not snapshots / pre-releases
+    skip_upload: true  # TODO: enable when jiusanzhou/homebrew-spore tap repo exists
