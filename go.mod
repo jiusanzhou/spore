@@ -17,7 +17,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.37
 	github.com/multiformats/go-multiaddr v0.16.1
 	github.com/multiformats/go-multihash v0.2.3
-	go.zoe.im/agentbox v0.0.0-00010101000000-000000000000
+	go.zoe.im/agentbox v0.0.0-20260321052139-f5e0637bd726
 	go.zoe.im/x v0.13.0
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -177,5 +177,3 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.4.1 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
-
-replace go.zoe.im/agentbox => ../agentbox

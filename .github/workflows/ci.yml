@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: interactive-web-app
+        working-directory: web-v2
     steps:
       - uses: actions/checkout@v4
 
@@ -39,8 +39,14 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Install
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Build
-        run: npx react-scripts build
+        run: pnpm build
+
