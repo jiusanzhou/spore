@@ -16,15 +16,17 @@
 # — tracked as future work.
 
 # ---------- Frontend bundle ----------
+# web-v2/ is the Vite + Tailwind v4 cockpit. We build it then drop dist/
+# into the Go build context where //go:embed picks it up at web/dist.
 FROM node:22-alpine AS frontend
 
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
 WORKDIR /web
-COPY web/package.json web/package-lock.json ./
-# --legacy-peer-deps tolerates the peer-dep conflicts in the existing
-# react-scripts setup; matches what's expected locally.
-RUN npm ci --prefer-offline --no-audit --legacy-peer-deps
-COPY web/ .
-RUN BUILD_PATH=dist npx react-scripts build
+COPY web-v2/package.json web-v2/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY web-v2/ .
+RUN pnpm build
 
 # ---------- Go build ----------
 FROM golang:1.25-alpine AS builder

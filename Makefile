@@ -63,11 +63,12 @@ release:
 	goreleaser release --clean
 
 web-build:
-	@cd web && npm ci --prefer-offline --no-audit && BUILD_PATH=dist npx react-scripts build
-	@echo "✅ web/dist built"
+	@cd web-v2 && pnpm install --frozen-lockfile && pnpm build
+	@rm -rf web/dist && cp -r web-v2/dist web/dist
+	@echo "✅ web/dist built (Vite + Tailwind v4 from web-v2/)"
 
 web-dev:
-	@cd web && npm start
+	@cd web-v2 && pnpm dev
 
 lint:
 	@which golangci-lint > /dev/null 2>&1 || echo "install: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"

@@ -34,8 +34,10 @@ project_name: spore
 before:
   hooks:
     - go mod tidy
-    # Frontend bundle is embedded by `make build` — same here so SSE/dashboard work in the released binary.
-    - sh -c 'cd web && npm ci --prefer-offline --no-audit && BUILD_PATH=dist npx react-scripts build'
+    # Frontend bundle is embedded by `make build` — same here so the SSE dashboard
+    # ships in the released binary. web-v2/ is the Vite + Tailwind v4 cockpit;
+    # we build it then copy dist/ to web/dist where //go:embed picks it up.
+    - sh -c 'cd web-v2 && pnpm install --frozen-lockfile && pnpm build && rm -rf ../web/dist && cp -r dist ../web/dist'
 
 builds:
   - id: spore
@@ -102,7 +104,7 @@ archives:
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
     files:
       - LICENSE
       - README.md
@@ -142,25 +144,27 @@ changelog:
       - '^ci:'
       - 'merge conflict'
 
-# Homebrew tap config — DRAFT ONLY, not active until brews.repository.owner
+# Homebrew Cask config — DRAFT ONLY, not active until repository.owner
 # is updated and a personal access token (HOMEBREW_TAP_TOKEN env var) is
 # wired up. Leaving the block here as a runway for the eventual `brew tap
-# zoe-corp/spore && brew install spore` story.
-brews:
+# zoe-corp/spore && brew install --cask spore` story.
+#
+# Note: GoReleaser deprecated `brews` in favor of `homebrew_casks` in v2.10
+# (hard removal in v2.16). Casks are the recommended path for distributing
+# pre-compiled binaries — they're the right shape for spore.
+homebrew_casks:
   - name: spore
     ids: [default]
+    binaries:
+      - spore
+      - spore-acp-server
+      - spore-mcp-server
     repository:
       owner: PLACEHOLDER-OWNER
       name: homebrew-spore
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    directory: Formula
+    directory: Casks
     homepage: "https://github.com/jiusanzhou/spore"
     description: "Decentralized AI agent swarm protocol and runtime"
     license: "Apache-2.0"
-    install: |
-      bin.install "spore"
-      bin.install "spore-acp-server"
-      bin.install "spore-mcp-server"
-    test: |
-      system "#{bin}/spore", "--version"
     skip_upload: auto  # only push for full releases, not snapshots / pre-releases

@@ -2,6 +2,11 @@
 bin/
 *.exe
 
+# GoReleaser output
+dist/
+spore-acp-server
+spore-mcp-server
+
 # Go
 vendor/
 
