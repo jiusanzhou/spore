@@ -292,6 +292,18 @@ func (a *Agent) executeTaskDirect(ctx context.Context, entry *taskEntry) error {
 
 	fmt.Printf("   [%s] Using runtime: %s\n", a.cfg.Agent.Name, rt.Info().Name)
 
+	// Plan-execute-verify loop: when the task description looks complex
+	// (action verbs like "implement"/"refactor", multi-clause goals),
+	// route it through the planner before single-shot execution. The
+	// planner reuses the same runtime, so the only extra cost is one
+	// planning round-trip + one verification round-trip per step.
+	// Builtin runtime has no LLM and can't plan — skip for it.
+	if _, isBuiltin := rt.(*runtime.Builtin); !isBuiltin && shouldPlan(entry.Description) {
+		planner := NewLLMPlanner(rt)
+		output, planErr := a.executeTaskWithPlan(ctx, entry, planner, rt)
+		return a.finalizeTaskResult(entry, rt, output, planErr)
+	}
+
 	input := runtime.TaskInput{
 		ID:          entry.ID,
 		Description: entry.Description,
@@ -350,6 +362,34 @@ func (a *Agent) executeTaskDirect(ctx context.Context, entry *taskEntry) error {
 		return err
 	}
 
+	return a.finalizeTaskResult(entry, rt, output, nil)
+}
+
+// finalizeTaskResult applies the post-execution side-effects (status
+// callback, token accounting, bus broadcast, memory write, evolution
+// record) that are identical for single-shot and plan-based execution.
+// Extracted from executeTaskDirect so the plan-execute-verify loop can
+// reuse it without duplicating the bookkeeping.
+func (a *Agent) finalizeTaskResult(
+	entry *taskEntry,
+	rt runtime.Runtime,
+	output *runtime.TaskOutput,
+	execErr error,
+) error {
+	if execErr != nil {
+		if a.onTaskUpdate != nil {
+			a.onTaskUpdate(entry.ID, "failed", rt.Info().Name, "", execErr.Error())
+		}
+		return execErr
+	}
+	if output == nil {
+		err := fmt.Errorf("nil output from runtime %s", rt.Info().Name)
+		if a.onTaskUpdate != nil {
+			a.onTaskUpdate(entry.ID, "failed", rt.Info().Name, "", err.Error())
+		}
+		return err
+	}
+
 	if output.Success {
 		fmt.Printf("✅ [%s] Task completed via %s: %s\n", a.cfg.Agent.Name, rt.Info().Name, truncate(output.Result, 200))
 		if a.onTaskUpdate != nil {
@@ -377,19 +417,19 @@ func (a *Agent) executeTaskDirect(ctx context.Context, entry *taskEntry) error {
 		a.rememberTask(entry, output, rt.Info().Name)
 		// Record to evolution engine for self-improvement
 		a.recordEvolution(entry, output, rt.Info().Name, true, "")
-	} else {
-		if a.onTaskUpdate != nil {
-			a.onTaskUpdate(entry.ID, "failed", rt.Info().Name, "", output.Error)
-		}
-		// Token economy: penalize failure
-		if a.tokens != nil {
-			a.tokens.RewardTask(entry.ID, false)
-		}
-		a.broadcastTaskResult(entry.ID, "", false, output.Error)
-		a.recordEvolution(entry, nil, rt.Info().Name, false, output.Error)
-		return fmt.Errorf("task failed: %s", output.Error)
+		return nil
 	}
-	return nil
+
+	if a.onTaskUpdate != nil {
+		a.onTaskUpdate(entry.ID, "failed", rt.Info().Name, "", output.Error)
+	}
+	// Token economy: penalize failure
+	if a.tokens != nil {
+		a.tokens.RewardTask(entry.ID, false)
+	}
+	a.broadcastTaskResult(entry.ID, "", false, output.Error)
+	a.recordEvolution(entry, nil, rt.Info().Name, false, output.Error)
+	return fmt.Errorf("task failed: %s", output.Error)
 }
 
 // rememberTask stores the task experience in two places: the legacy
