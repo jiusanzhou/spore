@@ -109,6 +109,14 @@ func (a *Agent) submitTaskWithID(taskID, description string) {
 func (a *Agent) makeRuntimeEventHandler(taskID, runtimeName string) runtime.EventHandler {
 	prefix := fmt.Sprintf("   ↳ [%s/%s/%s]", a.cfg.Agent.Name, runtimeName, taskID)
 	return func(ev runtime.StreamEvent) error {
+		// Fan event out to subscribers (SSE / chat UI) first — even if
+		// stdout formatting below fails it's never fatal, but we want
+		// every observed event to reach the bus before any logging
+		// errors short-circuit us.
+		if a.onRuntimeEvent != nil {
+			a.onRuntimeEvent(taskID, ev)
+		}
+
 		switch ev.Type {
 		case runtime.EventInit:
 			fmt.Printf("%s 🔌 init session=%s %s\n", prefix, ev.Session, ev.Content)
