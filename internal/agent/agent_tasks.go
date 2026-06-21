@@ -109,6 +109,14 @@ func (a *Agent) submitTaskWithID(taskID, description string) {
 func (a *Agent) makeRuntimeEventHandler(taskID, runtimeName string) runtime.EventHandler {
 	prefix := fmt.Sprintf("   ↳ [%s/%s/%s]", a.cfg.Agent.Name, runtimeName, taskID)
 	return func(ev runtime.StreamEvent) error {
+		// Fan event out to subscribers (SSE / chat UI) first — even if
+		// stdout formatting below fails it's never fatal, but we want
+		// every observed event to reach the bus before any logging
+		// errors short-circuit us.
+		if a.onRuntimeEvent != nil {
+			a.onRuntimeEvent(taskID, ev)
+		}
+
 		switch ev.Type {
 		case runtime.EventInit:
 			fmt.Printf("%s 🔌 init session=%s %s\n", prefix, ev.Session, ev.Content)
@@ -256,8 +264,17 @@ func (a *Agent) executeTaskDirect(ctx context.Context, entry *taskEntry) error {
 			return fmt.Errorf("runtime not found: %s", entry.Runtime)
 		}
 	} else {
-		// Let evolution engine suggest preferred runtime
-		if a.evolution != nil {
+		// Config-pinned runtime (CLI flag / spore.toml) wins over evolution:
+		// when the operator explicitly chose a backend, honour it. Evolution
+		// only steers when the config is "auto" (or empty).
+		cfgRT := a.cfg.Runtime.Type
+		if cfgRT != "" && cfgRT != "auto" {
+			if prt, ok := a.registry.Get(cfgRT); ok {
+				rt = prt
+			}
+		}
+		// Let evolution engine suggest preferred runtime when not pinned.
+		if rt == nil && a.evolution != nil {
 			if preferred := a.evolution.BestRuntime(); preferred != "" {
 				if prt, ok := a.registry.Get(preferred); ok {
 					rt = prt

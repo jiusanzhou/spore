@@ -27,6 +27,7 @@ import (
 
 	"go.zoe.im/spore/internal/agent"
 	"go.zoe.im/spore/internal/network"
+	"go.zoe.im/spore/internal/runtime"
 	"go.zoe.im/spore/internal/sessions"
 	"go.zoe.im/spore/internal/spawner"
 )
@@ -71,16 +72,22 @@ type Swarm struct {
 	// use; we just guard the open-once with a mutex.
 	sessionStore   *sessions.Store
 	sessionStoreMu sync.Mutex
+
+	// taskEvents fans out runtime.StreamEvent values to per-task SSE
+	// subscribers. Populated by agents via PublishTaskEvent; consumed by
+	// the API's /api/tasks/:id/stream handler.
+	taskEvents *taskEventBroadcaster
 }
 
 // New creates a new swarm with a local in-process bus.
 func New(baseDir string, maxAgents int) *Swarm {
 	return &Swarm{
-		bus:       network.NewLocalBus(),
-		agents:    make(map[string]*agent.Agent),
-		spawner:   spawner.New(baseDir, maxAgents),
-		baseDir:   baseDir,
-		startedAt: time.Now(),
+		bus:        network.NewLocalBus(),
+		agents:     make(map[string]*agent.Agent),
+		spawner:    spawner.New(baseDir, maxAgents),
+		baseDir:    baseDir,
+		startedAt:  time.Now(),
+		taskEvents: newTaskEventBroadcaster(),
 	}
 }
 
@@ -96,11 +103,12 @@ func NewP2PSwarm(baseDir string, maxAgents int, privKey ed25519.PrivateKey, list
 		return nil, fmt.Errorf("create p2p bus: %w", err)
 	}
 	return &Swarm{
-		bus:       bus,
-		agents:    make(map[string]*agent.Agent),
-		spawner:   spawner.New(baseDir, maxAgents),
-		baseDir:   baseDir,
-		startedAt: time.Now(),
+		bus:        bus,
+		agents:     make(map[string]*agent.Agent),
+		spawner:    spawner.New(baseDir, maxAgents),
+		baseDir:    baseDir,
+		startedAt:  time.Now(),
+		taskEvents: newTaskEventBroadcaster(),
 	}, nil
 }
 
@@ -136,6 +144,12 @@ func (s *Swarm) AddAgent(cfg *agent.Config) (*agent.Agent, error) {
 			CompletedAt: time.Now(),
 		})
 
+		// Close per-task SSE subscribers on terminal status so browsers
+		// don't sit on the stream after the task ends.
+		if status == "completed" || status == "failed" {
+			s.CloseTaskEvents(taskID)
+		}
+
 		// Chat session glue: if this task originated from a chat session,
 		// land the agent's reply back into that session so the user sees a
 		// continuous transcript on the next /api/sessions/<id> read or SSE
@@ -160,6 +174,13 @@ func (s *Swarm) AddAgent(cfg *agent.Config) (*agent.Agent, error) {
 			}
 			_, _ = s.sessionStore.AppendAssistantTurn(sid, "⚠️ "+msg, taskID, runtime)
 		}
+	})
+
+	// Register runtime stream event callback — fans every per-event chunk
+	// (thinking text, tool calls, completion) into the per-task pub/sub so
+	// the API SSE handler can push them to chat UIs in real time.
+	a.SetOnRuntimeEvent(func(taskID string, ev runtime.StreamEvent) {
+		s.PublishTaskEvent(taskID, ev)
 	})
 
 	// Register spawn callback — allows agents to spawn children at runtime
@@ -244,6 +265,44 @@ func (s *Swarm) Sessions() (*sessions.Store, error) {
 	}
 	s.sessionStore = store
 	return store, nil
+}
+
+// PublishTaskEvent forwards a runtime.StreamEvent to every subscriber of
+// taskID. Safe to call from runtime goroutines; non-blocking — slow
+// subscribers drop events rather than stall the runtime.
+//
+// Called by agent.makeRuntimeEventHandler for every event seen during a
+// streaming task execution, so the API SSE handler can fan it out to the
+// browser.
+func (s *Swarm) PublishTaskEvent(taskID string, ev runtime.StreamEvent) {
+	if s.taskEvents == nil {
+		return
+	}
+	s.taskEvents.publish(taskID, ev)
+}
+
+// SubscribeTaskEvents returns a channel of runtime.StreamEvent values for the
+// given task and a cancel function the caller MUST invoke when finished. The
+// channel closes when the task completes (CloseTaskEvents) or when cancel is
+// called, whichever comes first.
+func (s *Swarm) SubscribeTaskEvents(taskID string) (<-chan runtime.StreamEvent, func()) {
+	if s.taskEvents == nil {
+		// Defensive: return an already-closed channel + no-op cancel so
+		// callers handle "no events available" the same as "task done".
+		ch := make(chan runtime.StreamEvent)
+		close(ch)
+		return ch, func() {}
+	}
+	return s.taskEvents.subscribe(taskID)
+}
+
+// CloseTaskEvents signals to all subscribers of taskID that the task has
+// completed; subscriber channels are closed. Idempotent.
+func (s *Swarm) CloseTaskEvents(taskID string) {
+	if s.taskEvents == nil {
+		return
+	}
+	s.taskEvents.closeTask(taskID)
 }
 
 // SendTaskWithSession is the chat-aware variant of SendTask. It looks up the

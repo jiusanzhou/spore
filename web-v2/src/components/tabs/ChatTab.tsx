@@ -81,6 +81,18 @@ export function ChatTab({ state }: { state: SwarmState | null }) {
    * alive even between 5s polls.
    */
   const [elapsedSec, setElapsedSec] = useState(0)
+  /**
+   * streamPreview is the most recent assistant "thinking" content streamed
+   * over SSE while pendingTask is active. EventThinking carries a full text
+   * snapshot (not a delta) so we replace rather than append. Cleared when
+   * pendingTask clears.
+   */
+  const [streamPreview, setStreamPreview] = useState('')
+  /**
+   * streamTool surfaces the currently-running tool call (if any) so the
+   * placeholder can show "running Bash…" instead of generic "thinking".
+   */
+  const [streamTool, setStreamTool] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // ── Session list polling ───────────────────────────────────────────
@@ -158,10 +170,54 @@ export function ChatTab({ state }: { state: SwarmState | null }) {
     return () => clearInterval(id)
   }, [pendingTask])
 
+  // SSE stream of runtime events for the in-flight task. We open an
+  // EventSource against /api/tasks/<id>/stream when pendingTask becomes
+  // non-null and tear it down when pendingTask clears. EventThinking
+  // payloads carry a full text snapshot (not a delta) so we replace
+  // streamPreview rather than append. Tool calls surface as a separate
+  // label so the user can see what the agent is currently doing.
+  useEffect(() => {
+    if (!pendingTask) {
+      setStreamPreview('')
+      setStreamTool('')
+      return
+    }
+    const es = new EventSource(`/api/tasks/${pendingTask.taskId}/stream`)
+    const onThinking = (e: MessageEvent) => {
+      try {
+        const ev = JSON.parse(e.data) as { content?: string }
+        if (ev.content) setStreamPreview(ev.content)
+      } catch {
+        /* malformed frame — drop it */
+      }
+    }
+    const onToolCall = (e: MessageEvent) => {
+      try {
+        const ev = JSON.parse(e.data) as { tool_name?: string }
+        setStreamTool(ev.tool_name ?? '')
+      } catch {
+        /* drop */
+      }
+    }
+    const onToolResult = () => setStreamTool('')
+    const onEnd = () => es.close()
+    es.addEventListener('thinking', onThinking)
+    es.addEventListener('tool_call', onToolCall)
+    es.addEventListener('tool_result', onToolResult)
+    es.addEventListener('end', onEnd)
+    return () => {
+      es.removeEventListener('thinking', onThinking)
+      es.removeEventListener('tool_call', onToolCall)
+      es.removeEventListener('tool_result', onToolResult)
+      es.removeEventListener('end', onEnd)
+      es.close()
+    }
+  }, [pendingTask])
+
   // Auto-scroll to latest message when turn count changes.
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [turns.length, pendingTask])
+  }, [turns.length, pendingTask, streamPreview])
 
   const activeSession = sessions.find((s) => s.id === selectedId) ?? null
 
@@ -377,7 +433,12 @@ export function ChatTab({ state }: { state: SwarmState | null }) {
                 turns.map((t) => <MessageBubble key={t.id} turn={t} />)
               )}
               {pendingTask && pendingTask.sessionId === selectedId ? (
-                <ThinkingBubble agentName={activeSession.agent} elapsedSec={elapsedSec} />
+                <ThinkingBubble
+                  agentName={activeSession.agent}
+                  elapsedSec={elapsedSec}
+                  preview={streamPreview}
+                  tool={streamTool}
+                />
               ) : null}
               <div ref={messagesEndRef} />
             </div>
@@ -461,10 +522,15 @@ function MessageBubble({ turn }: { turn: Turn }) {
 function ThinkingBubble({
   agentName,
   elapsedSec,
+  preview,
+  tool,
 }: {
   agentName: string
   elapsedSec: number
+  preview: string
+  tool: string
 }) {
+  const status = tool ? `running ${tool}…` : `${agentName} is thinking…`
   return (
     <div className="flex justify-start">
       <div className="max-w-[80%] rounded-lg border border-[var(--color-border)] bg-[var(--color-card,rgba(255,255,255,0.03))] px-3 py-2">
@@ -484,9 +550,14 @@ function ThinkingBubble({
             />
           </span>
           <span className="text-[12px] italic text-[var(--color-muted)]">
-            {agentName} is thinking…
+            {status}
           </span>
         </div>
+        {preview ? (
+          <div className="mt-2 whitespace-pre-wrap break-words text-[13px] leading-relaxed text-[var(--color-fg,inherit)] opacity-80">
+            {preview}
+          </div>
+        ) : null}
         <div className="mt-1 text-[10px] text-[var(--color-muted)]">
           {elapsedSec}s elapsed
         </div>

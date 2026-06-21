@@ -140,6 +140,12 @@ type Agent struct {
 	// Task lifecycle callback (set by Swarm)
 	onTaskUpdate func(taskID, status, runtime, result, errMsg string)
 
+	// Runtime event callback (set by Swarm). Invoked for every
+	// runtime.StreamEvent observed during a task execution — used by the
+	// API SSE layer to push fine-grained progress (thinking tokens, tool
+	// calls) to chat UIs.
+	onRuntimeEvent func(taskID string, ev runtime.StreamEvent)
+
 	// Spawn callback (set by Swarm) — returns child agent name or error
 	onSpawnRequest func(parentName string, childRole string, childSkills []string, reason string) (string, error)
 
@@ -173,6 +179,16 @@ type Agent struct {
 // SetOnTaskUpdate registers a callback for task lifecycle events.
 func (a *Agent) SetOnTaskUpdate(fn func(taskID, status, runtime, result, errMsg string)) {
 	a.onTaskUpdate = fn
+}
+
+// SetOnRuntimeEvent registers a callback for fine-grained runtime stream
+// events (per-token thinking text, per-tool-call progress). Wired by the
+// Swarm to bridge events into the API SSE layer for chat UIs.
+//
+// The callback runs synchronously on the runtime's stream goroutine and must
+// stay cheap — typically just a non-blocking publish to a fan-out channel.
+func (a *Agent) SetOnRuntimeEvent(fn func(taskID string, ev runtime.StreamEvent)) {
+	a.onRuntimeEvent = fn
 }
 
 // SetOnSpawnRequest registers a callback for runtime spawn requests.
@@ -425,16 +441,27 @@ func New(cfg *Config) (*Agent, error) {
 	case "builtin":
 		// already registered
 	default:
-		// Try agentbox adapter for known runtimes (claude-code, codex, gemini, etc.)
-		// Map common aliases: "claude-code" → "claude"
+		// Auto-discover all runtimes (ACP, agentbox adapters, etc.) so the
+		// requested type is reachable. Without this, --runtime-type=claude-code
+		// only registers the agentbox "claude" adapter (different name) and
+		// the actual ACP runtime never gets wired up.
+		discovered := reg.AutoDiscover(context.Background())
+		if len(discovered) > 0 {
+			fmt.Printf("   Discovered runtimes: %v\n", discovered)
+		}
+		// Belt-and-suspenders: ensure the requested abox adapter is also
+		// registered (in case AutoDiscover skipped it because the same
+		// canonical name was already taken by ACP).
 		aboxName := cfg.Runtime.Type
 		if aboxName == "claude-code" {
 			aboxName = "claude"
 		}
-		for _, adapter := range runtime.DefaultAboxAdapters() {
-			if adapter.Info().Name == aboxName {
-				reg.Register(adapter)
-				break
+		if _, exists := reg.Get(aboxName); !exists {
+			for _, adapter := range runtime.DefaultAboxAdapters() {
+				if adapter.Info().Name == aboxName {
+					reg.Register(adapter)
+					break
+				}
 			}
 		}
 	}

@@ -92,6 +92,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/peers/connect", s.handlePeerConnect)
 	s.mux.HandleFunc("/api/stats", s.handleStats)
 	s.mux.HandleFunc("/api/tasks", s.handleTasks)
+	// Pattern: /api/tasks/<id>/stream — per-task SSE token stream.
+	s.mux.HandleFunc("/api/tasks/", s.handleTaskRoute)
 	s.mux.HandleFunc("/api/events", s.handleSSE)
 	s.mux.HandleFunc("/api/content", s.handleContent)
 	s.mux.HandleFunc("/api/content/", s.handleContentItem)
