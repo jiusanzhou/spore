@@ -441,16 +441,27 @@ func New(cfg *Config) (*Agent, error) {
 	case "builtin":
 		// already registered
 	default:
-		// Try agentbox adapter for known runtimes (claude-code, codex, gemini, etc.)
-		// Map common aliases: "claude-code" → "claude"
+		// Auto-discover all runtimes (ACP, agentbox adapters, etc.) so the
+		// requested type is reachable. Without this, --runtime-type=claude-code
+		// only registers the agentbox "claude" adapter (different name) and
+		// the actual ACP runtime never gets wired up.
+		discovered := reg.AutoDiscover(context.Background())
+		if len(discovered) > 0 {
+			fmt.Printf("   Discovered runtimes: %v\n", discovered)
+		}
+		// Belt-and-suspenders: ensure the requested abox adapter is also
+		// registered (in case AutoDiscover skipped it because the same
+		// canonical name was already taken by ACP).
 		aboxName := cfg.Runtime.Type
 		if aboxName == "claude-code" {
 			aboxName = "claude"
 		}
-		for _, adapter := range runtime.DefaultAboxAdapters() {
-			if adapter.Info().Name == aboxName {
-				reg.Register(adapter)
-				break
+		if _, exists := reg.Get(aboxName); !exists {
+			for _, adapter := range runtime.DefaultAboxAdapters() {
+				if adapter.Info().Name == aboxName {
+					reg.Register(adapter)
+					break
+				}
 			}
 		}
 	}

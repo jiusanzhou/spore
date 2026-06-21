@@ -264,8 +264,17 @@ func (a *Agent) executeTaskDirect(ctx context.Context, entry *taskEntry) error {
 			return fmt.Errorf("runtime not found: %s", entry.Runtime)
 		}
 	} else {
-		// Let evolution engine suggest preferred runtime
-		if a.evolution != nil {
+		// Config-pinned runtime (CLI flag / spore.toml) wins over evolution:
+		// when the operator explicitly chose a backend, honour it. Evolution
+		// only steers when the config is "auto" (or empty).
+		cfgRT := a.cfg.Runtime.Type
+		if cfgRT != "" && cfgRT != "auto" {
+			if prt, ok := a.registry.Get(cfgRT); ok {
+				rt = prt
+			}
+		}
+		// Let evolution engine suggest preferred runtime when not pinned.
+		if rt == nil && a.evolution != nil {
 			if preferred := a.evolution.BestRuntime(); preferred != "" {
 				if prt, ok := a.registry.Get(preferred); ok {
 					rt = prt

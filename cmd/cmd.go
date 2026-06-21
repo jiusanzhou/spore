@@ -81,6 +81,9 @@ var Run = app.Run
 // defaultLLM is the unmodified default LLM config for comparison.
 var defaultLLM = agent.DefaultConfig("", "gpt-4o").LLM
 
+// defaultRuntime is the unmodified default Runtime config for comparison.
+var defaultRuntime = agent.DefaultConfig("", "").Runtime
+
 // applyGlobalConfig merges global config into an agent config.
 // Global config values override agent config when the global value
 // differs from the built-in default (meaning user explicitly set it).
@@ -106,5 +109,27 @@ func applyGlobalConfig(cfg *agent.Config) {
 				cfg.LLM.Headers[k] = v
 			}
 		}
+	}
+	// Runtime: forward CLI/env overrides into the agent config. Without this
+	// --runtime-type=claude-code only sticks on globalCfg and the agent ends
+	// up running with whatever spore.toml says (or the "auto" default), which
+	// silently downgrades to builtin even when the operator pinned a backend.
+	if globalCfg.Runtime.Type != defaultRuntime.Type && globalCfg.Runtime.Type != "" {
+		cfg.Runtime.Type = globalCfg.Runtime.Type
+	}
+	if globalCfg.Runtime.Command != "" {
+		cfg.Runtime.Command = globalCfg.Runtime.Command
+	}
+	if len(globalCfg.Runtime.Args) > 0 {
+		cfg.Runtime.Args = globalCfg.Runtime.Args
+	}
+	if globalCfg.Runtime.TaskFlag != "" {
+		cfg.Runtime.TaskFlag = globalCfg.Runtime.TaskFlag
+	}
+	if len(globalCfg.Runtime.Tags) > 0 {
+		cfg.Runtime.Tags = globalCfg.Runtime.Tags
+	}
+	if globalCfg.Runtime.URL != "" {
+		cfg.Runtime.URL = globalCfg.Runtime.URL
 	}
 }
