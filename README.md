@@ -12,6 +12,8 @@ Decentralized AI agent swarm protocol and runtime. Agents self-organize, evolve 
 
 **📊 SWE-bench Lite dev: 12 / 23 resolved (52.2% raw, 66.7% adjusted)** — measured by the official Docker harness ([details](bench/swe-bench/README.md)). Single-shot patch generation through the ACP runtime + plan-execute-verify loop; no swarm involvement. Adjusted figure excludes 5 upstream-broken pvlib instances where the official gold patch also fails (numpy 2.0 / `np.Inf` conftest incompatibility).
 
+**🦠 60-second swarm demo** — `./examples/swarm-demo/run.sh` spins up 2 agents on the claude-code ACP runtime and shows them working on independent tasks in parallel, with a live P2P dashboard at `localhost:8765/`. See [`examples/swarm-demo/`](examples/swarm-demo/README.md).
+
 ## What Spore Does
 
 ```
