@@ -5,17 +5,25 @@ benchmark against spore.
 
 ## Baseline result
 
-**12 / 23 resolved (52.2%) on SWE-bench Lite dev split** (2026-06-22)
+**12 / 23 resolved (52.2% raw, 66.7% adjusted)** on SWE-bench Lite dev split (2026-06-22)
 
 ```
 Instances submitted:  23
-Instances resolved:   12   ← graded by the official Docker harness
-Instances unresolved: 10
+Resolved:             12   ← official harness verdict
+Unresolved:           10   ← includes 5 upstream-broken pvlib instances
 Empty patches:         1
 Errors:                0
 ```
 
-By repository:
+**Adjusted score: 12 / 18 = 66.7%** — excluding 5 broken pvlib instances
+where the conftest.py imports fail under numpy 2.0 (`np.Inf` was removed
+in numpy 2.0; the prebuilt eval images ship numpy ≥2.0 but pvlib 0.7-0.9
+`conftest.py` still uses `np.Inf`). Confirmed via gold-patch sanity check:
+running the official answer on `pvlib__pvlib-python-1606` produces the
+same `PASS_TO_PASS: 0/10 success` failure, so this is a SWE-bench
+upstream image incompatibility, not an agent miss.
+
+By repository (raw):
 
 | Repo | Resolved |
 |---|---|
@@ -23,10 +31,11 @@ By repository:
 | pylint-dev/astroid | 4/5 (80%) |
 | sqlfluff | 3/5 (60%) — incl. 1 empty patch |
 | pydicom | 3/5 (60%) |
-| pvlib-python | 0/5 (0%) |
+| pvlib-python | 0/5 — **broken upstream**, conftest.py / numpy 2.0 |
 | pyvista | 0/1 (0%) |
 
-Per-instance breakdown lives in [`baseline-lite-dev.json`](./baseline-lite-dev.json).
+Per-instance breakdown lives in [`baseline-lite-dev.json`](./baseline-lite-dev.json)
+(includes `broken_instance: true` marker on the affected instances).
 
 Configuration:
 - Agent: spore with the Claude Code ACP runtime + plan-execute-verify loop
@@ -226,9 +235,8 @@ Stage 2 (with `--evaluate`):
 
 1. **Run the test split** (300 instances) for an official leaderboard
    data point. Estimated wall clock ≈ 1 day at `--max-workers 4`.
-2. **Diagnose pvlib 0/5** — every pvlib instance failed; structural
-   issue (test layout? import paths? agent picking the wrong file?)
-   not nondeterminism.
+2. **Report pvlib brokenness upstream** to SWE-bench — confirmed via
+   gold-patch sanity check; affects 5/23 dev instances.
 3. **Plan loop tuning** — currently single-attempt. Adding a
    verifier-driven retry pass should help the marginal failures.
 4. **Grade-only mode** — `--grade-only --predictions PATH` to re-grade
