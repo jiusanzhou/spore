@@ -50,6 +50,20 @@ func main() {
 	idsArg := flag.String("ids", "", "comma-separated instance_id list (empty = all)")
 	limit := flag.Int("limit", 0, "max instances to run (0 = no cap)")
 	timeout := flag.Duration("timeout", 20*time.Minute, "per-instance timeout")
+
+	// Stage-2 grading flags. Default off so the harness stays usable
+	// in dev / patch-only mode without Docker.
+	evaluate := flag.Bool("evaluate", false, "run SWE-bench Docker harness on captured patches")
+	pythonBin := flag.String("python", "python3", "Python interpreter with the `swebench` package installed (for --evaluate)")
+	datasetName := flag.String("dataset-name", "SWE-bench/SWE-bench_Lite", "HF dataset name passed to the harness")
+	split := flag.String("split", "dev", "dataset split: dev (23 instances) or test (300)")
+	runID := flag.String("run-id", "", "harness run id (default: spore-<timestamp>)")
+	maxWorkers := flag.Int("max-workers", 2, "harness max_workers — 2 is a safe default for orbstack on a laptop")
+	graderTimeout := flag.Int("grader-timeout", 1800, "harness per-instance timeout (seconds)")
+	reportDir := flag.String("report-dir", ".", "directory the harness writes logs/reports under")
+	predictionsPath := flag.String("predictions", "", "where to write predictions.json (default: <out>.predictions.json)")
+	modelTag := flag.String("model-tag", "spore", "model_name_or_path written into predictions.json")
+
 	flag.Parse()
 
 	if *dataset == "" {
@@ -151,11 +165,100 @@ func main() {
 	abs, _ := filepath.Abs(*outPath)
 	log.Printf("wrote %d result(s) to %s", len(results), abs)
 
+	// Stage 2: hand the captured patches to the official SWE-bench
+	// Docker harness for real FAIL_TO_PASS / PASS_TO_PASS grading.
+	if *evaluate {
+		results, resolved = gradeWithHarness(rootCtx, results, gradeArgs{
+			outPath:         *outPath,
+			predictionsPath: *predictionsPath,
+			modelTag:        *modelTag,
+			pythonBin:       *pythonBin,
+			datasetName:     *datasetName,
+			split:           *split,
+			runID:           *runID,
+			maxWorkers:      *maxWorkers,
+			graderTimeout:   *graderTimeout,
+			reportDir:       *reportDir,
+		})
+	}
+
 	total := len(results)
 	if total > 0 {
 		pct := float64(resolved) / float64(total) * 100
 		log.Printf("=== resolved: %d/%d (%.1f%%) ===", resolved, total, pct)
 	}
+}
+
+// gradeArgs bundles the --evaluate flags so gradeWithHarness has a
+// clean signature instead of 10 positional parameters.
+type gradeArgs struct {
+	outPath         string
+	predictionsPath string
+	modelTag        string
+	pythonBin       string
+	datasetName     string
+	split           string
+	runID           string
+	maxWorkers      int
+	graderTimeout   int
+	reportDir       string
+}
+
+// gradeWithHarness exports the patches as predictions.json, runs the
+// official SWE-bench Docker harness, and merges the per-instance
+// reports back into the results slice. Returns the merged slice and
+// the new resolved count. The original results.json on disk is
+// rewritten so consumers always see the most authoritative verdict.
+func gradeWithHarness(ctx context.Context, results []*swebench.EvalResult, args gradeArgs) ([]*swebench.EvalResult, int) {
+	predPath := args.predictionsPath
+	if predPath == "" {
+		predPath = args.outPath + ".predictions.json"
+	}
+	if err := swebench.WritePredictions(predPath, args.modelTag, results); err != nil {
+		log.Printf("warn: write predictions: %v (skipping grading)", err)
+		return results, countResolved(results)
+	}
+	log.Printf("wrote predictions to %s", predPath)
+
+	runID := args.runID
+	if runID == "" {
+		runID = fmt.Sprintf("spore-%d", time.Now().Unix())
+	}
+	log.Printf("running SWE-bench harness (run_id=%s, split=%s, workers=%d)",
+		runID, args.split, args.maxWorkers)
+
+	merged, err := swebench.Grade(ctx, predPath, results, swebench.GradeOptions{
+		PythonBin:      args.pythonBin,
+		DatasetName:    args.datasetName,
+		Split:          args.split,
+		RunID:          runID,
+		MaxWorkers:     args.maxWorkers,
+		TimeoutSeconds: args.graderTimeout,
+		ReportDir:      args.reportDir,
+	})
+	if err != nil {
+		log.Printf("warn: grade: %v (keeping pre-grading results)", err)
+		return results, countResolved(results)
+	}
+
+	// Rewrite results.json with the graded verdicts so a fresh reader
+	// sees the same numbers we're about to log.
+	if err := swebench.WriteResults(args.outPath, merged); err != nil {
+		log.Printf("warn: rewrite results after grading: %v", err)
+	} else {
+		log.Printf("rewrote graded results to %s", args.outPath)
+	}
+	return merged, countResolved(merged)
+}
+
+func countResolved(results []*swebench.EvalResult) int {
+	n := 0
+	for _, r := range results {
+		if r.Resolved {
+			n++
+		}
+	}
+	return n
 }
 
 func truncate(s string, n int) string {
