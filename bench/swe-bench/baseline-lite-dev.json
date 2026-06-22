@@ -1,0 +1,190 @@
+{
+  "summary": {
+    "dataset": "SWE-bench/SWE-bench_Lite",
+    "split": "dev",
+    "agent": "spore (Claude Code via ACP runtime + plan-execute-verify loop)",
+    "date": "2026-06-22",
+    "total_instances": 23,
+    "resolved": 12,
+    "unresolved": 10,
+    "empty_patches": 1,
+    "errors": 0,
+    "resolve_rate_raw": "52.2%",
+    "broken_upstream_instances": 5,
+    "valid_instances": 18,
+    "resolve_rate_adjusted": "66.7%",
+    "adjusted_caveat": "5/23 instances are upstream-broken (pvlib conftest.py imports fail under numpy 2.0). Gold patch verified to fail on those instances too. Adjusted denominator excludes them: 12/18 = 66.7%."
+  },
+  "instances": [
+    {
+      "instance_id": "marshmallow-code__marshmallow-1343",
+      "resolved": true,
+      "patch_successfully_applied": true,
+      "fail_to_pass_passed": 1,
+      "fail_to_pass_failed": 0
+    },
+    {
+      "instance_id": "marshmallow-code__marshmallow-1359",
+      "resolved": true,
+      "patch_successfully_applied": true,
+      "fail_to_pass_passed": 1,
+      "fail_to_pass_failed": 0
+    },
+    {
+      "instance_id": "pydicom__pydicom-1256",
+      "resolved": true,
+      "patch_successfully_applied": true,
+      "fail_to_pass_passed": 1,
+      "fail_to_pass_failed": 0
+    },
+    {
+      "instance_id": "pydicom__pydicom-1694",
+      "resolved": true,
+      "patch_successfully_applied": true,
+      "fail_to_pass_passed": 1,
+      "fail_to_pass_failed": 0
+    },
+    {
+      "instance_id": "pydicom__pydicom-901",
+      "resolved": true,
+      "patch_successfully_applied": true,
+      "fail_to_pass_passed": 5,
+      "fail_to_pass_failed": 0
+    },
+    {
+      "instance_id": "pylint-dev__astroid-1196",
+      "resolved": true,
+      "patch_successfully_applied": true,
+      "fail_to_pass_passed": 2,
+      "fail_to_pass_failed": 0
+    },
+    {
+      "instance_id": "pylint-dev__astroid-1268",
+      "resolved": true,
+      "patch_successfully_applied": true,
+      "fail_to_pass_passed": 1,
+      "fail_to_pass_failed": 0
+    },
+    {
+      "instance_id": "pylint-dev__astroid-1333",
+      "resolved": true,
+      "patch_successfully_applied": true,
+      "fail_to_pass_passed": 1,
+      "fail_to_pass_failed": 0
+    },
+    {
+      "instance_id": "pylint-dev__astroid-1866",
+      "resolved": true,
+      "patch_successfully_applied": true,
+      "fail_to_pass_passed": 1,
+      "fail_to_pass_failed": 0
+    },
+    {
+      "instance_id": "sqlfluff__sqlfluff-1625",
+      "resolved": true,
+      "patch_successfully_applied": true,
+      "fail_to_pass_passed": 1,
+      "fail_to_pass_failed": 0
+    },
+    {
+      "instance_id": "sqlfluff__sqlfluff-1763",
+      "resolved": true,
+      "patch_successfully_applied": true,
+      "fail_to_pass_passed": 3,
+      "fail_to_pass_failed": 0
+    },
+    {
+      "instance_id": "sqlfluff__sqlfluff-2419",
+      "resolved": true,
+      "patch_successfully_applied": true,
+      "fail_to_pass_passed": 1,
+      "fail_to_pass_failed": 0
+    },
+    {
+      "instance_id": "pvlib__pvlib-python-1072",
+      "resolved": false,
+      "patch_successfully_applied": true,
+      "fail_to_pass_passed": 0,
+      "fail_to_pass_failed": 1,
+      "broken_instance": true,
+      "broken_reason": "SWE-bench upstream image incompatibility: conftest.py fails to import with `AttributeError: np.Inf was removed in the NumPy 2.0 release. Use np.inf instead.` The instance image ships numpy 2.x but pvlib 0.7-0.9 conftest uses np.Inf. Verified by running the gold patch (official answer) on pvlib__pvlib-python-1606 \u2014 same failure mode (PASS_TO_PASS 0/10 success)."
+    },
+    {
+      "instance_id": "pvlib__pvlib-python-1154",
+      "resolved": false,
+      "patch_successfully_applied": true,
+      "fail_to_pass_passed": 0,
+      "fail_to_pass_failed": 1,
+      "broken_instance": true,
+      "broken_reason": "SWE-bench upstream image incompatibility: conftest.py fails to import with `AttributeError: np.Inf was removed in the NumPy 2.0 release. Use np.inf instead.` The instance image ships numpy 2.x but pvlib 0.7-0.9 conftest uses np.Inf. Verified by running the gold patch (official answer) on pvlib__pvlib-python-1606 \u2014 same failure mode (PASS_TO_PASS 0/10 success)."
+    },
+    {
+      "instance_id": "pvlib__pvlib-python-1606",
+      "resolved": false,
+      "patch_successfully_applied": true,
+      "fail_to_pass_passed": 0,
+      "fail_to_pass_failed": 1,
+      "broken_instance": true,
+      "broken_reason": "SWE-bench upstream image incompatibility: conftest.py fails to import with `AttributeError: np.Inf was removed in the NumPy 2.0 release. Use np.inf instead.` The instance image ships numpy 2.x but pvlib 0.7-0.9 conftest uses np.Inf. Verified by running the gold patch (official answer) on pvlib__pvlib-python-1606 \u2014 same failure mode (PASS_TO_PASS 0/10 success)."
+    },
+    {
+      "instance_id": "pvlib__pvlib-python-1707",
+      "resolved": false,
+      "patch_successfully_applied": true,
+      "fail_to_pass_passed": 0,
+      "fail_to_pass_failed": 1,
+      "broken_instance": true,
+      "broken_reason": "SWE-bench upstream image incompatibility: conftest.py fails to import with `AttributeError: np.Inf was removed in the NumPy 2.0 release. Use np.inf instead.` The instance image ships numpy 2.x but pvlib 0.7-0.9 conftest uses np.Inf. Verified by running the gold patch (official answer) on pvlib__pvlib-python-1606 \u2014 same failure mode (PASS_TO_PASS 0/10 success)."
+    },
+    {
+      "instance_id": "pvlib__pvlib-python-1854",
+      "resolved": false,
+      "patch_successfully_applied": true,
+      "fail_to_pass_passed": 0,
+      "fail_to_pass_failed": 1,
+      "broken_instance": true,
+      "broken_reason": "SWE-bench upstream image incompatibility: conftest.py fails to import with `AttributeError: np.Inf was removed in the NumPy 2.0 release. Use np.inf instead.` The instance image ships numpy 2.x but pvlib 0.7-0.9 conftest uses np.Inf. Verified by running the gold patch (official answer) on pvlib__pvlib-python-1606 \u2014 same failure mode (PASS_TO_PASS 0/10 success)."
+    },
+    {
+      "instance_id": "pydicom__pydicom-1139",
+      "resolved": false,
+      "patch_successfully_applied": true,
+      "fail_to_pass_passed": 3,
+      "fail_to_pass_failed": 0
+    },
+    {
+      "instance_id": "pydicom__pydicom-1413",
+      "resolved": false,
+      "patch_successfully_applied": true,
+      "fail_to_pass_passed": 3,
+      "fail_to_pass_failed": 0
+    },
+    {
+      "instance_id": "pylint-dev__astroid-1978",
+      "resolved": false,
+      "patch_successfully_applied": true,
+      "fail_to_pass_passed": 0,
+      "fail_to_pass_failed": 1
+    },
+    {
+      "instance_id": "pyvista__pyvista-4315",
+      "resolved": false,
+      "patch_successfully_applied": true,
+      "fail_to_pass_passed": 0,
+      "fail_to_pass_failed": 1
+    },
+    {
+      "instance_id": "sqlfluff__sqlfluff-1517",
+      "resolved": false,
+      "patch_successfully_applied": true,
+      "fail_to_pass_passed": 0,
+      "fail_to_pass_failed": 1
+    },
+    {
+      "instance_id": "sqlfluff__sqlfluff-1733",
+      "resolved": false,
+      "patch_successfully_applied": false,
+      "note": "empty patch from agent"
+    }
+  ]
+}

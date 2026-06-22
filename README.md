@@ -10,6 +10,8 @@ Decentralized AI agent swarm protocol and runtime. Agents self-organize, evolve 
 
 **🔌 Bidirectional ACP + MCP node** — Spore consumes external ACP/MCP agents *and* exposes itself as one. Use it from Zed/JetBrains/Neovim, or hand any MCP-capable client (Claude Code, Codex, Cursor, Goose) the keys to your swarm.
 
+**📊 SWE-bench Lite dev: 12 / 23 resolved (52.2% raw, 66.7% adjusted)** — measured by the official Docker harness ([details](bench/swe-bench/README.md)). Single-shot patch generation through the ACP runtime + plan-execute-verify loop; no swarm involvement. Adjusted figure excludes 5 upstream-broken pvlib instances where the official gold patch also fails (numpy 2.0 / `np.Inf` conftest incompatibility).
+
 ## What Spore Does
 
 ```
