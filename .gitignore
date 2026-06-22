@@ -24,6 +24,10 @@ Thumbs.db
 *.db
 .spore/
 
+# SWE-bench harness artifacts (run_id-stamped files at repo root + logs/)
+/logs/
+/spore.spore-*.json
+
 # Demo runtime artifacts — agents mutate these at runtime.
 # Already-tracked baseline files (agent.yaml, spore.toml, skills/<baseline>)
 # are unaffected; this just stops new runtime-generated skills/experience/
