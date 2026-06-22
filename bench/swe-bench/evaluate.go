@@ -216,3 +216,19 @@ func WriteResults(path string, results []*EvalResult) error {
 	enc.SetIndent("", "  ")
 	return enc.Encode(results)
 }
+
+// ReadResults is the inverse of WriteResults — used by --grade-only
+// mode to re-grade a previous Stage 1 run without regenerating the
+// patches. Returns an error if the file is missing or malformed.
+func ReadResults(path string) ([]*EvalResult, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	var results []*EvalResult
+	if err := json.NewDecoder(f).Decode(&results); err != nil {
+		return nil, fmt.Errorf("decode results: %w", err)
+	}
+	return results, nil
+}

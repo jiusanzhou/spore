@@ -54,6 +54,7 @@ func main() {
 	// Stage-2 grading flags. Default off so the harness stays usable
 	// in dev / patch-only mode without Docker.
 	evaluate := flag.Bool("evaluate", false, "run SWE-bench Docker harness on captured patches")
+	gradeOnly := flag.Bool("grade-only", false, "skip Stage 1 — load patches from --out (an existing results.json) and run only the harness grading. Implies --evaluate. Useful when Stage 2 failed for environmental reasons (Docker disk full, registry hiccup) and you want to re-grade without burning another hour on LLM calls.")
 	pythonBin := flag.String("python", "python3", "Python interpreter with the `swebench` package installed (for --evaluate)")
 	datasetName := flag.String("dataset-name", "SWE-bench/SWE-bench_Lite", "HF dataset name passed to the harness")
 	split := flag.String("split", "dev", "dataset split: dev (23 instances) or test (300)")
@@ -66,10 +67,62 @@ func main() {
 
 	flag.Parse()
 
-	if *dataset == "" {
+	// --grade-only implies --evaluate. We bail early on conflicting
+	// configs so users don't burn 3 hours discovering the typo.
+	if *gradeOnly {
+		*evaluate = true
+	}
+
+	if *dataset == "" && !*gradeOnly {
 		fmt.Fprintln(os.Stderr, "usage: swe-bench-runner --dataset <jsonl> [flags]")
 		flag.PrintDefaults()
 		os.Exit(2)
+	}
+
+	// Cancel cleanly on Ctrl-C so a partial run still writes results.
+	rootCtx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
+	// --grade-only: skip Stage 1 entirely. Load patches from the
+	// existing results.json and jump straight to harness grading.
+	if *gradeOnly {
+		results, err := swebench.ReadResults(*outPath)
+		if err != nil {
+			log.Fatalf("--grade-only: read %s: %v", *outPath, err)
+		}
+		if len(results) == 0 {
+			log.Fatalf("--grade-only: %s contains no results", *outPath)
+		}
+		// Optional subset filter — same --ids syntax as Stage 1.
+		var instanceIDs []string
+		if *idsArg != "" {
+			for _, id := range strings.Split(*idsArg, ",") {
+				if id = strings.TrimSpace(id); id != "" {
+					instanceIDs = append(instanceIDs, id)
+				}
+			}
+			log.Printf("--grade-only: subsetting to %d instance(s) via --ids", len(instanceIDs))
+		}
+		log.Printf("--grade-only: loaded %d result(s) from %s — skipping Stage 1", len(results), *outPath)
+		results, resolved := gradeWithHarness(rootCtx, results, gradeArgs{
+			outPath:         *outPath,
+			predictionsPath: *predictionsPath,
+			modelTag:        *modelTag,
+			pythonBin:       *pythonBin,
+			datasetName:     *datasetName,
+			split:           *split,
+			runID:           *runID,
+			maxWorkers:      *maxWorkers,
+			graderTimeout:   *graderTimeout,
+			reportDir:       *reportDir,
+			instanceIDs:     instanceIDs,
+		})
+		total := len(results)
+		if total > 0 {
+			pct := float64(resolved) / float64(total) * 100
+			log.Printf("=== resolved: %d/%d (%.1f%%) ===", resolved, total, pct)
+		}
+		return
 	}
 
 	instances, err := swebench.LoadInstances(*dataset)
@@ -93,10 +146,6 @@ func main() {
 	if len(instances) == 0 {
 		log.Fatal("no instances to run")
 	}
-
-	// Cancel cleanly on Ctrl-C so a partial run still writes results.
-	rootCtx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer cancel()
 
 	// Use the ACP runtime directly. Bypassing the agent / swarm layer
 	// keeps the benchmark a clean signal on the runtime's raw capability
@@ -202,6 +251,7 @@ type gradeArgs struct {
 	maxWorkers      int
 	graderTimeout   int
 	reportDir       string
+	instanceIDs     []string // optional subset (grade-only mode)
 }
 
 // gradeWithHarness exports the patches as predictions.json, runs the
@@ -235,6 +285,7 @@ func gradeWithHarness(ctx context.Context, results []*swebench.EvalResult, args 
 		MaxWorkers:     args.maxWorkers,
 		TimeoutSeconds: args.graderTimeout,
 		ReportDir:      args.reportDir,
+		InstanceIDs:    args.instanceIDs,
 	})
 	if err != nil {
 		log.Printf("warn: grade: %v (keeping pre-grading results)", err)

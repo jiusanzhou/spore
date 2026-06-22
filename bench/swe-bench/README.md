@@ -200,6 +200,24 @@ Stage 2 (with `--evaluate`):
 - `--model-tag NAME` — defaults to `spore`
 - `--dataset-name NAME` — defaults to `SWE-bench/SWE-bench_Lite`
 
+Grade-only mode (skip Stage 1, useful when Stage 2 failed for
+environmental reasons — Docker disk full, registry hiccup, etc.):
+
+- `--grade-only` — load patches from `--out` (an existing results.json)
+  and run only the harness grading. Implies `--evaluate`. Combine with
+  `--ids a,b,c` to re-grade a subset.
+
+```bash
+./bin/swe-bench-runner \
+  --out /tmp/old-results.json \
+  --grade-only \
+  --ids sqlfluff__sqlfluff-1625,pydicom__pydicom-1256 \
+  --python /tmp/swebench-venv/bin/python \
+  --split dev
+```
+
+Saves you the ~3-hour Stage 1 cost when you only need to redo Stage 2.
+
 ## Requirements
 
 - `git` on PATH
@@ -239,6 +257,3 @@ Stage 2 (with `--evaluate`):
    gold-patch sanity check; affects 5/23 dev instances.
 3. **Plan loop tuning** — currently single-attempt. Adding a
    verifier-driven retry pass should help the marginal failures.
-4. **Grade-only mode** — `--grade-only --predictions PATH` to re-grade
-   without regenerating patches (useful when Stage 2 fails for
-   environmental reasons).
